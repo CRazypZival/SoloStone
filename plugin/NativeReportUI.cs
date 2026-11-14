@@ -56,7 +56,7 @@ internal static class NativeReportUI
     // The preview is built and verified but not saved: SAVE ZIP and BACK are offered.
     internal static bool PreviewPending => result != null && result.Pending;
     internal static bool IncludeSave { get; private set; }
-    internal static string Body => NativeReportText.Guidance + "\nPaste this id in it: " + reportId;
+    internal static string Body => NativeReportText.Guidance + "\nPaste this id in it:\n" + reportId;
     internal static string Status => exporting ? "Preparing the preview..." : error != null ? "Export failed: " + error
         : result == null ? NativeReportText.SaveHint
         : result.Pending ? NativeReportText.Preview(PreviewFiles(result), result.IncludeSave, result.Replaced)
@@ -331,14 +331,14 @@ internal sealed class NativeReportMenu : ButtonListMenu
         rows.Add(row); owned.Add(row.gameObject); controls[row] = id; slices.Add(new KeyValuePair<GameObject, bool>(row.gameObject, false));
         return row;
     }
-    private void Text(string value, UIBButton template)
+    private void Text(string value, UIBButton template, float height)
     {
         var source = ProfileFormKit.Label(template);
         if (source == null) throw new InvalidOperationException("Native report label template missing");
         var copy = UnityEngine.Object.Instantiate(source.gameObject, m_menu.m_buttonContainer.transform, true);
         copy.transform.localPosition = Vector3.zero;
         var text = copy.GetComponent(ProfileFormKit.TextType);
-        ProfileFormKit.ScaleRect(text, "Width", 1.65f); ProfileFormKit.ScaleRect(text, "Height", 4f);
+        ProfileFormKit.ScaleRect(text, "Width", 2.4f); ProfileFormKit.ScaleRect(text, "Height", height);
         ProfileFormKit.SetText(text, value); ProfileFormKit.SetColor(text, new Color(.22f, .15f, .09f, 1));
         ProfileFormKit.UpdateNow(text);
         owned.Add(copy); slices.Add(new KeyValuePair<GameObject, bool>(copy, true));
@@ -354,7 +354,7 @@ internal sealed class NativeReportMenu : ButtonListMenu
         var toggle = Row("report.include-save", NativeReportText.IncludeSaveLabel(NativeReportUI.IncludeSave),
             NativeReportUI.ToggleSave, NativeReportUI.CanExport);
         // The profile form's native plank-toggle fallback is synchronous, including on a frozen presentation queue.
-        Text(NativeReportUI.Body, toggle);
+        Text(NativeReportUI.Body, toggle, 5f);
         var guidance = slices[slices.Count - 1]; slices.RemoveAt(slices.Count - 1); slices.Insert(0, guidance);
         // Preview first: SAVE ZIP writes exactly what the preview verified; BACK or closing throws it away.
         if (NativeReportUI.PreviewPending)
@@ -366,7 +366,7 @@ internal sealed class NativeReportMenu : ButtonListMenu
             Row("report.export", NativeReportUI.Exporting ? "Preparing..." : NativeReportText.PreviewLabel, NativeReportUI.Export,
                 NativeReportUI.CanExport);
         Row("report.discord", NativeReportText.DiscordLabel, NativeReportUI.Discord, NativeReportText.DiscordEnabled);
-        Text(NativeReportUI.Status, toggle);
+        Text(NativeReportUI.Status, toggle, 4f);
         if (NativeReportUI.CopyVisible) Row("report.copy-path", "COPY PATH", NativeReportUI.CopyPath);
         Row("report.close", NativeStrings.Get("GLOBAL_BUTTON_CLOSE", "CLOSE").ToUpperInvariant(), NativeReportUI.Close);
     }
@@ -414,8 +414,12 @@ internal sealed class NativeReportMenu : ButtonListMenu
         }
         Rect rect = DeckLayout.ScreenRect(m_menu.gameObject, camera);
         if (rect.width <= 0 || rect.height <= 0) return;
-        // The native menu lays out near zero size, so this sets its on-screen size: about two thirds of the screen, like native popups.
-        float scale = Math.Min(Screen.width * .6f / rect.width, Screen.height * .66f / rect.height);
+        // The native menu lays out near zero size, so set the size here: buttons as tall as the native Game Menu's (32 px at 720p),
+        // shrunk further only if the whole dialog would not fit.
+        float scale = Math.Min(Screen.width * .86f / rect.width, Screen.height * .86f / rect.height);
+        var plank = rows.Count > 0 ? rows[0].GetComponent<Collider>() : null;
+        float plankHeight = plank != null ? DeckLayout.Project(plank.bounds, camera).height : 0f;
+        if (plankHeight > 0) scale = Math.Min(scale, Screen.height * (32f / 720f) / plankHeight);
         m_menu.transform.localScale *= scale;
         rect = DeckLayout.ScreenRect(m_menu.gameObject, camera);
         var at = camera.WorldToScreenPoint(m_menu.transform.position);

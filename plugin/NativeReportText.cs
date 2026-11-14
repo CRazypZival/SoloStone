@@ -6,8 +6,8 @@ internal static class NativeReportText
     internal const string BugReportsUrl = NativeHelpText.DiscordUrl;
     internal const string Header = "REPORT AN ISSUE";
     // Short lines: the native label shrinks one long line to fit its width, which made it unreadable.
-    internal const string Guidance = "Attach the zip to a post in #bug-reports on Discord.";
-    internal const string SaveHint = "Your save is only included if you switch it on above.";
+    internal const string Guidance = "Attach the zip to a post\nin #bug-reports on Discord.";
+    internal const string SaveHint = "Your save is included only\nif you switch it on above.";
     // Plain ASCII: native Hearthstone fonts lack checkbox glyphs.
     // The preview step (I2d): what the zip holds, before anything is saved. Names are already redacted. Short enough for the native popup.
     internal const string PreviewLabel = "PREVIEW REPORT", SaveLabel = "SAVE ZIP", BackLabel = "BACK";
