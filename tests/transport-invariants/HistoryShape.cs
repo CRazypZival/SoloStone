@@ -119,7 +119,7 @@ internal sealed class HistoryShape
         internal string WrappedVariant, Under = "root";
         internal int HitMeta; // TARGET=1, DAMAGE=2, HEALING=4 directly in this block.
         internal bool HitDamage; // DAMAGE other than Lifesteal healing converted onto its own hero.
-        internal bool TargetRequired, TargetChecked, HasTargets, RangeHasEffects, Hidden, HeaderSubSpellTarget, PoisonDestroyed;
+        internal bool TargetRequired, TargetChecked, HasTargets, RangeHasEffects, Hidden, HeaderSubSpellTarget, PoisonDestroyed, DamageTargeted;
         internal int FatigueEntity, Attacker = ground?.Source ?? start.Source, Defender = ground?.Target ?? start.Target;
         internal int GameStep; // Game entity STEP when the block opened.
     }
@@ -361,10 +361,11 @@ internal sealed class HistoryShape
     private static bool HasTarget(Block b, int victim) => b.Targets.Contains(victim) || SubSpellTarget(b, victim);
 
     // TARGET_META: retail O:4258-4302, O:4403-4417, F:1159-1176; native-client sections 1.6, 2.2 and 4.3.
-    private void TargetEffect(int victim, Block b, bool hit = false)
+    private void TargetEffect(int victim, Block b, bool hit = false, bool heal = false)
     {
         if (b == null || (int)b.Start.Type != 3 || (!hit && b.TargetChecked)
             || b.Start.Target != victim && !(hit && b.HasTargets)) return;
+        if (HealFollowsTarget(b, victim, heal)) return;
         if (b.Start.Target == victim) { b.TargetRequired = true; b.TargetChecked = true; }
         if (!HasTarget(b, victim)) Flag("TARGET_META", victim, block: b, detail: "TARGET or explicit sub-spell target absent before effect range");
     }
@@ -375,11 +376,16 @@ internal sealed class HistoryShape
         if (index < 0) return null;
         var meta = b.Pending[index]; b.Pending.RemoveAt(index); return meta;
     }
-    private void HitTargets(int victim, Block b, bool metadata = false)
+    // Retail publishes no TARGET for a heal that follows a damage target in the same POWER block: the play spell aims at
+    // the first target only (Drain Life CS2_061, Tidal Surge UNG_817, RLK_219, UNG_030 in the HearthSim logs; engine
+    // PowerHistory.HealFollowsTarget, #68). A heal after a heal still needs its own TARGET.
+    private static bool HealFollowsTarget(Block b, int victim, bool heal) => heal && b != null && (int)b.Start.Type == 3
+        && b.DamageTargeted && b.Start.Target != victim && !HasTarget(b, victim);
+    private void HitTargets(int victim, Block b, bool metadata = false, bool heal = false)
     {
-        TargetEffect(victim, b, hit: true);
+        TargetEffect(victim, b, hit: true, heal: heal);
         if (metadata && b != null && (int)b.Start.Type == 3 && b.SourceType is (int)CardType.SPELL or (int)CardType.HERO_POWER
-            && !HasTarget(b, victim)) Flag("HIT_TARGET", victim);
+            && !HasTarget(b, victim) && !HealFollowsTarget(b, victim, heal)) Flag("HIT_TARGET", victim);
         if (b != null) { b.Targets.RemoveAll(id => id == victim); b.RangeHasEffects = true; }
     }
     private void Resolve(Hit hit)
@@ -650,12 +656,13 @@ internal sealed class HistoryShape
                 else if (meta.Type is HistoryMeta.Type.DAMAGE or HistoryMeta.Type.HEALING)
                 {
                     if (b != null) b.Targeted[meta] = meta.Info.All(victim => HasTarget(b, victim));
+                    if (b != null && meta.Type == HistoryMeta.Type.DAMAGE && b.HasTargets) b.DamageTargeted = true;
                     if (b != null && meta.Type == HistoryMeta.Type.DAMAGE && meta.Data == 0 && b.Targeted[meta])
                         foreach (int victim in meta.Info)
                             if (Entity(victim).Get(GameTag.DIVINE_SHIELD) == 1
                                 && ActiveCard("EDR_258", Entity(victim).Get(GameTag.CONTROLLER)))
                                 b.ShieldZeros[victim] = b.ShieldZeros.GetValueOrDefault(victim) + 1;
-                    foreach (int victim in meta.Info) HitTargets(victim, b, metadata: true);
+                    foreach (int victim in meta.Info) HitTargets(victim, b, metadata: true, heal: meta.Type == HistoryMeta.Type.HEALING);
                     b?.Pending.Add(meta);
                     if (meta.Type == HistoryMeta.Type.DAMAGE && b != null && meta.Info.Count == 1)
                     {
