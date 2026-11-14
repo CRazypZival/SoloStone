@@ -88,8 +88,9 @@ namespace SabberStoneCore.Presentation
             Add("EDR_815", VisualPhase.Damage, "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1", block: BlockType.TRIGGER, source: VisualSource.Effect);
             Add("TLC_107 TLC_840", VisualPhase.Damage, "ReuseFX_Physical_Missile_Generic_Super_Simultaneous:6ff0a03c3b353254d887e154c0f94e33", block: BlockType.TRIGGER, source: VisualSource.Effect);
             Add("TIME_101", VisualPhase.Damage, "ReuseFX_Arcane_Missile_PurpleLightning_Super_Simultaneous:a40e6c32f4253314db432d7808a092de", block: BlockType.TRIGGER, source: VisualSource.Effect);
-            Add("JAIL_881t", VisualPhase.Damage, "ReuseFX_Arcane_Missile_PurpleLightning_Super_Simultaneous:a40e6c32f4253314db432d7808a092de", block: BlockType.TRIGGER, subOption: 0);
-            Add("JAIL_443t", VisualPhase.Damage, "ReuseFX_Physical_Impact_Slam_Super:4d1b99bee3bc05d489e03086bf27e295", block: BlockType.TRIGGER, subOption: 0);
+            // Cast when drawn: the TRIGGER block carries TriggerKeyword TOPDECK, as retail sends it (Draw.cs).
+            Add("JAIL_881t", VisualPhase.Damage, "ReuseFX_Arcane_Missile_PurpleLightning_Super_Simultaneous:a40e6c32f4253314db432d7808a092de", block: BlockType.TRIGGER, subOption: 0, keyword: (int)GameTag.TOPDECK);
+            Add("JAIL_443t", VisualPhase.Damage, "ReuseFX_Physical_Impact_Slam_Super:4d1b99bee3bc05d489e03086bf27e295", block: BlockType.TRIGGER, subOption: 0, keyword: (int)GameTag.TOPDECK);
             Add("TIME_025t JAIL_319", VisualPhase.Damage, "ReuseFX_Physical_Impact_Slam_Super:4d1b99bee3bc05d489e03086bf27e295");
             Add("JAIL_441 JAIL_891 JAIL_892 CATA_557 CAP_001 CATA_156 CATA_581 CORE_CATA_007 BE_086 BE_071 JAIL_941t CATA_498 JAIL_515 CATA_785 EDR_820b EDR_570A", VisualPhase.Damage, "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0");
             Add("DINO_132", VisualPhase.Damage, "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0", block: BlockType.TRIGGER, source: VisualSource.Effect);
