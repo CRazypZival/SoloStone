@@ -119,7 +119,7 @@ internal sealed class HistoryShape
         internal string WrappedVariant, Under = "root";
         internal int HitMeta; // TARGET=1, DAMAGE=2, HEALING=4 directly in this block.
         internal bool HitDamage; // DAMAGE other than Lifesteal healing converted onto its own hero.
-        internal bool TargetRequired, TargetChecked, HasTargets, RangeHasEffects, Hidden, HeaderSubSpellTarget, PoisonDestroyed;
+        internal bool TargetRequired, TargetChecked, HasTargets, RangeHasEffects, Hidden, HeaderSubSpellTarget, PoisonDestroyed, DamageTargeted;
         internal int FatigueEntity, Attacker = ground?.Source ?? start.Source, Defender = ground?.Target ?? start.Target;
         internal int GameStep; // Game entity STEP when the block opened.
     }
@@ -376,11 +376,11 @@ internal sealed class HistoryShape
         if (index < 0) return null;
         var meta = b.Pending[index]; b.Pending.RemoveAt(index); return meta;
     }
-    // Retail publishes no TARGET for a heal that follows another target in the same POWER block: the play spell aims at
+    // Retail publishes no TARGET for a heal that follows a damage target in the same POWER block: the play spell aims at
     // the first target only (Drain Life CS2_061, Tidal Surge UNG_817, RLK_219, UNG_030 in the HearthSim logs; engine
-    // PowerHistory.HealFollowsTarget, #68).
+    // PowerHistory.HealFollowsTarget, #68). A heal after a heal still needs its own TARGET.
     private static bool HealFollowsTarget(Block b, int victim, bool heal) => heal && b != null && (int)b.Start.Type == 3
-        && b.HasTargets && b.Start.Target != victim && !HasTarget(b, victim);
+        && b.DamageTargeted && b.Start.Target != victim && !HasTarget(b, victim);
     private void HitTargets(int victim, Block b, bool metadata = false, bool heal = false)
     {
         TargetEffect(victim, b, hit: true, heal: heal);
@@ -656,6 +656,7 @@ internal sealed class HistoryShape
                 else if (meta.Type is HistoryMeta.Type.DAMAGE or HistoryMeta.Type.HEALING)
                 {
                     if (b != null) b.Targeted[meta] = meta.Info.All(victim => HasTarget(b, victim));
+                    if (b != null && meta.Type == HistoryMeta.Type.DAMAGE && b.HasTargets) b.DamageTargeted = true;
                     if (b != null && meta.Type == HistoryMeta.Type.DAMAGE && meta.Data == 0 && b.Targeted[meta])
                         foreach (int victim in meta.Info)
                             if (Entity(victim).Get(GameTag.DIVINE_SHIELD) == 1
