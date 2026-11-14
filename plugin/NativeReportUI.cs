@@ -56,7 +56,7 @@ internal static class NativeReportUI
     // The preview is built and verified but not saved: SAVE ZIP and BACK are offered.
     internal static bool PreviewPending => result != null && result.Pending;
     internal static bool IncludeSave { get; private set; }
-    internal static string Body => NativeReportText.Guidance + "\nPaste this id in your post: " + reportId;
+    internal static string Body => NativeReportText.Guidance + "\nPaste this id in it: " + reportId;
     internal static string Status => exporting ? "Preparing the preview..." : error != null ? "Export failed: " + error
         : result == null ? NativeReportText.SaveHint
         : result.Pending ? NativeReportText.Preview(PreviewFiles(result), result.IncludeSave, result.Replaced)
@@ -336,7 +336,7 @@ internal sealed class NativeReportMenu : ButtonListMenu
         var source = ProfileFormKit.Label(template);
         if (source == null) throw new InvalidOperationException("Native report label template missing");
         var copy = UnityEngine.Object.Instantiate(source.gameObject, m_menu.m_buttonContainer.transform, true);
-        copy.transform.localPosition = Vector3.zero; copy.transform.localScale *= .7f;
+        copy.transform.localPosition = Vector3.zero;
         var text = copy.GetComponent(ProfileFormKit.TextType);
         ProfileFormKit.ScaleRect(text, "Width", 1.65f); ProfileFormKit.ScaleRect(text, "Height", 4f);
         ProfileFormKit.SetText(text, value); ProfileFormKit.SetColor(text, new Color(.22f, .15f, .09f, 1));
