@@ -941,9 +941,23 @@ internal static partial class HistoryShapeProof
             objectiveShow.ShowEntity.Tags.Add(new() { Name = 2311, Value = 1 });
             Feed(objective, objectiveShow); objective.Finish();
             Check(!objective.Findings.Any(v => v.Rule == "PRIVACY"), "OBJECTIVE=1 is public in SECRET");
-            var secret = Seed(); var secretShow = Show(16, "EX1_287", Zone.HAND);
+            // An automatic cast (Ohnahra) moves a Sigil from the top of the deck straight to SECRET, with no public zone between.
+            var sigil = Seed(); var sigilShow = new PowerHistoryData { ShowEntity = Full(16, "CATA_528", CardType.SPELL, Zone.DECK, 2).FullEntity };
+            sigilShow.ShowEntity.Tags.Add(new() { Name = 1749, Value = 1 });
+            Feed(sigil, Start(5, 15, 0), sigilShow, Start(7, 16, 0), TC(16, GameTag.ZONE, (int)Zone.SECRET), End(), End());
+            sigil.Finish(); Check(!sigil.Findings.Any(v => v.Rule == "PRIVACY"), "SIGIL=1 is public after entering SECRET");
+            foreach (var zone in new[] { Zone.HAND, Zone.DECK })
+            {
+                var heldSigil = Seed(); var heldShow = new PowerHistoryData { ShowEntity = Full(16, "CATA_528", CardType.SPELL, zone, 2).FullEntity };
+                heldShow.ShowEntity.Tags.Add(new() { Name = 1749, Value = 1 });
+                Feed(heldSigil, heldShow); heldSigil.Finish();
+                Check(heldSigil.Findings.Any(v => v.Rule == "PRIVACY"), "an unplayed Sigil stays private in " + zone);
+            }
+            // A SPELL, so PublicSecret's own guards (SECRET, SecretCards) are what keep it private.
+            var secret = Seed(); var secretShow = new PowerHistoryData { ShowEntity = Full(16, "EX1_287", CardType.SPELL, Zone.HAND, 2).FullEntity };
             secretShow.ShowEntity.Tags.Add(new() { Name = 2311, Value = 1 });
             secretShow.ShowEntity.Tags.Add(new() { Name = 1192, Value = 1 });
+            secretShow.ShowEntity.Tags.Add(new() { Name = 1749, Value = 1 });
             Feed(secret, Start(7, 16, 0), secretShow, TC(16, GameTag.ZONE, (int)Zone.PLAY), TC(16, GameTag.ZONE, (int)Zone.SECRET), End());
             secret.Finish(); Check(secret.Findings.Any(v => v.Rule == "PRIVACY"), "actual secret must remain anonymous");
             var activated = Seed(); var activation = Show(16, "CORE_BAR_812", Zone.SECRET);
