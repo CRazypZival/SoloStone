@@ -414,7 +414,8 @@ internal sealed class NativeReportMenu : ButtonListMenu
         }
         Rect rect = DeckLayout.ScreenRect(m_menu.gameObject, camera);
         if (rect.width <= 0 || rect.height <= 0) return;
-        float scale = Math.Min(Screen.width * .86f / rect.width, Screen.height * .86f / rect.height);
+        // Shrink to fit only; never grow past the native size.
+        float scale = Math.Min(1f, Math.Min(Screen.width * .86f / rect.width, Screen.height * .86f / rect.height));
         m_menu.transform.localScale *= scale;
         rect = DeckLayout.ScreenRect(m_menu.gameObject, camera);
         var at = camera.WorldToScreenPoint(m_menu.transform.position);
