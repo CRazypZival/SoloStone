@@ -18,6 +18,10 @@ internal static class LocalNativeText
     };
     // Native (transport) ID -> engine ID, for the card file's locale texts, which are keyed by engine ID.
     private static readonly Dictionary<string, string> EngineIdByNativeId = new Dictionary<string, string>(StringComparer.Ordinal);
+    // Quarantined cards and the tokens they make are shown through another card's native identity, so they keep its text.
+    // Keep it above TextByNativeId: static fields initialize in order, and the loop's catch would hide a null set.
+    private static readonly HashSet<string> KeepNativeText = new HashSet<string>(
+        LocalCardCatalog.QuarantinedIds.Concat(new[] { "EX1_614t", "EX1_finkle" }), StringComparer.Ordinal);
     private static readonly Dictionary<string, string> TextByNativeId = BuildTextByNativeId();
     private static string clientLocale;
 
@@ -155,7 +159,8 @@ internal static class LocalNativeText
         {
             try
             {
-                if (card.Implemented && !result.ContainsKey(card.Id) && NativeMatch.TransportCardId(card.Id) == card.Id)
+                if (card.Implemented && !result.ContainsKey(card.Id) && !KeepNativeText.Contains(card.Id)
+                    && NativeMatch.TransportCardId(card.Id) == card.Id)
                 {
                     result[card.Id] = card.Text;
                     EngineIdByNativeId[card.Id] = card.Id;

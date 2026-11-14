@@ -154,9 +154,16 @@ class NothingOutside(unittest.TestCase):
     def test_the_plugin_builds_the_engine_from_source_by_default(self):
         project = (PRODUCT / 'plugin' / 'OfflineProbe.csproj').read_text(encoding='utf-8')
         self.assertRegex(project, r"<EngineSource Condition=\"'\$\(EngineSource\)' == '' and '\$\(StandardProof\)' != 'true' and '\$\(SabberStoneCorePath\)' == ''\">true</EngineSource>")
-        for csproj in PRODUCT.rglob('*.csproj'):
-            if {'bin', 'obj', 'out'} & set(csproj.relative_to(PRODUCT).parts):
-                continue
+        # The public tree only (tracked, or new and not ignored): a maintainer's ignored private/ checkout has projects
+        # that do name the vendor DLL. An export without .git falls back to walking the folder.
+        try:
+            names = git(PRODUCT, 'ls-files', '--cached', '--others', '--exclude-standard', '--', '*.csproj').splitlines()
+        except (OSError, subprocess.CalledProcessError):
+            names = [str(p.relative_to(PRODUCT)) for p in PRODUCT.rglob('*.csproj')
+                     if not {'bin', 'obj', 'out', 'private'} & set(p.relative_to(PRODUCT).parts)]
+        projects = [PRODUCT / name for name in names if (PRODUCT / name).is_file()]
+        self.assertIn(PRODUCT / 'plugin' / 'OfflineProbe.csproj', projects)
+        for csproj in projects:
             self.assertNotIn('vendor/SabberStoneCore.dll', csproj.read_text(encoding='utf-8'), str(csproj))
 
 
