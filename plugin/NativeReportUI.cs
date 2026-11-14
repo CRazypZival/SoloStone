@@ -393,9 +393,28 @@ internal sealed class NativeReportMenu : ButtonListMenu
             slice.Key.SetActive(true); // Native Show hides every cached plank immediately before LayoutMenu.
             container.AddSlice(slice.Key, Vector3.zero, Vector3.zero, false, true, false, slice.Value);
         }
-        container.UpdateSlices(); LayoutMenuBackground();
+        container.UpdateSlices();
         var camera = CameraUtils.FindFirstByLayerMask(1 << m_menu.gameObject.layer);
-        if (camera == null) return;
+        if (camera == null) { LayoutMenuBackground(); return; }
+        // The slice container reserves a text slice's template height, not its rendered lines: push each slice below the one above it.
+        float above = float.NaN;
+        foreach (var slice in slices)
+        {
+            Rect r = DeckLayout.ScreenRect(slice.Key, camera);
+            if (r.height <= 0) continue;
+            if (!float.IsNaN(above))
+            {
+                float gap = r.height * (slice.Value ? .15f : .1f), shift = r.yMax - (above - gap);
+                if (shift > 0)
+                {
+                    Vector3 pos = camera.WorldToScreenPoint(slice.Key.transform.position);
+                    slice.Key.transform.position += camera.ScreenToWorldPoint(pos - Vector3.up * shift) - camera.ScreenToWorldPoint(pos);
+                    r.y -= shift;
+                }
+            }
+            above = r.yMin;
+        }
+        LayoutMenuBackground();
         // Native background sizing omits caption text bounds; grow it to cover the text slices too.
         Rect frame = DeckLayout.ScreenRect(m_menu.m_background.gameObject, camera);
         float bottom = frame.yMin;
