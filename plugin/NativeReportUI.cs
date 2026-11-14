@@ -58,7 +58,7 @@ internal static class NativeReportUI
     internal static bool IncludeSave { get; private set; }
     internal static string Body => NativeReportText.Guidance + "\nPaste this id in it:\n" + reportId;
     internal static string Status => exporting ? "Preparing the preview..." : error != null ? "Export failed: " + error
-        : result == null ? NativeReportText.SaveHint
+        : result == null ? ""
         : result.Pending ? NativeReportText.Preview(PreviewFiles(result), result.IncludeSave, result.Replaced)
         : "Exported. Attach this zip:\n" + NativeReportText.WrapPath(displayPath);
     private static List<KeyValuePair<string, long>> PreviewFiles(ReportExport.Result preview)
@@ -366,7 +366,8 @@ internal sealed class NativeReportMenu : ButtonListMenu
             Row("report.export", NativeReportUI.Exporting ? "Preparing..." : NativeReportText.PreviewLabel, NativeReportUI.Export,
                 NativeReportUI.CanExport);
         Row("report.discord", NativeReportText.DiscordLabel, NativeReportUI.Discord, NativeReportText.DiscordEnabled);
-        Text(NativeReportUI.Status, toggle, 3f);
+        string status = NativeReportUI.Status;
+        if (status.Length != 0) Text(status, toggle, 5f);
         if (NativeReportUI.CopyVisible) Row("report.copy-path", "COPY PATH", NativeReportUI.CopyPath);
         Row("report.close", NativeStrings.Get("GLOBAL_BUTTON_CLOSE", "CLOSE").ToUpperInvariant(), NativeReportUI.Close);
     }

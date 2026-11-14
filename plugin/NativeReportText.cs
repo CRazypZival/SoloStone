@@ -7,7 +7,6 @@ internal static class NativeReportText
     internal const string Header = "REPORT AN ISSUE";
     // Short lines: the native label shrinks one long line to fit its width, which made it unreadable.
     internal const string Guidance = "Attach the zip to a post\nin #bug-reports on Discord.";
-    internal const string SaveHint = "Your save is included only\nif you switch it on above.";
     // Plain ASCII: native Hearthstone fonts lack checkbox glyphs.
     // The preview step (I2d): what the zip holds, before anything is saved. Names are already redacted. Short enough for the native popup.
     internal const string PreviewLabel = "PREVIEW REPORT", SaveLabel = "SAVE ZIP", BackLabel = "BACK";
@@ -16,13 +15,11 @@ internal static class NativeReportText
         : ((bytes * 10 + 524288) / 1048576 / 10.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB";
     internal static string Preview(System.Collections.Generic.IList<System.Collections.Generic.KeyValuePair<string, long>> files, bool includeSave, long replaced)
     {
-        var lines = new System.Collections.Generic.List<string> { "Preview. The zip holds:" };
-        for (int i = 0; i < files.Count && i < PreviewRows; i++) lines.Add(files[i].Key + "  " + Size(files[i].Value));
-        if (files.Count > PreviewRows) lines.Add("and " + (files.Count - PreviewRows) + " more");
-        lines.Add(includeSave ? "Your save is included." : "Your save is not included.");
-        lines.Add(replaced + " personal details (Windows user, PC name, folders) were replaced. Nothing is uploaded; you attach the zip yourself.");
-        lines.Add("SAVE ZIP writes it. BACK discards it.");
-        return string.Join("\n", lines);
+        // Short lines: the dialog is native Game Menu size, so a file list would be unreadable.
+        long total = 0; foreach (var file in files) total += file.Value;
+        return "The zip holds " + files.Count + " files, " + Size(total) + ".\n"
+            + (includeSave ? "Your save is included.\n" : "Your save is not included.\n")
+            + replaced + " personal details replaced.\nNothing is uploaded.";
     }
     internal static string IncludeSaveLabel(bool on) => on ? "INCLUDE MY SAVE: ON" : "INCLUDE MY SAVE: OFF";
     internal static bool DiscordEnabled => !string.IsNullOrEmpty(BugReportsUrl);
@@ -54,7 +51,7 @@ internal static class NativeReportText
     {
         path = path ?? "";
         var lines = new System.Collections.Generic.List<string>();
-        for (int start = 0; start < path.Length; start += 56) lines.Add(path.Substring(start, Math.Min(56, path.Length - start)));
+        for (int start = 0; start < path.Length; start += 30) lines.Add(path.Substring(start, Math.Min(30, path.Length - start)));
         return string.Join("\n", lines);
     }
 }
