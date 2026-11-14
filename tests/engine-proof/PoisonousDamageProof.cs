@@ -39,7 +39,7 @@ internal static class PoisonousDamageProof
     }
     internal static void Run()
     {
-        KnifeJuggler(); AreaDamage(); DamageWaves(); PerHitLifesteal(); NestedWaves(); SingleTarget(); Combat(); Reactions(); Weapon(); HeroSources(); Deathrattles(); KeywordTiming(); Prevention(); GenericSources(); KillAndLifestealTiming();
+        KnifeJuggler(); AreaDamage(); DamageWaves(); PerHitLifesteal(); NestedWaves(); SingleTarget(); Combat(); AfterAttackSideHits(); Reactions(); Weapon(); HeroSources(); Deathrattles(); KeywordTiming(); Prevention(); GenericSources(); KillAndLifestealTiming();
         Console.WriteLine("PASS Poisonous waves: damage before poison before collected Lifesteal/deaths; nested waves isolated; serial/single-target history unchanged");
         Console.WriteLine("PASS Poisonous all damage: granted Juggler/Pyromancer; combat/Patron/Acolyte; weapon attack/counter; Hagatha/fatigue/nested hero provenance; printed/granted Deathrattles; timing; prevention; spell/power/location; history on/off");
     }
@@ -238,6 +238,32 @@ internal static class PoisonousDamageProof
         defender = Summon(p.Opponent, "CS2_200"); cursor = g.PowerHistory.Full.Count;
         Verify(Generic.AttackBlock(p, attacker, defender, true, false), "forced zero-Attack combat resolves");
         Verify(defender.Zone.Type == Zone.PLAY && defender.Damage == 0, "zero Attack cannot poison"); History(g, cursor);
+    }
+    // Cave Hydra and Shadowmourne hit the defender's neighbours in their own after-attack trigger, not through combat cleave:
+    // both side hits land before either neighbour's Poisonous block.
+    private static void AfterAttackSideHits()
+    {
+        foreach (bool weapon in new[] { false, true })
+        {
+            var g = HistoryFactsProof.Fixture(); var p = g.Player1;
+            IPlayable source;
+            if (weapon) { var blade = (Weapon)Play(g, p, "ICC_834w"); blade[GameTag.POISONOUS] = 1; source = blade; }
+            else { var hydra = Summon(p, "LOOT_078"); Grant(g, hydra); source = hydra; }
+            var left = Summon(p.Opponent, "CS2_200");
+            var defender = Summon(p.Opponent, "CS2_200");
+            var right = Summon(p.Opponent, "CS2_200");
+            string name = weapon ? "Shadowmourne" : "Cave Hydra";
+            int cursor = g.PowerHistory.Full.Count;
+            if (weapon) Verify(g.Process(HeroAttackTask.Any(p, defender)), name + " hero attack accepted");
+            else Attack(g, (Minion)source, defender);
+            History(g, cursor, (source, defender), (source, left), (source, right));
+            Verify(new[] { defender, left, right }.All(m => m.Zone.Type == Zone.GRAVEYARD), name + " poisons defender and both neighbours");
+            var rows = g.PowerHistory.Full.Skip(cursor).ToArray();
+            int Hit(Minion m) => Array.FindIndex(rows, e => e is PowerHistoryTagChange { Tag: GameTag.DAMAGE, Value: > 0 } t && t.EntityId == m.Id);
+            int Poison(Minion m) => Array.FindIndex(rows, (e) => e is PowerHistoryMetaData { Type: MetaDataType.POISONOUS } meta && meta.Info.Contains(m.Id));
+            Verify(Hit(left) >= 0 && Hit(right) >= 0 && Math.Max(Hit(left), Hit(right)) < Math.Min(Poison(left), Poison(right)),
+                name + " side hits both precede the neighbours' poison");
+        }
     }
     private static void Reactions()
     {

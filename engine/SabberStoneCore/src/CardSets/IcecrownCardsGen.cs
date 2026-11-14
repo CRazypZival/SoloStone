@@ -2629,8 +2629,11 @@ namespace SabberStoneCore.CardSets
 						{
 							//Minion target = (Minion) p.Game.IdEntityDic[p.Game.ProposedDefender];
 							Minion target = (Minion)p.Game.CurrentEventData.EventTarget;
-							foreach (Minion adjacent in target.GetAdjacentMinions())
-								adjacent.TakeDamage(p, p.Controller.Hero.AttackDamage);
+							Minion[] adjacents = target.GetAdjacentMinions();
+							// Both side hits land before a Poisonous Shadowmourne's kills (#93).
+							using (p.Game.History ? p.Game.PowerHistory.DamageWave(adjacents.Length) : null)
+								foreach (Minion adjacent in adjacents)
+									adjacent.TakeDamage(p, p.Controller.Hero.AttackDamage);
 							return 0;
 						}))
 				}
