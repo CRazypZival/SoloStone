@@ -312,8 +312,11 @@ namespace SabberStoneCore.CardSets
 						{
 							//Minion target = (Minion)p.Game.IdEntityDic[p.Game.ProposedDefender];
 							Minion target = (Minion)p.Game.CurrentEventData.EventTarget;
-							foreach (Minion adjacent in target.GetAdjacentMinions())
-								adjacent.TakeDamage(p, ((Minion)p).AttackDamage);
+							Minion[] adjacents = target.GetAdjacentMinions();
+							// Both side hits land before a Poisonous Cave Hydra's kills (#93).
+							using (p.Game.History ? p.Game.PowerHistory.DamageWave(adjacents.Length) : null)
+								foreach (Minion adjacent in adjacents)
+									adjacent.TakeDamage(p, ((Minion)p).AttackDamage);
 							return 0;
 						}))
 				}
