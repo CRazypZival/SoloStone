@@ -14,10 +14,10 @@ internal static partial class Program
     private static void WispHeroPowerHistory()
     {
         // Blessing of the Wisp (EDR_851p) has no play effect in its card definition, so the client draws no damage
-        // visual by itself; the server sends one sub-spell per hit instead. This prefab is a stand-in (Arcane Missile
-        // recipe) because the retail asset is unknown, so the checks pin the sub-spell shape per hit, not the asset
-        // itself.
-        const string arcane = "ReuseFX_Arcane_Missile_PurpleLightning_Super_Simultaneous:a40e6c32f4253314db432d7808a092de";
+        // visual by itself; the server sends one sub-spell per hit instead. This prefab is a stand-in (Arcane Missiles'
+        // crystal missile, #26's second report) because the retail asset is unknown, so the checks pin the sub-spell
+        // shape per hit and the recipe's current prefab.
+        const string arcane = "ReuseFX_Arcane_Missile_Crystal_Small_Super_Simultaneous_WithIdle:6c662c0f4f538374dbd930f66e205eb3";
         foreach (bool bot in new[] { false, true })
         foreach (string mode in new[] { "missiles", "wisp", "full-board", "mixed", "bonuses", "zero" })
         {
