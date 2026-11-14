@@ -76,6 +76,9 @@ sealed class FakeLauncherOps : ILauncherOps
     public RollbackResult Rollback() { Calls.Add("Rollback"); return RolledBack; }
     public RestoreResult RestoreBackup(string id) { Calls.Add("RestoreBackup:" + id); return new RestoreResult { BackupId = id, Message = "Your saves are back to backup " + id + ". Progress since the update is lost." }; }
     public void SaveUpdatesSetting(bool on) { Calls.Add("SaveUpdatesSetting:" + on); }
+    public string Skipped;
+    public string SkippedVersion() { Calls.Add("SkippedVersion"); return Skipped; }
+    public void SkipVersion(string version) { Calls.Add("SkipVersion:" + version); Skipped = version; }
     public void RepairFirewall() { Calls.Add("RepairFirewall"); if (FirewallFails != null) { var e = FirewallFails; FirewallFails = null; throw e; } }
 }
 
@@ -315,22 +318,49 @@ static partial class Program
         var m = new LauncherModel(); var runner = new LauncherRunner(m, ops, Inline);
         Check(!runner.Start(CancellationToken.None), "no restart without a swap");
         var order = ops.Calls.Where(c => c != "Status").ToList();
-        Check(string.Join(",", order) == "Lease,Resume,Check,Apply,Unlease", "start order is resume, check, apply under one lease: " + string.Join(",", ops.Calls));
+        Check(string.Join(",", order) == "Lease,Resume,Check,SkippedVersion,Unlease", "start order is resume, check under one lease, and no apply: " + string.Join(",", ops.Calls));
         Check(ops.Calls.IndexOf("Resume") < ops.Calls.IndexOf("Status") && m.Phase == LauncherPhase.Ready && m.CanPlay, "the window is ready only after the update step");
+        Check(m.Update == UpdateUi.Offered && m.CanOffer && !ops.Calls.Contains("Apply") && m.UpdateText == "SoloStone 0.2.0 is available.", "a newer release is offered, nothing is downloaded");
         // Swapped: restart at once, after the lease is released, and nothing else runs.
         ops = new FakeLauncherOps { Checked = new UpdateStatus { State = UpdateState.Available }, Applied = new UpdateResult { Outcome = UpdateOutcome.Swapped, Version = "0.2.0", Message = "SoloStone 0.2.0 is installed. Restarting." } };
         m = new LauncherModel(); runner = new LauncherRunner(m, ops, Inline);
-        Check(runner.Start(CancellationToken.None), "a swap asks for a restart");
+        Check(!runner.Start(CancellationToken.None) && m.CanOffer, "an available release waits for the player");
+        Check(runner.UpdateNow(CancellationToken.None) && ops.AppliedAccepting == false, "Update now applies and asks for a restart");
         Check(ops.Calls.Last() == "Restart:leases=0" && ops.Calls.Count(c => c.StartsWith("Restart")) == 1, "restart happens once, after the lease was released");
-        Check(!ops.Calls.Contains("Launch") && ops.Calls.IndexOf("Apply") < ops.Calls.IndexOf("Unlease") && ops.Calls.Count(c => c == "Status") == 1, "no more work after a swap, and no launch");
+        Check(!ops.Calls.Contains("Launch") && ops.Calls.IndexOf("Apply") < ops.Calls.LastIndexOf("Unlease") && ops.Calls.LastIndexOf("Status") < ops.Calls.IndexOf("Apply"), "no more work after a swap, and no launch");
         Check(m.Phase == LauncherPhase.Restarting && m.Update == UpdateUi.Swapped && !m.CanPlay, "the window shows the restart");
         // Warning on the new release.
         ops = new FakeLauncherOps { Checked = new UpdateStatus { State = UpdateState.Available },
             Applied = new UpdateResult { Outcome = UpdateOutcome.NeedsConfirmation, Version = "0.2.0", Message = "Latest client we tested with: 37.0.2. Your client: 37.0.0. SoloStone has not been tested with this exact client." } };
         m = new LauncherModel(); runner = new LauncherRunner(m, ops, Inline);
-        Check(!runner.Start(CancellationToken.None) && m.Update == UpdateUi.NeedsConfirmation && m.CanConfirmUpdate && m.CanPlay && m.UpdateText.Contains("has not been tested"), "a warning on the new release waits for a click, play still works");
+        Check(!runner.Start(CancellationToken.None) && m.CanOffer, "the offer comes first");
+        Check(!runner.UpdateNow(CancellationToken.None) && m.Update == UpdateUi.NeedsConfirmation && m.CanConfirmUpdate && m.CanPlay && m.UpdateText.Contains("has not been tested"), "after Update now a warning on the new release waits for a click, play still works");
         ops.Applied = new UpdateResult { Outcome = UpdateOutcome.Swapped, Message = "installed" };
         Check(runner.ConfirmUpdate(CancellationToken.None) && ops.AppliedAccepting == true && ops.Calls.Last().StartsWith("Restart"), "confirming applies with the warning accepted and restarts");
+        // Offer buttons: Later, Skip this version, a newer one, off.
+        var avail = new UpdateStatus { State = UpdateState.Available, Latest = new LatestRelease { Version = "0.3.0" }, Message = "SoloStone 0.3.0 is available." };
+        ops = new FakeLauncherOps { Checked = avail };
+        m = Started(ops);
+        Check(m.Update == UpdateUi.Offered && m.OfferedVersion == "0.3.0" && m.CanOffer && m.CanSkipVersion && m.CanPlay && !ops.Calls.Contains("Apply"), "offer: three buttons live, Play on, no apply");
+        var snap = m.Snapshot(); Check(snap.CanUpdateNow && snap.CanLater && snap.CanSkipVersion && snap.OfferedVersion == "0.3.0" && snap.ToJson().Contains("canSkipVersion"), "the test hook sees the offer and its buttons");
+        runner = new LauncherRunner(m, ops, Inline);
+        runner.Later();
+        Check(m.Update == UpdateUi.Declined && !m.CanOffer && m.CanPlay && m.Phase == LauncherPhase.Ready && !ops.Calls.Contains("Apply") && !ops.Calls.Any(c => c.StartsWith("SkipVersion")), "Later: nothing applied, nothing saved, Play on");
+        m = Started(ops); Check(m.Update == UpdateUi.Offered, "Later asks again on the next start");
+        ops.Calls.Clear(); runner = new LauncherRunner(m, ops, Inline);
+        runner.SkipVersion();
+        Check(ops.Skipped == "0.3.0" && m.Update == UpdateUi.Declined && !m.CanOffer && m.CanPlay && !ops.Calls.Contains("Apply") && ops.OpenLeases == 0, "Skip this version saves it and applies nothing");
+        ops.Calls.Clear(); m = Started(ops);
+        Check(m.Update == UpdateUi.Declined && !m.CanOffer && m.CanPlay && m.UpdateText.Contains("skipped") && !ops.Calls.Contains("Apply"), "the same version is not offered again");
+        ops.Checked = new UpdateStatus { State = UpdateState.Available, Latest = new LatestRelease { Version = "0.3.1" }, Message = "SoloStone 0.3.1 is available." };
+        m = Started(ops); Check(m.Update == UpdateUi.Offered && m.OfferedVersion == "0.3.1" && m.CanOffer, "a newer version is offered despite an older skip");
+        ops.Checked = new UpdateStatus { State = UpdateState.Available, Latest = new LatestRelease { Version = "0.2.9" }, Message = "x" };
+        m = Started(ops); Check(m.Update == UpdateUi.Declined, "a release older than the skipped one stays quiet");
+        ops = new FakeLauncherOps { Checked = new UpdateStatus { State = UpdateState.Off, Message = "Update checks are off." }, Report = Report(updates: false) };
+        m = Started(ops); Check(m.Update == UpdateUi.Off && !m.CanOffer && !ops.Calls.Contains("SkippedVersion") && !ops.Calls.Contains("Apply"), "updates off: no offer, no apply");
+        ops = new FakeLauncherOps { Checked = avail, Applied = new UpdateResult { Outcome = UpdateOutcome.Swapped, Message = "installed" } };
+        m = Started(ops); runner = new LauncherRunner(m, ops, Inline);
+        Check(runner.UpdateNow(CancellationToken.None) && ops.Calls.Count(c => c == "Apply") == 1 && m.Update == UpdateUi.Swapped, "Update now still swaps and restarts");
         // Held, failed, off, not configured, up to date.
         foreach (var (state, ui) in new[] { (UpdateState.Held, UpdateUi.Held), (UpdateState.Failed, UpdateUi.Failed), (UpdateState.Off, UpdateUi.Off), (UpdateState.NotConfigured, UpdateUi.NotConfigured), (UpdateState.UpToDate, UpdateUi.UpToDate), (UpdateState.Busy, UpdateUi.Failed) }) {
             ops = new FakeLauncherOps { Checked = new UpdateStatus { State = state, Message = "message for " + state } };

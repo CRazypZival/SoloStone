@@ -17,7 +17,8 @@ namespace SoloStone
         readonly CheckBox accept = Ui.Check("launcher.accept", Texts.PlayWarning);
         readonly WrapText update = new WrapText("launcher.update") { MaxHeight = 160 };
         readonly ProgressBar bar = new ProgressBar { Name = "launcher.progress", Style = ProgressBarStyle.Marquee, Height = 16 };
-        readonly Button skip = Ui.Button("launcher.skip", Texts.Skip), installUpdate = Ui.Button("launcher.update-confirm", Texts.InstallUpdate);
+        readonly Button skip = Ui.Button("launcher.skip", Texts.Skip), installUpdate = Ui.Button("launcher.update-confirm", Texts.InstallUpdate),
+            updateNow = Ui.Button("launcher.update-now", Texts.UpdateNow), later = Ui.Button("launcher.update-later", Texts.Later), skipVersion = Ui.Button("launcher.update-skip-version", Texts.SkipVersion);
         readonly FlowLayoutPanel updateButtons = new FlowLayoutPanel { Name = "launcher.update-buttons", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true };
         readonly WrapText notice = new WrapText("launcher.message") { MaxHeight = 240 };
         readonly CheckBox switchBox = Ui.Check("launcher.updates-switch", Texts.UpdatesSwitch);
@@ -52,7 +53,7 @@ namespace SoloStone
             play.BackColor = Color.FromArgb(35, 97, 169); play.ForeColor = Color.White; play.UseVisualStyleBackColor = false;
             uninstall.FlatStyle = FlatStyle.Flat; uninstall.FlatAppearance.BorderSize = 0; uninstall.ForeColor = Color.FromArgb(65, 90, 120);
             uninstall.MinimumSize = Size.Empty; uninstall.Padding = Padding.Empty;
-            updateButtons.Controls.AddRange(new Control[] { skip, installUpdate });
+            updateButtons.Controls.AddRange(new Control[] { skip, updateNow, later, skipVersion, installUpdate });
             uninstallButtons.Controls.AddRange(new Control[] { uninstallGo, uninstallKeep });
             var fanNotice = new WrapText("launcher.fan-notice") { ForeColor = SystemColors.GrayText, Font = new Font(Font.FontFamily, Font.Size * 0.9f) }; fanNotice.SetText(Texts.FanNotice);
             stack.Controls.AddRange(new Control[] { headline, tested, yours, release, detail, accept, play, update, bar, updateButtons, notice, switchBox, uninstall, uninstallText, deleteSaves, uninstallButtons, fanNotice });
@@ -94,6 +95,13 @@ namespace SoloStone
                 model.Busy("Installing the update…"); Render();
                 Background(() => runner.ConfirmUpdate(CancellationToken.None));
             };
+            updateNow.Click += (s, e) => {
+                if (!model.CanOffer) return;
+                model.Busy("Installing the update…"); Render();
+                Background(() => runner.UpdateNow(CancellationToken.None));
+            };
+            later.Click += (s, e) => { if (model.CanOffer) Background(() => runner.Later()); };
+            skipVersion.Click += (s, e) => { if (model.CanSkipVersion) Background(() => runner.SkipVersion()); };
             play.Click += (s, e) => Play();
             rollback.Click += (s, e) => { if (model.CanRollback) { model.Busy("Rolling back…"); Render(); Background(() => runner.RollBack()); } };
             restore.Click += (s, e) => { if (model.CanRestoreBackup) { string id = model.BackupId; model.Busy("Restoring your saves…"); Render(); Background(() => { runner.RestoreBackup(id); }); } };
@@ -146,8 +154,11 @@ namespace SoloStone
                 accept.Visible = model.ShowWarning; accept.Enabled = model.CanConfirmWarning; accept.Checked = model.WarningConfirmed;
                 update.Visible = model.UpdateText.Length != 0; update.SetText(model.UpdateText);
                 bar.Visible = model.UpdateBusy;
-                updateButtons.Visible = model.CanSkip || model.CanConfirmUpdate;
+                updateButtons.Visible = model.CanSkip || model.CanConfirmUpdate || model.CanOffer;
                 skip.Visible = model.UpdateBusy; skip.Enabled = model.CanSkip && !skipUpdate.IsCancellationRequested;
+                updateNow.Visible = model.CanOffer; updateNow.Enabled = model.CanOffer;
+                later.Visible = model.CanOffer; later.Enabled = model.CanOffer;
+                skipVersion.Visible = model.CanOffer; skipVersion.Enabled = model.CanSkipVersion;
                 installUpdate.Visible = model.CanConfirmUpdate; installUpdate.Enabled = model.CanConfirmUpdate;
                 notice.Visible = model.Notice.Length != 0; notice.SetText(model.Notice);
                 notice.ForeColor = model.NoticeIsProblem ? Color.Firebrick : SystemColors.ControlText;

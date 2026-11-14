@@ -6,7 +6,7 @@ using System.Threading;
 namespace SoloStone
 {
     public enum LauncherPhase { Starting, Ready, Working, Launching, Running, Restarting, NotInstalled, Closing }
-    public enum UpdateUi { Pending, NotConfigured, Off, Checking, UpToDate, Applying, NeedsConfirmation, Held, Failed, Skipped, Swapped }
+    public enum UpdateUi { Pending, NotConfigured, Off, Checking, UpToDate, Applying, Offered, Declined, NeedsConfirmation, Held, Failed, Skipped, Swapped }
 
     public interface ILauncherOps
     {
@@ -21,6 +21,8 @@ namespace SoloStone
         RollbackResult Rollback();
         RestoreResult RestoreBackup(string id);
         void SaveUpdatesSetting(bool on);
+        string SkippedVersion();                                         // the release the player chose to skip, or null
+        void SkipVersion(string version);
         void RepairFirewall();
     }
 
@@ -34,6 +36,7 @@ namespace SoloStone
         public string Notice { get; private set; } = "";
         public bool NoticeIsProblem { get; private set; }
         public bool WarningConfirmed { get; private set; }
+        public string OfferedVersion { get; private set; }
         public UpdateResult PendingUpdate { get; private set; }
         public bool OffersBackup { get; private set; }
         public string BackupId { get; private set; }
@@ -50,6 +53,8 @@ namespace SoloStone
         public bool ShowWarning => Installed && Kind == VerdictKind.Warning;
         public bool CanConfirmWarning => ShowWarning && Idle;
         public bool CanSkip => Phase == LauncherPhase.Starting && UpdateBusy;
+        public bool CanOffer => Idle && Update == UpdateUi.Offered;
+        public bool CanSkipVersion => CanOffer && !string.IsNullOrEmpty(OfferedVersion);
         public bool CanConfirmUpdate => Idle && Update == UpdateUi.NeedsConfirmation && PendingUpdate != null;
         public bool CanRollback => Idle && Installed && !string.IsNullOrEmpty(Report.PreviousVersion);
         public bool CanRestoreBackup => Idle && OffersBackup;
@@ -86,9 +91,16 @@ namespace SoloStone
                 case UpdateState.Held: Update = UpdateUi.Held; break;
                 case UpdateState.Failed: Update = UpdateUi.Failed; break;
                 case UpdateState.Busy: Update = UpdateUi.Failed; break;
-                default: Update = UpdateUi.Checking; break; // Available: the apply step follows at once
+                default: Update = UpdateUi.Offered; OfferedVersion = status.Latest?.Version; break; // Available: the player chooses
             }
         }
+        // The newest release is the one the player skipped: say so, offer nothing.
+        public void UpdateVersionSkipped(UpdateStatus status) {
+            Update = UpdateUi.Declined; OfferedVersion = null;
+            UpdateText = "SoloStone " + status.Latest?.Version + " is available, but you skipped it.";
+        }
+        public void UpdateLater() { Update = UpdateUi.Declined; OfferedVersion = null; UpdateText = "No update this time. SoloStone will ask again next time."; }
+        public void VersionSkipped(string version) { Update = UpdateUi.Declined; OfferedVersion = null; UpdateText = "Skipped SoloStone " + version + ". SoloStone will ask again when a newer version is out."; }
         public void UpdateApplying() { Update = UpdateUi.Applying; UpdateText = "Downloading and checking the update…"; }
         public void UpdateApplied(UpdateResult result) {
             UpdateText = result.Message ?? "";
@@ -138,7 +150,7 @@ namespace SoloStone
             Window = "launcher", Phase = Phase.ToString(), Update = Update.ToString(), UpdateText = UpdateText, Installed = Installed, Verdict = Report?.Verdict?.KindName,
             TestedVersion = Report?.Verdict?.TestedVersion ?? Report?.TestedVersion, ClientVersion = Report?.Verdict?.FoundVersion ?? Report?.ClientVersion, ReleaseVersion = Report?.ReleaseVersion,
             PreviousVersion = Report?.PreviousVersion, HeldVersion = Report?.HeldVersion, HeldReason = Report?.HeldReason, UpdatesConfigured = Report?.UpdatesConfigured ?? false, CheckForUpdates = Report?.CheckForUpdates ?? false,
-            Notice = Notice, NoticeIsProblem = NoticeIsProblem, WarningConfirmed = WarningConfirmed, CanPlay = CanPlay, CanSkip = CanSkip, CanConfirmUpdate = CanConfirmUpdate,
+            Notice = Notice, NoticeIsProblem = NoticeIsProblem, WarningConfirmed = WarningConfirmed, CanPlay = CanPlay, CanSkip = CanSkip, CanConfirmUpdate = CanConfirmUpdate, CanUpdateNow = CanOffer, CanLater = CanOffer, CanSkipVersion = CanSkipVersion, OfferedVersion = OfferedVersion,
             CanRollback = CanRollback, CanRestoreBackup = CanRestoreBackup, CanSwitch = CanSwitch, CanUninstall = CanUninstall, CanFixFirewall = CanFixFirewall,
             Backups = Report?.Backups ?? new string[0], JournalPhase = Report?.JournalPhase };
     }
@@ -165,6 +177,10 @@ namespace SoloStone
         [DataMember(Name = "canPlay")] public bool CanPlay;
         [DataMember(Name = "canSkip")] public bool CanSkip;
         [DataMember(Name = "canConfirmUpdate")] public bool CanConfirmUpdate;
+        [DataMember(Name = "canUpdateNow")] public bool CanUpdateNow;
+        [DataMember(Name = "canLater")] public bool CanLater;
+        [DataMember(Name = "canSkipVersion")] public bool CanSkipVersion;
+        [DataMember(Name = "offeredVersion")] public string OfferedVersion;
         [DataMember(Name = "canRollback")] public bool CanRollback;
         [DataMember(Name = "canRestoreBackup")] public bool CanRestoreBackup;
         [DataMember(Name = "canSwitch")] public bool CanSwitch;
@@ -205,14 +221,19 @@ namespace SoloStone
             if (restart) Restart();
             return restart;
         }
+        // Check only. A newer release is offered, not installed: the player picks Update now, Later or Skip this version.
         bool CheckAndApply(bool acceptWarning, CancellationToken cancel, bool checkFirst) {
             bool checking = checkFirst;
             try {
                 if (checkFirst) {
                     post(model.UpdateChecking);
                     var status = ops.Check(cancel);
+                    if (status.State == UpdateState.Available) {
+                        string latest = status.Latest?.Version, skipped = ops.SkippedVersion();
+                        if (latest != null && !string.IsNullOrEmpty(skipped) && SemVer.Valid(skipped) && !SemVer.Newer(latest, skipped)) { post(() => model.UpdateVersionSkipped(status)); return false; }
+                    }
                     post(() => model.UpdateChecked(status));
-                    if (status.State != UpdateState.Available) return false;
+                    return false;
                 }
                 checking = false;
                 post(model.UpdateApplying);
@@ -224,14 +245,28 @@ namespace SoloStone
             catch (Exception e) when (Messages.Expected(e)) { string message = Messages.Friendly(e); post(() => { if (checking) model.UpdateChecked(new UpdateStatus { State = UpdateState.Failed, Message = "Couldn't check for updates." }); else model.UpdateFailed(message); }); return false; }
         }
         // After the player confirmed a Warning verdict on the new release.
-        public bool ConfirmUpdate(CancellationToken skip) {
+        public bool ConfirmUpdate(CancellationToken skip) => ApplyChosen(true, skip);
+        // After the player chose Update now. The warning path, if any, asks again on its own.
+        public bool UpdateNow(CancellationToken skip) => ApplyChosen(false, skip);
+        bool ApplyChosen(bool acceptWarning, CancellationToken skip) {
             bool restart;
             using (ops.Lease()) {
-                restart = CheckAndApply(true, skip, false);
+                restart = CheckAndApply(acceptWarning, skip, false);
                 if (!restart) { try { var report = ops.Status(); post(() => model.ApplyReport(report)); } catch (Exception e) when (Messages.Expected(e)) { } post(model.Ready); }
             }
             if (restart) Restart();
             return restart;
+        }
+        public void Later() { post(model.UpdateLater); }
+        // Remembered on disk, so later starts leave this release alone. A newer one is still offered.
+        public void SkipVersion() {
+            string version = model.OfferedVersion;
+            if (string.IsNullOrEmpty(version)) return;
+            try {
+                using (ops.Lease()) { ops.SkipVersion(version); }
+                post(() => model.VersionSkipped(version));
+            }
+            catch (Exception e) when (Messages.Expected(e)) { string message = Messages.Friendly(e); post(() => model.Failure(message)); }
         }
         void Restart() { post(model.Restarting); ops.Restart(); }
 

@@ -113,7 +113,11 @@ With it off, SoloStone makes **no request at all**.
 The desktop and Start menu shortcut opens the launcher. It shows the client version SoloStone was tested with,
 yours, the SoloStone version, update status, **Play**, **Roll back**, the update switch and **Uninstall**.
 
-- On start it checks for an update (you can **Skip update**) and installs it. After the swap it restarts itself.
+- On start it checks for an update. If a newer version exists, the window shows it ("SoloStone 0.3.0 is
+  available.") and nothing is downloaded yet. **Update now** installs it and restarts SoloStone after the swap.
+  **Later** does nothing this time and asks again on the next start. **Skip this version** remembers that
+  version and stops asking about it; a newer version is offered again. You can play the current version in all
+  three cases.
 - A new release is installed and then checked: the next start must see the mod load. If it does not, the previous
   version is restored and the window says so.
 - A release that would give a warning for your client asks first. A release for a different major version never
