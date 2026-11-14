@@ -724,8 +724,9 @@ internal static partial class Program
             for (int i = 0; i < 5; i++) Check(Equals(next.Invoke(left, null), next.Invoke(right, null)), id + " route presentation leaves RNG unchanged");
             InvokeProcess(match, task); FlushFieldHistory(match); var entries = History(capture, cursor);
             string prefab = id switch {
-                "CATA_533" => "ReuseFX_Frost_Missile_Snowball_Medium_Fast_Super_Simultaneous:4fecda861d7d78b4186c3a3c3091c1e5",
-                "TLC_901" => "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1",
+                // #26's second report: Flash Flood is a Demon Hunter eye beam, Fumigate plays its own cloud.
+                "CATA_533" => "ReuseFX_Fel_DemonHunter_Missile_EyeBeam_Small_Super:19f497e56d4024342a2879a13a492eb8",
+                "TLC_901" => "TLCFX_901_Fumigate_Super:2781e5badd1556b49bf824643c973f3d",
                 "JAIL_805" or "CATA_475" or "CATA_999" => "ReuseFX_Lightning_Missile_Bolt_Small_Super_Simultaneous:4e176ec954bdc6f4bb7494e521d35c8a",
                 "CAP_001" or "CATA_156" or "CORE_CATA_007" or "DINO_132" => "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0",
                 "CATA_581" => "ReuseFX_Shadow_Fire_AE_Shockwave_Small_BothSides_Super:1f77cfbb2d94e3f4982cf07e849fa699",
@@ -812,7 +813,7 @@ internal static partial class Program
             var damage = entries.Where(e => e.HasMetaData && (int)e.MetaData.Type == 1).Select(e => e.MetaData.Info.Single()).ToArray();
             Check(shots.Length == 8 && shots.Select(s => s.TargetEntityIds.Single()).SequenceEqual(damage)
                 && shots.All(s => s.SourceEntityId == owner.Hero.Id && s.SpellPrefabGuid ==
-                    "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0"),
+                    "ReuseFX_Generic_Missile_Arrow_Super_Simultaneous:bbd7f9a5ebabd8e45b0a22cb4446f1d9"),
                 "powered Sylvanas targets only eight enemies; native pacing remains pending");
             capture.SerializeAll();
         }
@@ -966,9 +967,10 @@ internal static partial class Program
             for (int i = 0; i < 5; i++) Check(Equals(next.Invoke(left, null), next.Invoke(right, null)), id + " presentation leaves RNG unchanged");
             InvokeProcess(match, task); FlushFieldHistory(match); var entries = History(capture, cursor);
             string prefab = id switch {
-                "JAIL_891" or "JAIL_892" or "CATA_557" => "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0",
+                "JAIL_891" or "JAIL_892" => "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0",
                 "TIME_218" or "EDR_262" => "ReuseFX_Lightning_Missile_Bolt_Small_Super_Simultaneous:4e176ec954bdc6f4bb7494e521d35c8a",
-                "TIME_750" or "TIME_600" => "ReuseFX_Generic_Missile_Arrow_Super_Simultaneous:bbd7f9a5ebabd8e45b0a22cb4446f1d9",
+                // Sylvanas's Triumph shoots arrows, not shadow bolts (#26's second report).
+                "TIME_750" or "TIME_600" or "CATA_557" => "ReuseFX_Generic_Missile_Arrow_Super_Simultaneous:bbd7f9a5ebabd8e45b0a22cb4446f1d9",
                 "EDR_941" or "CATA_978" => "ReuseFX_Arcane_Missile_PurpleLightning_Super_Simultaneous:a40e6c32f4253314db432d7808a092de",
                 "EDR_814" => "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1",
                 _ => "ReuseFX_Fire_Missile_Fireball_Medium_Super_Simultaneous:161d5760bd9de1e41baf4c5611e61eed" };
@@ -1200,8 +1202,10 @@ internal static partial class Program
                 && (t.Target == null || t.Target.Id == victim.Id)));
             FlushFieldHistory(match);
             var entries = History(capture, cursor);
-            int expected = card == "DINO_417" || card == "TIME_609" ? 2 : card == "TIME_601" ? 3 : card == "JAIL_454" ? 4 : 1;
-            Check(entries.Count(e => e.HasSubSpellStart) == expected, card + " each actual semantic phase is animated");
+            // Ranger General Sylvanas plays her CardDef's one area volley over the enemy side (#26's second report).
+            int expected = card == "DINO_417" ? 2 : card == "TIME_601" ? 3 : card == "JAIL_454" ? 4 : 1;
+            Check(entries.Count(e => e.HasSubSpellStart) == expected, card + " each actual semantic phase is animated: "
+                + string.Join(",", entries.Where(e => e.HasSubSpellStart).Select(e => e.SubSpellStart.SpellPrefabGuid.Split(':')[0])));
             var scopes = new Stack<PegasusGame.PowerHistorySubSpellStart>();
             int powerDepth = 0;
             foreach (var entry in entries)
@@ -1211,8 +1215,9 @@ internal static partial class Program
                 {
                     Check(powerDepth > 0, card + " scope belongs to causal POWER");
                     scopes.Push(entry.SubSpellStart);
-                    Check(entry.SubSpellStart.SourceEntityId == owner.Hero.Id, card + " public visual origin");
-                    if (card is "TIME_601" or "CATA_556" or "JAIL_454")
+                    // Sylvanas's area volley comes from the card, as her CardDef authors it; the rest from the hero.
+                    Check(entry.SubSpellStart.SourceEntityId == (card == "TIME_609" ? source.Id : owner.Hero.Id), card + " public visual origin");
+                    if (card is "TIME_601" or "CATA_556" or "JAIL_454" or "TIME_609")
                         Check(entry.SubSpellStart.TargetEntityIds.Count == 0,
                             card + " future/private targets omitted; no invented origin target");
                 }
