@@ -257,7 +257,9 @@ internal static partial class Program
         life.Game.Player2.Hero.TakeDamage(source, 2); FlushFieldHistory(life);
         Check(History(packets, from).Any(e => e.HasPowerStart && e.PowerStart.Source == source.Id
             && (int)e.PowerStart.Type == 5 && e.PowerStart.HasTriggerKeyword && e.PowerStart.TriggerKeyword == 685
-            && e.PowerStart.HasEffectIndex && e.PowerStart.EffectIndex == 0), "Lifesteal needs TRIGGER keyword 685");
+            // Retail sends EffectIndex -1 and no effect card; 0 made the client play the card's first trigger effect (#67).
+            && e.PowerStart.HasEffectIndex && e.PowerStart.EffectIndex == -1 && string.IsNullOrEmpty(e.PowerStart.EffectCardId)),
+            "Lifesteal needs TRIGGER keyword 685");
         Check(life.Game.Player1.Hero.Damage == 3, "Lifesteal result unchanged");
         from = packets.Packets.Count;
         SendHistoryEntries(life, new List<IPowerHistoryEntry> {
