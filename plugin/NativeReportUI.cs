@@ -56,7 +56,7 @@ internal static class NativeReportUI
     // The preview is built and verified but not saved: SAVE ZIP and BACK are offered.
     internal static bool PreviewPending => result != null && result.Pending;
     internal static bool IncludeSave { get; private set; }
-    internal static string Body => NativeReportText.Guidance + "\nPaste this id in it:\n" + reportId;
+    internal static string Body => NativeReportText.Guidance; // The report id travels inside the zip (report.json).
     internal static string Status => exporting ? "Preparing the preview..." : error != null ? "Export failed: " + error
         : result == null ? ""
         : result.Pending ? NativeReportText.Preview(PreviewFiles(result), result.IncludeSave, result.Replaced)
@@ -354,7 +354,7 @@ internal sealed class NativeReportMenu : ButtonListMenu
         var toggle = Row("report.include-save", NativeReportText.IncludeSaveLabel(NativeReportUI.IncludeSave),
             NativeReportUI.ToggleSave, NativeReportUI.CanExport);
         // The profile form's native plank-toggle fallback is synchronous, including on a frozen presentation queue.
-        Text(NativeReportUI.Body, toggle, 5f);
+        Text(NativeReportUI.Body, toggle, 3f);
         var guidance = slices[slices.Count - 1]; slices.RemoveAt(slices.Count - 1); slices.Insert(0, guidance);
         // Preview first: SAVE ZIP writes exactly what the preview verified; BACK or closing throws it away.
         if (NativeReportUI.PreviewPending)
