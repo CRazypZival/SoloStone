@@ -367,7 +367,8 @@ internal sealed class NativeReportMenu : ButtonListMenu
                 NativeReportUI.CanExport);
         Row("report.discord", NativeReportText.DiscordLabel, NativeReportUI.Discord, NativeReportText.DiscordEnabled);
         string status = NativeReportUI.Status;
-        if (status.Length != 0) Text(status, toggle, 5f);
+        // Under the guidance, not low in the panel, where the native board darkens text.
+        if (status.Length != 0) { Text(status, toggle, 5f); var line = slices[slices.Count - 1]; slices.RemoveAt(slices.Count - 1); slices.Insert(1, line); }
         if (NativeReportUI.CopyVisible) Row("report.copy-path", "COPY PATH", NativeReportUI.CopyPath);
         Row("report.close", NativeStrings.Get("GLOBAL_BUTTON_CLOSE", "CLOSE").ToUpperInvariant(), NativeReportUI.Close);
     }
