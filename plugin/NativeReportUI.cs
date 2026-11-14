@@ -338,7 +338,7 @@ internal sealed class NativeReportMenu : ButtonListMenu
         var copy = UnityEngine.Object.Instantiate(source.gameObject, m_menu.m_buttonContainer.transform, true);
         copy.transform.localPosition = Vector3.zero;
         var text = copy.GetComponent(ProfileFormKit.TextType);
-        ProfileFormKit.ScaleRect(text, "Width", 2.4f); ProfileFormKit.ScaleRect(text, "Height", height);
+        ProfileFormKit.ScaleRect(text, "Width", 1.85f); ProfileFormKit.ScaleRect(text, "Height", height);
         ProfileFormKit.SetText(text, value); ProfileFormKit.SetColor(text, new Color(.22f, .15f, .09f, 1));
         ProfileFormKit.UpdateNow(text);
         owned.Add(copy); slices.Add(new KeyValuePair<GameObject, bool>(copy, true));
@@ -366,7 +366,7 @@ internal sealed class NativeReportMenu : ButtonListMenu
             Row("report.export", NativeReportUI.Exporting ? "Preparing..." : NativeReportText.PreviewLabel, NativeReportUI.Export,
                 NativeReportUI.CanExport);
         Row("report.discord", NativeReportText.DiscordLabel, NativeReportUI.Discord, NativeReportText.DiscordEnabled);
-        Text(NativeReportUI.Status, toggle, 4f);
+        Text(NativeReportUI.Status, toggle, 3f);
         if (NativeReportUI.CopyVisible) Row("report.copy-path", "COPY PATH", NativeReportUI.CopyPath);
         Row("report.close", NativeStrings.Get("GLOBAL_BUTTON_CLOSE", "CLOSE").ToUpperInvariant(), NativeReportUI.Close);
     }
