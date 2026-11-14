@@ -9,7 +9,7 @@ internal static class NativeReportText
     internal const string Guidance = "Attach the zip to a post\nin #bug-reports on Discord.";
     // Plain ASCII: native Hearthstone fonts lack checkbox glyphs.
     // The preview step (I2d): what the zip holds, before anything is saved. Names are already redacted. Short enough for the native popup.
-    internal const string PreviewLabel = "PREVIEW REPORT", SaveLabel = "SAVE ZIP", BackLabel = "BACK";
+    internal const string PreviewLabel = "PREVIEW REPORT", SaveLabel = "SAVE ZIP";
     internal const int PreviewRows = 6;
     internal static string Size(long bytes) => bytes < 1024 ? bytes + " B" : bytes < 1024 * 1024 ? (bytes + 512) / 1024 + " KB"
         : ((bytes * 10 + 524288) / 1048576 / 10.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB";
@@ -28,7 +28,7 @@ internal static class NativeReportText
         + (string.IsNullOrEmpty(matchId) ? "nomatch" : Regex.Replace(matchId, "[^A-Za-z0-9]", "").PadRight(6, '0').Substring(0, 6))
         + "-" + Guid.NewGuid().ToString("N").Substring(0, 4);
     internal static bool IsControl(string id) => id == "menu.report-issue"
-        || id == "report.include-save" || id == "report.export" || id == "report.save" || id == "report.back"
+        || id == "report.include-save" || id == "report.export" || id == "report.save"
         || id == "report.discord" || id == "report.copy-path" || id == "report.close";
     // Wine hides the Unix HOME: WINEHOMEDIR ("\??\Z:\home\deck") first, then HOME. Deployment keeps the release label beside compat/.
     internal static string DeckLabelPath(string wineHomeDir, string home)

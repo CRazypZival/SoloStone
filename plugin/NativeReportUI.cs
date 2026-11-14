@@ -53,7 +53,7 @@ internal static class NativeReportUI
     internal static bool CanExport => !exporting && result == null;
     // Offered after every successful export: cheap, and helps players who closed Explorer.
     internal static bool CopyVisible => result != null && !result.Pending;
-    // The preview is built and verified but not saved: SAVE ZIP and BACK are offered.
+    // The preview is built and verified but not saved: SAVE ZIP is offered; the save toggle rebuilds it.
     internal static bool PreviewPending => result != null && result.Pending;
     internal static bool IncludeSave { get; private set; }
     internal static string Body => NativeReportText.Guidance; // The report id travels inside the zip (report.json).
@@ -161,7 +161,15 @@ internal static class NativeReportUI
         result = null; error = displayPath = revealMode = null;
         popup.Open();
     }
-    internal static void ToggleSave() => Guard(() => { if (CanExport) { IncludeSave = !IncludeSave; popup.Refresh(); } });
+    // Before a preview it just flips; during a preview it discards that preview and builds a new one with the new setting.
+    internal static bool CanToggleSave => !exporting && (result == null || result.Pending);
+    internal static void ToggleSave() => Guard(() => {
+        if (!CanToggleSave) return;
+        bool rebuild = PreviewPending;
+        if (rebuild) DiscardPreview();
+        IncludeSave = !IncludeSave;
+        if (rebuild) Export(); else popup.Refresh();
+    });
     internal static void Close() => Guard(() => { DiscardPreview(); popup?.Hide(); });
     // Closing with an unsaved preview throws it away: only a saved zip is a report.
     private static void DiscardPreview()
@@ -169,7 +177,6 @@ internal static class NativeReportUI
         if (!PreviewPending) return;
         ReportExport.Discard(result); result = null; error = displayPath = revealMode = null; unseen = false;
     }
-    internal static void Back() => Guard(() => { if (PreviewPending && !exporting) { DiscardPreview(); popup.Refresh(); } });
     internal static void Save() => Guard(() => {
         if (!PreviewPending || exporting) return;
         try { ReportExport.Commit(result); }
@@ -352,16 +359,13 @@ internal sealed class NativeReportMenu : ButtonListMenu
         var header = AccessTools.Field(typeof(ButtonListMenuDef), "m_headerText").GetValue(m_menu) as Component;
         ProfileFormKit.SetText(header, NativeReportText.Header);
         var toggle = Row("report.include-save", NativeReportText.IncludeSaveLabel(NativeReportUI.IncludeSave),
-            NativeReportUI.ToggleSave, NativeReportUI.CanExport);
+            NativeReportUI.ToggleSave, NativeReportUI.CanToggleSave);
         // The profile form's native plank-toggle fallback is synchronous, including on a frozen presentation queue.
         Text(NativeReportUI.Body, toggle, 3f);
         var guidance = slices[slices.Count - 1]; slices.RemoveAt(slices.Count - 1); slices.Insert(0, guidance);
-        // Preview first: SAVE ZIP writes exactly what the preview verified; BACK or closing throws it away.
+        // Preview first: SAVE ZIP writes exactly what the preview verified; the save toggle or closing throws it away.
         if (NativeReportUI.PreviewPending)
-        {
             Row("report.save", NativeReportText.SaveLabel, NativeReportUI.Save);
-            Row("report.back", NativeStrings.Get("GLOBAL_BACK", NativeReportText.BackLabel).ToUpperInvariant(), NativeReportUI.Back);
-        }
         else if (NativeReportUI.CanExport || NativeReportUI.Exporting)
             Row("report.export", NativeReportUI.Exporting ? "Preparing..." : NativeReportText.PreviewLabel, NativeReportUI.Export,
                 NativeReportUI.CanExport);
