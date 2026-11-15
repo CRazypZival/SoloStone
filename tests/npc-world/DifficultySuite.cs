@@ -1,0 +1,213 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+// NPC difficulty (owner 2026-11-15, NpcDifficulty.cs): Hard is today's matchmaker unchanged; Easy and Medium are the ladder
+// shifted down with a Core step below Bronze and a beginner boost that fades with rank; Extreme is locked.
+internal static class DifficultySuite
+{
+    private static NpcWorld Real(bool casual = false)
+    {
+        var decks = NpcDeckLibrary.Parse(Program.Data("decks-v1.json"));
+        if (casual) decks = CasualDeckCatalog.Parse(Program.Data("casual-decks-v1.json")).MergeInto(decks);
+        return NpcWorld.Generate(new NpcWorldCatalogs(decks, SkillCatalog.Parse(Program.Data("skills-v1.json")),
+            PersonalityCatalog.Parse(Program.Data("personalities-v1.json")), NpcNotables.Parse(Program.Data("notables-v1.json")),
+            NpcNameTables.Parse(Program.Data("names-v1.json")), NpcCosmeticPool.Parse(Program.Data("cosmetics-v1.json"))));
+    }
+
+    private const long Profile = 424242;
+
+    internal static void Run()
+    {
+        Levels();
+        var world = Real();
+        CoreDecks(world);
+        var mm = new LadderMatchmaker(world);
+        HardUnchanged(mm);
+        ShiftScalesWithRank(mm, world);
+        CoreStepAtBronze(mm);
+        BoostFadesAndKeepsFloors(world);
+        Rematch(mm);
+        Casual();
+        Console.WriteLine("difficulty suite passed");
+    }
+
+    private static void Levels()
+    {
+        Program.Require(NpcDifficulties.Find(null) == NpcDifficulties.Hard, "absent difficulty is Hard");
+        Program.Require(NpcDifficulties.NewSaveDefault == NpcDifficulties.Medium, "new saves start at Medium");
+        Program.Require(NpcDifficulties.All.Select(l => l.Id).SequenceEqual(new[] { "easy", "medium", "hard", "extreme" }), "level order");
+        Program.Require(NpcDifficulties.Extreme.Locked && !NpcDifficulties.IsSelectable("extreme") && NpcDifficulties.IsKnown("extreme"), "Extreme locked");
+        Program.Require(NpcDifficulties.IsSelectable("easy") && NpcDifficulties.IsSelectable("hard") && !NpcDifficulties.IsKnown("nightmare"), "selectable levels");
+        bool threw = false;
+        try { NpcDifficulties.Find("nightmare"); } catch (InvalidOperationException) { threw = true; }
+        Program.Require(threw, "unknown difficulty refused");
+        Program.Require(NpcDifficulties.Hard.IsHard && NpcDifficulties.Extreme.IsHard && !NpcDifficulties.Easy.IsHard, "Hard and locked Extreme change nothing");
+        Program.Require(NpcDifficulties.Easy.ShiftStars == 60 && NpcDifficulties.Medium.ShiftStars == 30, "shifts: Easy two leagues, Medium one");
+        Program.Require(NpcDifficulties.Easy.DisplayShift == 240 && NpcDifficulties.Hard.DisplayShift == 0, "display shift in rating points");
+        Program.Require(NpcDifficulties.Easy.CoreChance(0) == 0 && NpcDifficulties.Easy.CoreChance(-15) == 0.5
+            && NpcDifficulties.Easy.CoreChance(-60) == 1, "Core share rises below Bronze 10");
+    }
+
+    private static void CoreDecks(NpcWorld world)
+    {
+        var core = world.Catalogs.Decks.Decks.Where(NpcDifficultyShaper.IsCoreDeck).ToList();
+        Program.Require(core.Count == 11 && core.Select(d => d.Class).Distinct().Count() == 11, "one Core NPC deck per class: " + core.Count);
+        Program.Require(core.All(d => !d.Admitted && d.Id == NpcCoreDecks.IdFor(d.Class)), "Core decks are never admitted ladder decks");
+        Program.Require(world.All.All(npc => npc.DeckIds.All(id => !id.StartsWith(NpcCoreDecks.IdPrefix, StringComparison.Ordinal))),
+            "no NPC is generated with a Core deck");
+        var problems = world.Catalogs.Decks.Validate();
+        Program.Require(problems.Count == 0, "merged library validates: " + string.Join("; ", problems));
+        var resolve = world.Catalogs.Decks.LocalDeckResolver(null, true, _ => true);
+        foreach (var deck in core)
+        {
+            var local = resolve(deck.Id);
+            Program.Require(local != null, "Core deck resolves: " + deck.Id);
+            local.Build();
+            var player = LocalDecks.PlayerCoreStarterDecks.Single(p => p.Hero == deck.Hero);
+            Program.Require(local.CardIds.OrderBy(c => c, StringComparer.Ordinal).SequenceEqual(player.CardIds.OrderBy(c => c, StringComparer.Ordinal)),
+                "Core NPC deck matches the player's Core starter: " + deck.Id);
+        }
+    }
+
+    private static IEnumerable<MatchRequest> Ladder(NpcDifficultyLevel level, int matches = 120)
+    {
+        int[] stars = { 0, 15, 45, 75, 105, 125, 140, 150 };
+        for (int i = 0; i < matches; i++)
+        {
+            int star = stars[i % stars.Length];
+            double hidden = LadderRules.RatingForIndex(star) + 30;
+            yield return new MatchRequest(Profile, i, star, hidden, star >= LadderRules.LegendIndex ? 500 : (int?)null, null, level);
+        }
+    }
+
+    private static void HardUnchanged(LadderMatchmaker mm)
+    {
+        var plain = Ladder(null).Select(r => mm.Choose(r)).ToList();
+        var hard = Ladder(NpcDifficulties.Hard).Select(r => mm.Choose(r)).ToList();
+        var extreme = Ladder(NpcDifficulties.Extreme).Select(r => mm.Choose(r)).ToList();
+        for (int i = 0; i < plain.Count; i++)
+            foreach (var other in new[] { hard[i], extreme[i] })
+            {
+                var a = plain[i].Encounter; var b = other.Encounter;
+                Program.Require(a.Npc.Id == b.Npc.Id && a.Deck.Id == b.Deck.Id && ReferenceEquals(a.Skill, b.Skill) && a.Rating == b.Rating
+                    && a.MatchSeed == b.MatchSeed && a.Reason == b.Reason && plain[i].Target == other.Target && b.Difficulty == null,
+                    "Hard is today's matchmaker at match " + i);
+            }
+    }
+
+    private static void ShiftScalesWithRank(LadderMatchmaker mm, NpcWorld world)
+    {
+        foreach (var level in new[] { NpcDifficulties.Easy, NpcDifficulties.Medium })
+        {
+            double previous = double.MinValue;
+            foreach (int star in new[] { 0, 45, 75, 105, 140, 150 })
+            {
+                var picks = Enumerable.Range(0, 60).Select(i => mm.Choose(new MatchRequest(Profile, i, star, LadderRules.RatingForIndex(star) + 30,
+                    star >= LadderRules.LegendIndex ? 500 : (int?)null, null, level))).ToList();
+                var hard = Enumerable.Range(0, 60).Select(i => mm.Choose(new MatchRequest(Profile, i, star, LadderRules.RatingForIndex(star) + 30,
+                    star >= LadderRules.LegendIndex ? 500 : (int?)null, null))).ToList();
+                double mean = picks.Average(p => p.Encounter.Rating), hardMean = hard.Average(p => p.Encounter.Rating);
+                Program.Require(mean > previous, level.Id + " opponents get stronger with rank at star " + star);
+                // At Bronze the population's floor (no NPC far below Bronze 10) caps the shift; the Core step and boost carry it there.
+                double gap = star < 30 ? 0 : level.ShiftRating / 2;
+                Program.Require(mean <= hardMean - gap, level.Id + " opponents weaker than Hard at star " + star + ": " + mean + " vs " + hardMean);
+                previous = mean;
+                var band = NpcWorld.BandForStarIndex(Math.Max(0, level.LadderPosition(star)));
+                foreach (var pick in picks)
+                {
+                    var e = pick.Encounter;
+                    Program.Require(e.Difficulty == level.Id && e.DifficultyPosition == level.LadderPosition(star), "encounter carries its level");
+                    Program.Require(NpcDifficultyShaper.IsCoreDeck(e.Deck) || e.Deck.Tags.Allows(band) || pick.BandRelaxed,
+                        level.Id + " deck from the shifted band at star " + star + ": " + e.Deck.Id);
+                    Program.Require(e.Reason != "legend-field", "shifted Legend uses the fixed field");
+                    Program.Require(e.Skill.Id.EndsWith("+" + level.Id, StringComparison.Ordinal) && e.Profile.Budget.PlanNodes == e.Skill.Budget.PlanNodes,
+                        "boosted skill drives the profile");
+                }
+            }
+        }
+    }
+
+    private static void CoreStepAtBronze(LadderMatchmaker mm)
+    {
+        var easy = Enumerable.Range(0, 300).Select(i => mm.Choose(new MatchRequest(Profile + 1, i, 5, 1030, null, null, NpcDifficulties.Easy)).Encounter).ToList();
+        int core = easy.Count(e => NpcDifficultyShaper.IsCoreDeck(e.Deck));
+        Program.Require(core >= 200, "Easy at Bronze is mostly Core decks: " + core + "/300");
+        Program.Require(easy.Where(e => !NpcDifficultyShaper.IsCoreDeck(e.Deck)).All(e => e.Deck.Tags.PowerTier >= 4 && e.Deck.Tags.Archetype != DeckArchetype.Aggro),
+            "non-Core decks at the Core step are soft and not Aggro");
+        Program.Require(easy.Where(e => NpcDifficultyShaper.IsCoreDeck(e.Deck)).All(e => e.Profile.DeckId == e.Deck.Id && e.Npc.DeckIds.Count > 0),
+            "Core deck profile names the Core deck");
+        var medium = Enumerable.Range(0, 300).Select(i => mm.Choose(new MatchRequest(Profile + 1, i, 29, 1030, null, null, NpcDifficulties.Medium)).Encounter).ToList();
+        Program.Require(medium.Count(e => NpcDifficultyShaper.IsCoreDeck(e.Deck)) < 30, "Medium at Bronze 1 has almost no Core decks");
+        var gold = Enumerable.Range(0, 120).Select(i => mm.Choose(new MatchRequest(Profile + 1, i, 75, 1330, null, null, NpcDifficulties.Easy)).Encounter).ToList();
+        Program.Require(gold.All(e => !NpcDifficultyShaper.IsCoreDeck(e.Deck)), "Easy at Gold has left the Core step");
+    }
+
+    private static void BoostFadesAndKeepsFloors(NpcWorld world)
+    {
+        var skills = world.Catalogs.Skills;
+        var novice = skills.Tiers[0];
+        foreach (var level in new[] { NpcDifficulties.Easy, NpcDifficulties.Medium })
+            foreach (var skill in skills.Tiers)
+                foreach (int position in new[] { -60, 0, 45, 90, 150 })
+                {
+                    var boosted = level.Apply(skill, novice, position);
+                    Program.Require(boosted.Mistakes.All(m => m.Chance > 0 && m.Chance <= NpcDifficultyLevel.MaxChance), "chances in (0, 0.6]");
+                    Program.Require(boosted.Mistakes.Where(m => m.Kind == MistakeKind.LethalMiss).All(m => m.MinLethalActions >= SkillCatalog.MinMissableLethalActions),
+                        "short lethals are always taken");
+                    Program.Require(boosted.Budget.PlanNodes >= Math.Min(skill.Budget.PlanNodes, NpcDifficultyLevel.MinPlanNodes)
+                        && boosted.Budget.PlanNodes <= skill.Budget.PlanNodes && boosted.Budget.LethalNodes == skill.Budget.LethalNodes,
+                        "budget floor, never above the tier, lethal budget kept");
+                    foreach (var own in skill.Mistakes)
+                        Program.Require(boosted.Chance(own.Kind) >= Math.Min(NpcDifficultyLevel.MaxChance, own.Chance) - 1e-12, "boost never removes a tier mistake");
+                }
+        Program.Require(Close(NpcDifficulties.Easy.BoostAt(-30), NpcDifficulties.Easy.Bottom) && Close(NpcDifficulties.Easy.BoostAt(90), NpcDifficulties.Easy.Top),
+            "Easy boost: full at the bottom, its top value at the top");
+        var master = skills.Find("master");
+        var mediumTop = NpcDifficulties.Medium.Apply(master, novice, LadderRules.LegendIndex - NpcDifficulties.Medium.ShiftStars);
+        Program.Require(mediumTop.Mistakes.Count == master.Mistakes.Count && mediumTop.Budget.PlanNodes == master.Budget.PlanNodes
+            && mediumTop.Temperature == master.Temperature, "Medium's boost has faded at its top");
+        var easyBottom = NpcDifficulties.Easy.Apply(novice, novice, -30);
+        Program.Require(easyBottom.Chance(MistakeKind.TradeTarget) > novice.Chance(MistakeKind.TradeTarget)
+            && easyBottom.Chance(MistakeKind.IgnoreAoeRisk) >= 0.6 && easyBottom.Budget.PlanNodes == 3500 && easyBottom.Temperature >= 2,
+            "Easy bottom: more mistakes, half the search");
+    }
+
+    private static bool Close(DifficultyBoost a, DifficultyBoost b) => Math.Abs(a.MistakeScale - b.MistakeScale) < 1e-9
+        && Math.Abs(a.BudgetScale - b.BudgetScale) < 1e-9 && Math.Abs(a.AoeFloor - b.AoeFloor) < 1e-9 && a.TopNFloor == b.TopNFloor;
+
+    private static void Rematch(LadderMatchmaker mm)
+    {
+        // An Easy Bronze loss to a Core deck can be rematched on Easy (same Core deck, boosted skill), never on Hard.
+        NpcEncounter lost = null; int index = -1;
+        for (int i = 0; i < 200 && lost == null; i++)
+        {
+            var e = mm.Choose(new MatchRequest(Profile + 2, i, 5, 1030, null, null, NpcDifficulties.Easy)).Encounter;
+            if (NpcDifficultyShaper.IsCoreDeck(e.Deck)) { lost = e; index = i; }
+        }
+        Program.Require(lost != null, "an Easy Core encounter exists");
+        var history = new[] { new PastEncounter(lost.Npc.Id, lost.Deck.Id, lost.Deck.Tags.Archetype, "Lost") };
+        var again = mm.Rematch(new MatchRequest(Profile + 2, index + 1, 5, 1030, null, history, NpcDifficulties.Easy), lost.Npc.Id, lost.Deck.Id, out string refusal);
+        Program.Require(again != null && again.Deck.Id == lost.Deck.Id && again.Difficulty == "easy" && again.Skill.Id.EndsWith("+easy", StringComparison.Ordinal),
+            "Easy rematch keeps the Core deck: " + refusal);
+        var hard = mm.Rematch(new MatchRequest(Profile + 2, index + 1, 5, 1030, null, history), lost.Npc.Id, lost.Deck.Id, out refusal);
+        Program.Require(hard == null && refusal == "deck not allowed in this band", "Hard never rematches a Core deck: " + refusal);
+    }
+
+    private static void Casual()
+    {
+        var world = Real(casual: true);
+        var catalog = CasualDeckCatalog.Parse(Program.Data("casual-decks-v1.json"));
+        var mm = new CasualMatchmaker(world, catalog, new NpcLegendField(world));
+        for (int i = 0; i < 80; i++)
+        {
+            var plain = mm.Choose(new CasualRequest(Profile, i, 10, 1300, null));
+            var hard = mm.Choose(new CasualRequest(Profile, i, 10, 1300, null, NpcDifficulties.Hard));
+            Program.Require(plain.Encounter.Npc.Id == hard.Encounter.Npc.Id && plain.Encounter.Deck.Id == hard.Encounter.Deck.Id
+                && ReferenceEquals(plain.Encounter.Skill, hard.Encounter.Skill) && hard.Encounter.Difficulty == null, "Casual Hard unchanged");
+            var easy = mm.Choose(new CasualRequest(Profile, i, 10, 1300, null, NpcDifficulties.Easy));
+            Program.Require(Math.Abs(easy.Target - (plain.Target - NpcDifficulties.Easy.ShiftRating)) < 1e-9, "Casual Easy target shifted");
+            Program.Require(easy.Encounter.Difficulty == "easy" && easy.Encounter.Skill.Id.EndsWith("+easy", StringComparison.Ordinal), "Casual Easy boosted");
+        }
+    }
+}

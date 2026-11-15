@@ -24,10 +24,17 @@ public sealed class MatchRequest
     public int? LegendNumber { get; }                // current number if in Legend
     // Oldest first. The queue rules read at most the last QueueRules.HistoryDepth entries; callers may pass only those.
     public IReadOnlyList<PastEncounter> History { get; }
+    // The save's NPC difficulty (NpcDifficulties); null or Hard = today's matchmaker, unchanged.
+    public NpcDifficultyLevel Difficulty { get; }
     public MatchRequest(long profileSeed, int matchIndex, int starIndex, double hiddenRating, int? legendNumber,
-        IEnumerable<PastEncounter> history)
+        IEnumerable<PastEncounter> history, NpcDifficultyLevel difficulty = null)
     { ProfileSeed = profileSeed; MatchIndex = matchIndex; StarIndex = starIndex; HiddenRating = hiddenRating;
-      LegendNumber = legendNumber; History = GoldenData.Copy(history); }
+      LegendNumber = legendNumber; History = GoldenData.Copy(history); Difficulty = difficulty; }
+    internal bool Shifted => Difficulty != null && !Difficulty.IsHard;
+    // Easy/Medium: the shifted ladder position in stars (negative at the Core step); Hard: the star index.
+    internal int Position => Shifted ? Difficulty.LadderPosition(StarIndex) : StarIndex;
+    // The band whose decks this match draws: the shifted position's (Bronze at the Core step).
+    internal LadderBand DeckBand => NpcWorld.BandForStarIndex(Math.Max(0, Position));
 }
 
 // Queue rules (spec "Matchmaker"); numbers live here so the climb sim and tests share them.
@@ -140,6 +147,15 @@ public sealed class LadderMatchmaker : IMatchmaker
         if (request == null) throw new ArgumentNullException(nameof(request));
         var rng = new MatchRng(seed, StreamTarget);
         int index = request.StarIndex;
+        // Easy/Medium (owner 2026-11-15): the target a player ShiftStars lower would get. Below Diamond 5 the hidden rating
+        // minus the shift; from Diamond 5 (Legend included) the fixed field at the shifted position, never the Legend field.
+        if (request.Shifted)
+        {
+            if (index < LadderRules.DiamondFiveIndex)
+                return request.HiddenRating - Rules.BandOffset(NpcWorld.BandForStarIndex(index)) - request.Difficulty.ShiftRating
+                    + rng.Gauss() * Rules.JitterSigma;
+            return LadderRules.RatingForIndex(Math.Max(0, request.Position)) + Rules.FieldOffset + rng.Gauss() * Rules.FieldJitterSigma;
+        }
         if (index < LadderRules.DiamondFiveIndex)
             return request.HiddenRating - Rules.BandOffset(NpcWorld.BandForStarIndex(index)) + rng.Gauss() * Rules.JitterSigma;
         if (index < LadderRules.LegendIndex)
@@ -164,7 +180,7 @@ public sealed class LadderMatchmaker : IMatchmaker
         lock (gate)
         {
             int seed = StableSeed.Derive(request.ProfileSeed, request.MatchIndex);
-            LadderBand band = NpcWorld.BandForStarIndex(request.StarIndex);
+            LadderBand band = request.DeckBand;
             double target = TargetRating(request, seed);
             var ranked = Legend.Ranked(request.MatchIndex);
             var history = new HistoryView(request.History, World.Catalogs.Decks, Rules);
@@ -209,8 +225,9 @@ public sealed class LadderMatchmaker : IMatchmaker
             DeckOption deck = chosen.Decks[deckRng.Pick(chosen.Decks.Select(d => d.Weight).ToArray())];
 
             string reason = request.StarIndex < LadderRules.DiamondFiveIndex ? "hidden-rating"
-                : request.StarIndex < LadderRules.LegendIndex ? "fixed-field" : "legend-field";
-            var encounter = Encounter(chosen.Npc, deck.Deck, chosen.Rating, seed, reason);
+                : request.StarIndex < LadderRules.LegendIndex || request.Shifted ? "fixed-field" : "legend-field";
+            var encounter = NpcDifficultyShaper.Shape(Encounter(chosen.Npc, deck.Deck, chosen.Rating, seed, reason),
+                request.Difficulty, request.Position, seed, World, buildProfile);
             return new MatchPick(encounter, target, level, widened, bandRelaxed, regularDraw);
         }
     }
@@ -238,7 +255,9 @@ public sealed class LadderMatchmaker : IMatchmaker
         if (request == null) throw new ArgumentNullException(nameof(request));
         refusal = RematchRefusal(request, npcId, deckId, out NpcIdentity npc, out NpcDeckEntry deck, out double rating);
         if (refusal != null) return null;
-        lock (gate) return Encounter(npc, deck, rating, StableSeed.Derive(request.ProfileSeed, request.MatchIndex), "rematch");
+        int seed = StableSeed.Derive(request.ProfileSeed, request.MatchIndex);
+        lock (gate) return NpcDifficultyShaper.Shape(Encounter(npc, deck, rating, seed, "rematch"), request.Difficulty, request.Position,
+            seed, World, buildProfile, deck);
     }
 
     private string RematchRefusal(MatchRequest request, string npcId, string deckId, out NpcIdentity npc, out NpcDeckEntry deck, out double rating)
@@ -253,9 +272,22 @@ public sealed class LadderMatchmaker : IMatchmaker
         if (series >= MaxRematchSeries) return "series limit";
         npc = World.Find(npcId);
         if (npc == null) return "unknown NPC";
-        deck = npc.DeckIds.Contains(deckId) ? World.Catalogs.Decks.Find(deckId) : null;
-        if (deck == null || !deck.Admitted) return "deck unavailable";
-        if (!deck.Tags.Allows(NpcWorld.BandForStarIndex(request.StarIndex))) return "deck not allowed in this band";
+        var found = World.Catalogs.Decks.Find(deckId);
+        if (NpcDifficultyShaper.IsCoreDeck(found))
+        {
+            // A Core-step deck stands in for the NPC's deck of its class; it is offered again only while the Core step still is.
+            var owner = npc;
+            bool owns = owner.DeckIds.Any(id => World.Catalogs.Decks.Find(id)?.Class == found.Class);
+            deck = owns ? found : null;
+            if (deck == null) return "deck unavailable";
+            if (!request.Shifted || request.Difficulty.CoreChance(request.Position) <= 0) return "deck not allowed in this band";
+        }
+        else
+        {
+            deck = npc.DeckIds.Contains(deckId) ? found : null;
+            if (deck == null || !deck.Admitted) return "deck unavailable";
+            if (!deck.Tags.Allows(request.DeckBand)) return "deck not allowed in this band";
+        }
         if (double.IsNaN(request.HiddenRating) || double.IsInfinity(request.HiddenRating)) return "invalid hidden rating";
         rating = Legend.DriftedRating(npc, request.MatchIndex);
         // A regular may be drawn well below the target, so its floor is RegularWindow below the un-jittered target. The jittered tail stays refused.
@@ -274,6 +306,12 @@ public sealed class LadderMatchmaker : IMatchmaker
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
         int index = request.StarIndex;
+        if (request.Shifted)
+        {
+            if (index < LadderRules.DiamondFiveIndex)
+                return request.HiddenRating - Rules.BandOffset(NpcWorld.BandForStarIndex(index)) - request.Difficulty.ShiftRating - sigmas * Rules.JitterSigma;
+            return LadderRules.RatingForIndex(Math.Max(0, request.Position)) + Rules.FieldOffset - sigmas * Rules.FieldJitterSigma;
+        }
         if (index < LadderRules.DiamondFiveIndex)
             return request.HiddenRating - Rules.BandOffset(NpcWorld.BandForStarIndex(index)) - sigmas * Rules.JitterSigma;
         double field = LadderRules.RatingForIndex(Math.Min(index, LadderRules.LegendIndex)) + Rules.FieldOffset - sigmas * Rules.FieldJitterSigma;
