@@ -10726,6 +10726,12 @@
 {"id":"YOP_001e","dbf":62005,"name":"Loner","text":"Your next <b>Outcast</b> card costs (1) less.","textHash":"bcbb5629a3ff8e5e","tags":[[183,1466],[199,12],[202,6],[321,0],[362,1]]}
 ]},
 "identity":[
+{"id":"AT_002","dbf":2541,"name":"Effigy","text":"<b>Secret:</b> When a friendly minion dies, summon a random minion with the same Cost.","textHash":"b3ac18ec7dcbb742","tags":[[48,3],[183,15],[199,4],[202,5],[203,3],[219,1],[321,1],[1635,2]]},
+{"id":"AT_008","dbf":2544,"name":"Coldarra Drake","text":"You can use your Hero Power any number of times.","textHash":"6b7cfe978fa84683","tags":[[45,7],[47,6],[48,6],[183,15],[199,4],[200,24],[202,4],[203,4],[321,1]]},
+{"id":"AT_010","dbf":2552,"name":"Ram Wrangler","text":"<b>Battlecry:</b> If you have a Beast, summon a\nrandom Beast.","textHash":"973d9694e1ef953d","tags":[[45,3],[47,3],[48,5],[183,15],[199,3],[202,4],[203,3],[218,1],[321,1]]},
+{"id":"AT_014","dbf":2566,"name":"Shadowfiend","text":"Whenever you draw a card, reduce its Cost by (1).","textHash":"4b003eaaba1b643d","tags":[[32,1],[45,3],[47,2],[48,2],[183,15],[199,6],[202,4],[203,4],[321,1]]},
+{"id":"AT_016","dbf":2564,"name":"Confuse","text":"Swap the Attack and Health of all minions.","textHash":"9629655f46beb942","tags":[[48,2],[183,15],[199,6],[202,5],[203,4],[321,1],[1635,6]]},
+{"id":"AT_022","dbf":2628,"name":"Fist of Jaraxxus","text":"When you play or discard this, deal $4 damage to a random enemy.","textHash":"a689da9135c43131","tags":[[48,4],[183,15],[199,9],[202,5],[203,3],[321,1],[335,1],[1635,7]]},
 {"id":"CS2_028","dbf":457,"name":"Blizzard","text":"Deal $2 damage to all enemy minions and <b>Freeze</b> them.","textHash":"7706396b54c39fb8","tags":[[48,6],[183,3],[199,4],[201,3],[202,5],[203,3],[208,1],[251,1],[268,2],[321,1],[1635,3]]},
 {"id":"CS2_031","dbf":172,"name":"Ice Lance","text":"<b>Freeze</b> a character. If it was already <b>Frozen</b>, deal $4 damage instead.","textHash":"0f7466691cba2dad","tags":[[48,1],[183,3],[199,4],[201,3],[202,5],[203,1],[208,1],[251,1],[268,2],[321,1],[1635,3]]},
 {"id":"CS2_059","dbf":469,"name":"Blood Imp","text":"[x]  <b>Stealth</b>. At the end of your  \nturn, give another random\n friendly minion +1 Health.","textHash":"e8e330b0bbd46da7","tags":[[32,1],[45,1],[48,1],[183,3],[191,1],[199,9],[200,15],[201,3],[202,4],[203,1],[251,3],[268,2],[321,1],[1965,1]]},

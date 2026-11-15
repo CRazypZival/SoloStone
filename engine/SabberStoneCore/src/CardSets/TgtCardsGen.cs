@@ -766,7 +766,8 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_008", new CardDef(new Power
 			{
-				// TODO [AT_008] Coldarra Drake && Test: Coldarra Drake_AT_008
+				// Played from hand: free a Hero Power already used this turn; Inspire frees it again after every use.
+				PowerTask = new SetGameTagTask(GameTag.EXHAUSTED, 0, EntityType.HERO_POWER),
 				Trigger = TriggerBuilder
 					.Type(TriggerType.INSPIRE)
 					.SetTask(new SetGameTagTask(GameTag.EXHAUSTED, 0, EntityType.HERO_POWER))
@@ -816,10 +817,13 @@ namespace SabberStoneCore.CardSets
 			{
 				Trigger = TriggerBuilder
 					.Type(TriggerType.DEATH)
-					.SetSecretTasks(
+					// The Secret is revealed and spent before the random pick: a Cost with no minion must not leave it armed.
+					.SetTask(StateTaskList.Chain(
 						new GetGameTagTask(GameTag.COST, EntityType.TARGET),
+						new SetGameTagTask(GameTag.REVEALED, 1, EntityType.SOURCE),
+						new MoveToGraveYard(EntityType.SOURCE),
 						new RandomMinionNumberTask(GameTag.COST),
-						new SummonTask())
+						new SummonTask()))
 					.SetSource(TriggerSource.FRIENDLY)
 					.GetTrigger()
 			}));
@@ -1165,6 +1169,7 @@ namespace SabberStoneCore.CardSets
 				Trigger = TriggerBuilder
 					.Type(TriggerType.DRAW)
 					.SetTask(new AddEnchantmentTask("AT_014e", EntityType.TARGET))
+					.SetSource(TriggerSource.FRIENDLY)
 					.GetTrigger()
 			}));
 
