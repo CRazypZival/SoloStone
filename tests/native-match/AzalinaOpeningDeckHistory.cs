@@ -27,7 +27,10 @@ internal static partial class Program
         for (int seed = 1; seed <= 6; seed++)
         {
             var capture = new Capture();
-            var match = new NativeMatch(capture.Send, Cards.FromId("HERO_09"), own, seed) { StartingPlayer = seat };
+            // The fixture constructor takes exactly 30 cards; an Azalina deck has 20, set like SogStart does.
+            var match = new NativeMatch(capture.Send, Cards.FromId("HERO_09"), Enumerable.Repeat(Cards.FromId("CS2_231"), 30), seed)
+                { StartingPlayer = seat };
+            typeof(NativeMatch).GetField("playerCards", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(match, own);
             typeof(NativeMatch).GetField("opponentDeck", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(match, bot);
             match.Start();
             var game = match.Game;
