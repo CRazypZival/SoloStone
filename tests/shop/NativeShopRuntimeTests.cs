@@ -1051,10 +1051,17 @@ partial class NativeBundleHarness
     private static void RunPackQuantity(Action<bool, string> check, Func<string, int, string> fresh)
     {
         var store = StoreManager.Get(); var dialogs = DialogManager.Get();
-        string path = fresh("native-pack-quantity", 1050);
+        string path = fresh("native-pack-quantity", 100);
         var profile = new LocalProfile(path);
         try
         {
+            // Lab test-control gold-grant (live checks need a balance): one ledger commit, bounded, refused mid pack reveal.
+            bool Throws(Action action) { try { action(); return false; } catch (ArgumentOutOfRangeException) { return true; } catch (InvalidOperationException) { return true; } }
+            check(Throws(() => profile.GrantGoldForTest(0)) && Throws(() => profile.GrantGoldForTest(LocalProfile.MaximumTestGoldGrant + 1)) && profile.Gold == 100,
+                "gold grant refuses 0 and above the maximum");
+            profile.GrantGoldForTest(950);
+            profile.Dispose(); profile = new LocalProfile(path);
+            check(profile.Gold == 1050, "gold grant is saved: 100 + 950 after reopening");
             Reseed(profile);
             var manager = ServiceManager.Manager = new PurchaseManager();
             var pack = NativeShopPurchase.Products.First(p => p.Kind == "Pack" && profile.PurchasePrice(p.Id) == 100);

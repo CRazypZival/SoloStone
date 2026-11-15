@@ -24,7 +24,9 @@ using ShopAttribute = Shared.Scripts.Game.Shop.Product.Attribute;
 // Test-control ids of the native pack quantity stepper (AdjustBuyingAmount + / -) on the open local pack page.
 internal static class NativeShopAmountText
 {
-    internal const string MoreId = "shop.amount.more", LessId = "shop.amount.less";
+    internal const string MoreId = "shop.amount.more", LessId = "shop.amount.less", TypeId = "shop.amount.type";
+    // The count's click area: opens the client's type-a-number box (StoreQuantityPrompt), bounded by the same max.
+    internal const string TypeSuffix = "Arrow Adjust Option/QuantityPromptClicker";
 }
 
 // #57 kit question copy and test-control ids (pure: test-control checks them against the denylist).
@@ -912,6 +914,9 @@ internal static class NativeShop
         new[] { "Field", "AdjustBuyingAmount", "m_incrementClickable", "*", "", "ui" },
         new[] { "Field", "AdjustBuyingAmount", "m_decrementClickable", "*", "", "ui" },
 #if !SOLOSTONE_RELEASE
+        new[] { "Field", "StoreQuantityPrompt", "m_currentMaxQuantity", "*", "", "ui" },
+        new[] { "Field", "StoreQuantityPrompt", "m_currentInputText", "*", "", "ui" },
+        new[] { "Method", "StoreQuantityPrompt", "OnInputComplete", "System.String", "", "ui" },
         new[] { "Field", "AdjustBuyingAmount", "m_buyingAmountText", "*", "", "ui" },
         new[] { "Field", "AdjustBuyingAmount", "m_buyingAmount", "*", "", "ui" },
         new[] { "Field", "AdjustBuyingAmount", "m_maximumBuyingAmount", "*", "", "ui" },
@@ -2373,9 +2378,24 @@ internal static class NativeShop
                 events.Add(new MiniJSON.JsonNode { { "name", button.transform.parent == null ? button.name : button.transform.parent.name + "/" + button.name },
                     { "event", button.BubbleUpEvent }, { "buyPath", IsSingleBuyPath(path => MatchesHierarchy(button, path)) } });
             node["buttons"] = events;
+            var prompt = Read(shop.ProductPageController, "m_quantityPrompt") as StoreQuantityPrompt;
+            node["prompt"] = prompt == null ? null : new MiniJSON.JsonNode { { "shown", prompt.IsShown() },
+                { "max", (int)Read(prompt, "m_currentMaxQuantity") }, { "text", Read(prompt, "m_currentInputText") as string } };
             return node;
         }
         catch (Exception error) { return new MiniJSON.JsonNode { { "error", (error.InnerException ?? error).Message } }; }
+    }
+    // Test control (shop-quantity-type): what typing TEXT and Enter does in the open type-a-number box: the box's own
+    // input-complete callback, which validates against its max, hides the box and sets the page quantity (or refuses).
+    internal static int TypeQuantityForTest(string text)
+    {
+        var shop = Shop.Get();
+        if (!Active || shop == null || !shop.IsOpen() || !ControlContext(shop, out var page, out bool local) || !local)
+            throw new InvalidOperationException("Open a local pack page first.");
+        var prompt = Read(shop.ProductPageController, "m_quantityPrompt") as StoreQuantityPrompt;
+        if (prompt == null || !prompt.IsShown()) throw new InvalidOperationException("Open the quantity box first (press shop.amount.type).");
+        Call(prompt, "OnInputComplete", text);
+        return page.Selection?.Quantity ?? 0;
     }
     // Test-control only: the browser scroller's height inputs (registered items, dividers, viewport) along its scroll axis.
     internal static MiniJSON.JsonNode ScrollDiagnostics()
@@ -3253,6 +3273,8 @@ internal static class NativeShop
             if (Under("m_incrementClickable")) { id = NativeShopAmountText.MoreId; return true; }
             if (Under("m_decrementClickable")) { id = NativeShopAmountText.LessId; return true; }
         }
+        if (localPage && control.GetComponentInParent<ProductPage>() == currentPage && MatchesHierarchy(control, NativeShopAmountText.TypeSuffix))
+        { id = NativeShopAmountText.TypeId; return true; }
         var page = control.GetComponentInParent<ProductPage>();
         bool inShop = control.GetComponentInParent<Shop>() == shop;
         if (!inShop && !(localPage && page == currentPage)) return false;

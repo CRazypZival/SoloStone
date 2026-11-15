@@ -104,6 +104,8 @@ internal sealed partial class NativeTestControl
         internal int PressFrame = -1;
         internal int RevealAttempts, RevealFrame = -1, RevealPendingFrame = -1;
         internal bool Right;
+        // press holdMs: the mouse-up waits until then (a held button, e.g. the shop quantity stepper's repeat).
+        internal DateTime HoldUntil = DateTime.MinValue;
         // "press" (left or right click), "ui-scroll", "ui-hover", "ui-unhover" or "ui-drag".
         internal string Gesture = "press";
         internal UiElement DragTarget;
@@ -329,7 +331,7 @@ internal sealed partial class NativeTestControl
         catch (Exception error) { Freeze("Control tick failed: " + error.GetType().Name + ": " + error.Message); }
     }
     private static bool NeedsView(ControlRequest request) => (request.Mutation && request.Command != "shop-purchase" && request.Command != "open-packs"
-        && request.Command != "craft-token-grant" && request.Command != "collection-jump"
+        && request.Command != "craft-token-grant" && request.Command != "collection-jump" && request.Command != "gold-grant" && request.Command != "shop-quantity-type"
         && !(request.Command == "press" && UiRules.IsMatchEscape(request.Text("element")))) || request.Command == "state"
         || request.Command == "options" || request.Command == "choices" || request.Command == "wait-until-idle";
     private void ResetSampling()
@@ -527,7 +529,7 @@ internal sealed partial class NativeTestControl
             if (request.Command == "press" || request.Command == "ui-hover" || request.Command == "ui-unhover" || request.Command == "ui-escape" || request.Command == "ui-drag" || request.Command == "ui-scroll") { HandlePress(envelope); return; }
             if (request.Command == "shop-purchase") { HandleShopPurchase(envelope); return; }
             if (request.Command == "open-packs") { HandleOpenPacks(envelope); return; }
-            if (request.Command == "craft-token-grant" || request.Command == "collection-jump") { HandleCraftingTest(envelope); return; }
+            if (request.Command == "craft-token-grant" || request.Command == "collection-jump" || request.Command == "gold-grant" || request.Command == "shop-quantity-type") { HandleCraftingTest(envelope); return; }
             if (request.Command == "squelch" || request.Command == "unsquelch" || request.Command == "emote" || request.Command == "npc-emote" || request.Command == "npc-concede"
                 || request.Command == "human-defeat" || request.Command == "premium-unlock-prepare" || request.Command == "achievement-prime" || request.Command == "turn-timer-debug" || request.Command == "spell-stall-arm")
             { HandlePresence(envelope, view); return; }
@@ -1389,7 +1391,7 @@ internal sealed partial class NativeTestControl
         {
             // Release on a later frame, like a real mouse-up. PegUI re-hit-tests on mouse-up: if the element no longer
             // receives the click, it only gets release-all(false) and the click does not complete.
-            if (Time.frameCount <= press.PressFrame) return;
+            if (Time.frameCount <= press.PressFrame || DateTime.UtcNow < press.HoldUntil) return;
             UiElement now = snapshot.Elements.FirstOrDefault(element => element.Instance == press.Target.Instance);
             string interrupted = now == null ? "element gone after press"
                 : now.Id != press.Target.Id || now.Type != press.Target.Type || now.DeckId != press.Target.DeckId ? "element identity changed after press"
@@ -1469,6 +1471,7 @@ internal sealed partial class NativeTestControl
         // The tile id was canonical at acceptance; the live element must also take PegUI's RIGHTCLICK event.
         if (press.Right && !NativeUiTree.RightClickable(target)) { RejectPress("Element does not accept right-click"); return; }
         press.Target = target; press.PressFrame = Time.frameCount;
+        if (!press.Right && request.Has("holdMs")) press.HoldUntil = DateTime.UtcNow.AddMilliseconds(request.Integer("holdMs"));
         if (!press.Right && (id == NativePremiumRewards.DoneId || id.StartsWith(NativePremiumRewards.DoneId + ".", StringComparison.Ordinal)))
         {
             operation.Detail["premiumDismissalsBefore"] = NativeResultsUI.PremiumRewards?.DismissalCount ?? 0;
@@ -1484,7 +1487,7 @@ internal sealed partial class NativeTestControl
         catch (Exception error) { FailPress("Press failed: " + error.GetType().Name + ": " + error.Message); return; }
         log.LogInfo("TEST_CONTROL_PRESS " + Json.Serialize(new JsonNode {
             { "inputKind", "semantic-ui" }, { "requestId", request.Id }, { "runId", launch.RunId }, { "element", id }, { "generation", snapshot.Generation },
-            { "button", press.Right ? "right" : "left" }
+            { "button", press.Right ? "right" : "left" }, { "holdMs", request.Has("holdMs") ? (object)request.Integer("holdMs") : null }
         }));
         OperationReply(press.Owner, request, operation);
     }
