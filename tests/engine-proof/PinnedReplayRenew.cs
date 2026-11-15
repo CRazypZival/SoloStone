@@ -133,6 +133,71 @@ internal static partial class PinnedReplayEngineProof
         Console.WriteLine("PASS pinned replay renewal tool: refuses an illegal action and a changed winner, rewrites only hashes and the fingerprint");
     }
 
+    // `--rerecord-replay PATH --baseline DIR --expect-first-diff STEP [--dump DIR] [--write]`: for a replay whose game really changes after an intended rules change.
+    // It regenerates the game from the file's own identity (pinned decks, pool snapshot, seed, random policy; refuses if any cannot be rebuilt)
+    // with the same policy stream the recorder uses, and prints the new outcome. Before STEP the baseline dump (from --renew-replay --dump on the
+    // last passing commit) must match exactly: chosen move, legal-move hash, RNG state and full state; the first difference must be at STEP.
+    // --write replaces `actions`, `legalShas`, `turns`, `winner` and `engineFingerprint` only.
+    internal static int Rerecord(string[] args)
+    {
+        string path = Path.GetFullPath(args[Array.IndexOf(args, "--rerecord-replay") + 1]);
+        string baseline = Opt(args, "--baseline"), dump = Opt(args, "--dump");
+        if (baseline == null || !int.TryParse(Opt(args, "--expect-first-diff"), out int expected)) { Console.Error.WriteLine("--rerecord-replay needs --baseline DIR and --expect-first-diff STEP"); return 1; }
+        if (dump != null) Directory.CreateDirectory(dump);
+        string text = File.ReadAllText(path);
+        var replay = JsonSerializer.Deserialize<PinnedReplay>(text, Json);
+        var old = replay.Game;
+        if (old.Policy != "random") { Console.Error.WriteLine("refusing: only the random policy can be regenerated"); return 1; }
+        var game = Simulation.Create(old, replay: true, playerDeck: replay.PlayerDeck, opponentDeck: replay.OpponentDeck);
+        var policy = new PolicyRandom(unchecked((ulong)(long)old.Seed) ^ 0x485353494DUL);
+        var actions = new List<int>(); var hashes = new List<string>();
+        int step = 0, firstDiff = -1;
+        var report = new List<string>();
+        while (game.State != State.COMPLETE)
+        {
+            if (game.Turn > 200 || step >= 20000) { Console.Error.WriteLine("refusing: the regenerated game does not terminate"); return 1; }
+            var legal = Simulation.Legal(game);
+            string hash = Canonical.Sha(Canonical.Value(legal.Select(Simulation.TaskKey).ToArray()));
+            int index = policy.Index(legal.Count);
+            string snapshot = "action:" + Simulation.TaskKey(legal[index]) + "\nrng:" + Canonical.Value(game.Random.CaptureState()) + "\n" + Canonical.State(game);
+            if (dump != null) File.WriteAllText(Path.Combine(dump, step.ToString("000") + ".txt"), snapshot);
+            string basePath = Path.Combine(baseline, step.ToString("000") + ".txt");
+            bool same = File.Exists(basePath) && File.ReadAllText(basePath) == snapshot
+                && step < old.LegalShas.Count && old.LegalShas[step] == hash && step < old.Actions.Count && old.Actions[step] == index;
+            if (!same && firstDiff < 0)
+            {
+                firstDiff = step;
+                if (File.Exists(basePath))
+                {
+                    string[] a = File.ReadAllText(basePath).Split('\n', 3), b = snapshot.Split('\n', 3);
+                    report.Add($"first difference at step {step}: move {a[0]} -> {b[0]}; RNG {(a[1] == b[1] ? "same" : "differs")}; legal hash {(step < old.LegalShas.Count && old.LegalShas[step] == hash ? "same" : "differs")}; recorded index {old.Actions.ElementAtOrDefault(step)} -> {index}");
+                    foreach (var change in StateDiff(a[2], b[2])) report.Add("  " + change.Key + ": " + change.Value);
+                }
+            }
+            actions.Add(index); hashes.Add(hash);
+            if (!Simulation.Process(game, legal[index])) { Console.Error.WriteLine($"refusing: regenerated action {step} rejected"); return 1; }
+            step++;
+        }
+        var current = new GameRecord(); Simulation.Finish(current, game);
+        string fingerprint = Fingerprint(game);
+        Console.WriteLine($"{Path.GetFileName(path)}: regenerated {actions.Count} actions (recorded {old.Actions.Count}); turns {old.Turns} -> {current.Turns}; winner {old.Winner} -> {current.Winner}");
+        Console.WriteLine($"steps 0..{(firstDiff < 0 ? actions.Count : firstDiff) - 1} identical to the old recording (chosen move, legal-move hash, RNG state, full state)");
+        foreach (string line in report) Console.WriteLine(line);
+        if (firstDiff != expected) { Console.Error.WriteLine($"refusing: the first difference is at step {firstDiff}, expected {expected}"); return 1; }
+        if (!args.Contains("--write")) return 1;
+        var pattern = new Regex("\"actions\":\\[[^\\]]*\\]"); var legalPattern = new Regex("\"legalShas\":\\[[^\\]]*\\]");
+        if (!pattern.IsMatch(text) || !legalPattern.IsMatch(text) || !text.Contains($"\"engineFingerprint\":\"{replay.EngineFingerprint}\"", StringComparison.Ordinal))
+        { Console.Error.WriteLine("refusing: the replay file is not in the expected compact form"); return 1; }
+        string renewed = pattern.Replace(text, "\"actions\":[" + string.Join(",", actions) + "]", 1);
+        renewed = legalPattern.Replace(renewed, "\"legalShas\":[" + string.Join(",", hashes.Select(h => "\"" + h + "\"")) + "]", 1);
+        renewed = Regex.Replace(renewed, "\"turns\":\\d+", "\"turns\":" + current.Turns, RegexOptions.None);
+        renewed = Regex.Replace(renewed, "\"winner\":\\d+", "\"winner\":" + current.Winner);
+        renewed = renewed.Replace($"\"engineFingerprint\":\"{replay.EngineFingerprint}\"", $"\"engineFingerprint\":\"{fingerprint}\"", StringComparison.Ordinal);
+        File.WriteAllText(path, renewed);
+        Console.WriteLine($"rewrote actions ({old.Actions.Count} -> {actions.Count}), legal-move hashes, turns, winner and fingerprint; id, decks, pool, seed and policy untouched");
+        return 0;
+    }
+
     // Labels: "CARDID tag N" per differing tag, "entity added/removed", "entity card". Example text names the entity id and the values.
     internal static IEnumerable<KeyValuePair<string, string>> StateDiff(string before, string after)
     {

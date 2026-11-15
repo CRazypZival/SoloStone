@@ -7,6 +7,7 @@ using SabberStoneCore.Tasks.PlayerTasks;
 
 if (args.Contains("--ai-frontier-only")) { AiFrontierProof.Run(); return; }
 if (args.Contains("--renew-replay")) { Environment.Exit(PinnedReplayEngineProof.Renew(args)); return; }
+if (args.Contains("--rerecord-replay")) { Environment.Exit(PinnedReplayEngineProof.Rerecord(args)); return; }
 if (args.Contains("--renew-replay-selftest")) { PinnedReplayEngineProof.RenewSelfTest(); return; }
 if (args.Contains("--pinned-replays-only")) { PinnedReplayEngineProof.Run(); return; }
 if (args.Contains("--canonical-policy-only")) { CanonicalPolicyChecks.Run(); return; }
