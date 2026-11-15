@@ -763,6 +763,7 @@ internal static class UiRules
     private static readonly HashSet<string> LocalShopIds = new HashSet<string>(StringComparer.Ordinal) {
         "home.store", "shop.buy", "shop.ack", "shop.back", "shop.page.close", "shop.quantity.cancel", "dialog.confirm", "dialog.cancel",
         "shop.kit.use", "shop.kit.full", // #57 deck kit question (NativeShopKitText)
+        "shop.amount.more", "shop.amount.less", // Pack quantity stepper (NativeShopAmountText)
         "shop.tab.cards", "shop.tab.decks_1", "shop.tab.decks_2", "shop.tab.skins", "shop.tab.themes", // Categories (NativeShopTabs.Ids), then their sub-tabs.
         "shop.tab.packs", "shop.tab.deck_deathknight", "shop.tab.deck_demonhunter", "shop.tab.deck_druid", "shop.tab.deck_hunter", "shop.tab.deck_mage", "shop.tab.deck_paladin",
         "shop.tab.deck_priest", "shop.tab.deck_rogue", "shop.tab.deck_shaman", "shop.tab.deck_warlock", "shop.tab.deck_warrior", "shop.tab.hero_skins", "shop.tab.card_backs",

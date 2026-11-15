@@ -1339,6 +1339,7 @@ internal sealed partial class NativeTestControl
         data["premiumRewardPresentation"] = NativeResultsUI.PremiumRewards?.State;
         data["rewardPresentation"] = NativeRewardUI.Diagnostics;
         data["packRevealPending"] = LocalLadder.Profile?.PackRevealPending ?? false;
+        data["shopAmount"] = NativeShop.AmountDiagnostics(); // Open pack page: quantity stepper and Buy price label.
         if (all) data["shopSubTabs"] = NativeShop.SubTabDiagnostics(); // Which object draws each sub-tab plate.
         if (all) data["shopRecipePrices"] = NativeShopTilePrices.Diagnostics(); // Deck tiles' recipe price plates.
         if (all) data["shopScroll"] = NativeShop.ScrollDiagnostics(); // Browser scroll height inputs.
@@ -2342,10 +2343,18 @@ internal static class TestControlShop
             products.Add(new JsonNode {
                 { "id", product.Id }, { "kind", product.Kind }, { "price", price },
                 { "owned", Owned(profile, product, price) }, { "purchasable", reason == null }, { "reason", reason },
-                { "equipped", Equipped(profile, product) }
+                { "equipped", Equipped(profile, product) },
+                // Packs only: the native tile id (shop.product.<pmt>) and the stepper's catalogue maximum.
+                { "pmt", product.Kind == "Pack" ? (object)NativeShopPurchase.PmtId(product) : null },
+                { "maxQuantity", product.Kind == "Pack" ? (object)product.MaxQuantity : null }, { "packType", product.PackType }
             });
         }
+        // Saved pack stacks, ledger sequence and newest receipt: live checks compare these before/after a purchase and restart.
+        var packs = new JsonList();
+        foreach (var pack in profile.PackInventory) packs.Add(new JsonNode { { "packType", pack.PackType }, { "count", pack.Count } });
+        var last = profile.Purchases.LastOrDefault();
         return new JsonNode { { "version", LocalShop.Default.Version }, { "gold", profile.Gold }, { "products", products },
+            { "packs", packs }, { "purchaseSequence", profile.PurchaseSequence }, { "lastPurchase", last == null ? null : Receipt(last, profile.Gold) },
             { "selectedHubTheme", profile.SelectedHubTheme }, { "selectedBoard", profile.SelectedBoard }, { "selectedPet", profile.SelectedPet },
             { "ownedPets", pets },
             { "launchHubTheme", LaunchHubTheme?.Invoke() } };
