@@ -53,7 +53,7 @@ if (args.Length == 0)
 {
     var arenaRoot = Path.Combine(Path.GetTempPath(), "hs-arena-" + Guid.NewGuid());
     Directory.CreateDirectory(arenaRoot);
-    try { ArenaChecks.Run(arenaRoot); } finally { Directory.Delete(arenaRoot, true); }
+    try { ArenaChecks.Run(arenaRoot); NativeArenaBoundary.NativeArena.RunRealServiceTests(arenaRoot); } finally { Directory.Delete(arenaRoot, true); }
     var premiumRoot = Path.Combine(Path.GetTempPath(), "hs-deck-premiums-" + Guid.NewGuid());
     Directory.CreateDirectory(premiumRoot);
     try { DeckPremiumChecks.Run(premiumRoot); } finally { Directory.Delete(premiumRoot, true); }

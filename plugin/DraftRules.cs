@@ -52,7 +52,7 @@ public sealed class DraftRules
             || rarities.Length == 0 || rarities.Any(row => row.Value <= 0 || row.Key == Rarity.LEGENDARY)
             || rewards.Length != MaxWins + 1 || rewards.Any(row => row.Any(value => value < 0)))
             throw new InvalidOperationException("Invalid Arena rules.");
-        pool = new Lazy<EngineCard[]>(() => LocalCardCatalog.ActivePoolIds().Select(Cards.FromId).Where(Eligible)
+        pool = new Lazy<EngineCard[]>(() => LocalCardCatalog.ActivePoolIds().Select(Cards.FromId).Where(LocalCardCatalog.IsStandardLegal).Where(Eligible)
             .OrderBy(card => card.Id, StringComparer.Ordinal).ToArray());
     }
 
@@ -77,6 +77,7 @@ public sealed class DraftRules
         return card.Cost <= 10 || !string.IsNullOrWhiteSpace(text);
     }
 
+    internal IReadOnlyList<EngineCard> Pool => pool.Value;
     public IReadOnlyList<string> Heroes => heroes;
     public IReadOnlyList<string> HeroOffers(long seed) => Draw(heroes.ToList(), seed, 0);
 
@@ -124,6 +125,21 @@ public sealed class DraftRules
     {
         unchecked { ulong hash = 14695981039346656037UL; foreach (char c in value) { hash ^= c; hash *= 1099511628211UL; } return (long)hash; }
     }
+
+    // The reward for every win count at one pace, for the native rewards list (season reward levels). Preview only: the paid
+    // reward is computed at the end of the run with the run's own pack set.
+    public IReadOnlyList<ArenaReward> RewardTable(string tierId, string packType)
+    {
+        string key = tierId + "|" + packType;
+        lock (rewardTables)
+        {
+            if (!rewardTables.TryGetValue(key, out var table))
+                rewardTables[key] = table = Enumerable.Range(0, MaxWins + 1).Select(wins => Reward(null, wins, tierId, packType)).ToList().AsReadOnly();
+            return table;
+        }
+    }
+    private readonly Dictionary<string, IReadOnlyList<ArenaReward>> rewardTables = new Dictionary<string, IReadOnlyList<ArenaReward>>();
+    internal static string PreviewPackType => FairPackRules.PackTypes.Contains(FairPackRules.Standard) ? FairPackRules.Standard : FairPackRules.PackTypes.FirstOrDefault();
 
     public ArenaReward Reward(string runId, int wins, string tierId, string packType)
     {

@@ -300,6 +300,8 @@ internal static class ArenaMatchChecks
             Check(ids.Count == 30 && built.Count == 30 && LocalDecks.PlayerHeroes.Contains(row.Hero) && built.All(card => card != null && card.Implemented && rules.Eligible(card)
                 && LocalDecks.IsAllowedInDeck(card, LocalDecks.HeroClass(row.Hero))), "deck loads " + row.Id);
             LocalDecks.ValidateRunes(built, LocalDecks.HeroClass(row.Hero));
+            Check(built.All(card => card.Collectible && LocalCardCatalog.IsStandardLegal(card) && card.Id != "GIL_213" && card.Id != "CFM_305"),
+                "NPC deck has only collectible Standard-legal cards (no Wild, Basic, Classic, Hall of Fame) " + row.Id);
         }
         Check(rows.Select(r => r.Class).Distinct().Count() >= 8 && rows.Select(r => r.Skill).Distinct().Count() == ArenaDeckGenerator.Skills.Length, "mixed classes and drafter skill");
         double Mean(double skill) => rows.Where(r => r.Skill == skill).Average(r => r.Quality);

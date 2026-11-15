@@ -18,7 +18,8 @@ public sealed class ArenaService : IArenaService
             HeroCardId = run?.Hero, HeroOffers = run?.HeroOffers.ToList() ?? new List<string>(),
             Offers = run?.Phase == ArenaPhase.Drafting ? run.PendingOffers.ToList() : new List<string>(),
             Deck = run?.Deck.ToList() ?? new List<string>(), Reward = ArenaRun.CopyReward(run?.Reward),
-            EntryCost = rules.EntryGold, GoldBalance = profile.Gold
+            EntryCost = rules.EntryGold, GoldBalance = profile.Gold,
+            RewardTable = rules.RewardTable(run?.GrindTier ?? profile.GrindTier.Id, DraftRules.PreviewPackType).Select(ArenaRun.CopyReward).ToList()
         };
     }
 
@@ -41,7 +42,7 @@ public sealed class ArenaService : IArenaService
         if (profile.Pending != null) return Error("A match is pending.");
         if (profile.HasPendingRewardPresentation || profile.PackRevealPending) return Error("A reward presentation is pending.");
         var rules = DraftRules.Arena();
-        if (profile.Gold < rules.EntryGold) return Error("Not enough gold.");
+        if (profile.Gold < rules.EntryGold) return Error("Arena costs " + rules.EntryGold + " gold. You have " + profile.Gold + " gold.");
         return Change(next => {
             if (next.ArenaEntryRequestIds.Count >= LocalProfile.MaximumArenaRequests) throw new InvalidOperationException("Arena entry receipt limit reached.");
             string id = Guid.NewGuid().ToString("D");
