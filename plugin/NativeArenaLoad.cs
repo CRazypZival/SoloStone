@@ -112,6 +112,7 @@ internal static partial class NativeArena
                 if (draftLoadBegan >= 0)
                     log.LogInfo("NATIVE_ARENA_LOAD left t=" + (now - draftLoadBegan).ToString("0.0") + " usable=false " + RoutineSummary());
                 draftLoadBegan = -1; visitUsable = false; hiddenSince = -1;
+                LeftDraft();
                 return;
             }
             if (visitUsable) { WatchScreenStaysActive(now); return; }

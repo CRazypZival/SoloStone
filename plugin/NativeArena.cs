@@ -48,7 +48,11 @@ internal static partial class NativeArena
     // Informational notices (Underground, Disclaimer, no store, match not started) go to lastNotice and never touch the error state.
     private static string lastError, lastNotice;
     private static int errorSeq;
-    private static bool mutationPending, startingMatch, disabled;
+    private static bool mutationPending, startingMatch, disabled, homePatched;
+    // The Home Arena button is offered only when its prefix is installed and Arena is not disabled (else retail's online path runs).
+    internal static bool HomeEntryAvailable => homePatched && !disabled;
+    // Leaving DRAFT drops replies queued for that screen: a later visit is filled from the saved run, never from a stale reply.
+    internal static void LeftDraft() { while (replies.Count > 0) { if (replies.Dequeue().Mutating) mutationPending = false; } }
     // Set when the DRAFT scene never finished loading (NativeArenaLoad): entry is refused for the session, but every offline
     // patch stays active so the scene that is being left never reaches retail code.
     private static string loadFailure;
@@ -76,6 +80,10 @@ internal static partial class NativeArena
     internal static void Initialize(Harmony harmony, ManualLogSource logger)
     {
         log = logger;
+        // Home entries first: if a later patch fails, Disable runs and these already refuse instead of reaching retail's reconnect flow.
+        Patch(harmony, typeof(Box), "OnArenaButtonPressed", nameof(HomeButton));
+        Patch(harmony, typeof(Hub), "HandleAreanaButtonPressed", nameof(HomeArena));
+        homePatched = true;
         foreach (var pair in new[] {
             ("SendArenaSessionRequest", nameof(SessionRequest)), ("RequestDraftChoicesAndContents", nameof(ContentsRequest)),
             ("DraftBegin", nameof(BeginRequest)), ("MakeDraftChoice", nameof(ChoiceRequest)),
@@ -111,9 +119,7 @@ internal static partial class NativeArena
         Patch(harmony, typeof(DraftManager), "GetMaxLosses", nameof(MaxLosses), typeof(bool));
         Patch(harmony, typeof(DraftManager), "GetMaxLosses", nameof(MaxLosses), Type.EmptyTypes);
         Patch(harmony, typeof(ArenaModeToggleButton), "DetermineStartingState", nameof(ToggleStartingState));
-        Patch(harmony, typeof(Box), "OnArenaButtonPressed", nameof(HomeButton));
         InstallRetailGuards(harmony);
-        Patch(harmony, typeof(Hub), "HandleAreanaButtonPressed", nameof(HomeArena));
         // These calls have no offline backend. Keep the scope to this scene and our Arena match.
         Patch(harmony, typeof(BnetPresenceMgr), "SetGameFieldBlob", nameof(NoPresence));
         Patch(harmony, typeof(PresenceMgr), "SetStatus", nameof(NoPresence));
@@ -416,7 +422,7 @@ internal static partial class NativeArena
     }
     // Keep GT_VS_AI transport/presentation. Only post-game routing changes; retail's OnGameOver must not count a second result.
     internal static SceneMgr.Mode NavigationTarget(SceneMgr.Mode mode) => Live && MatchActive && mode == SceneMgr.Mode.TOURNAMENT ? SceneMgr.Mode.DRAFT : mode;
-    private static void ReturnToDraft(ref SceneMgr.Mode __result) { if (Live && MatchActive) __result = SceneMgr.Mode.DRAFT; }
+    private static void ReturnToDraft(ref SceneMgr.Mode __result) { if (Live && MatchActive && !EntryBlocked) __result = SceneMgr.Mode.DRAFT; }
     private static bool Underground() { if (!Offline) return true; if (disabled) return Inert(); Notice(UndergroundNotice); return false; }
     private static bool Disclaimer() { if (!Offline) return true; if (disabled) return Inert(); Notice(RulesText(Read())); return false; }
     internal const string UndergroundNotice = "This Arena mode is coming in a later SoloStone update.";

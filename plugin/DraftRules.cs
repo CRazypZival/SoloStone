@@ -88,6 +88,8 @@ public sealed class DraftRules
     public IReadOnlyList<string> Heroes => heroes;
     public IReadOnlyList<string> HeroOffers(long seed) => Draw(heroes.ToList(), seed, 0);
 
+    private static EngineCard KnownCard(string id) { try { return Cards.FromId(id); } catch (KeyNotFoundException) { return null; } }
+
     public IReadOnlyList<string> Offers(long seed, int slot, string hero, IEnumerable<string> deck)
     {
         var ids = deck.ToArray();
@@ -95,7 +97,8 @@ public sealed class DraftRules
             throw new InvalidOperationException("Invalid draft slot or hero.");
         int decision = StableSeed.Derive(seed, Version, slot, Hash(hero), Hash(string.Join("|", ids)));
         var heroClass = LocalDecks.HeroClass(hero);
-        var runes = LocalDecks.RuneCounts(ids.Select(Cards.FromId));
+        // Runes matter for Death Knight only; a drafted card a later card-data update no longer knows adds none instead of throwing.
+        var runes = hero == "HERO_11" ? LocalDecks.RuneCounts(ids.Select(KnownCard).Where(card => card != null)) : new int[3];
         var allowed = pool.Value.Where(card => LocalDecks.IsAllowedInDeck(card, heroClass)
             && (hero != "HERO_11" || Enumerable.Range(0, 3).Sum(i => Math.Max(runes[i], card[(GameTag)(2196 + i)])) <= 3)).ToArray();
         Rarity rarity = Rarity.LEGENDARY;

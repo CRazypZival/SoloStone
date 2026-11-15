@@ -1552,7 +1552,7 @@ internal static partial class NativeUIProbe
         if (!AtHome() || __instance == null) return;
         __instance.DisableAllButtons();
         __instance.SetBoxButtonInteractions(true, __instance.m_PlayButton, true);
-        __instance.SetBoxButtonInteractions(true, __instance.m_ArenaButton, true);
+        __instance.SetBoxButtonInteractions(NativeArena.HomeEntryAvailable, __instance.m_ArenaButton, true);
         __instance.SetButtonEnabled(true, __instance.m_OpenPacksButton);
         __instance.SetButtonEnabled(true, __instance.m_CollectionButton);
         NativeHiddenEntries.Apply(__instance);

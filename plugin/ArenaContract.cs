@@ -28,7 +28,7 @@ public sealed class ArenaView
     public string RunId;             // null when Phase == None
     public int Wins, Losses;
     public int MaxWins = 12, MaxLosses = 3;
-    public int Slot;                 // number of choices made: 0 = hero choice pending, 1..30 = cards drafted so far
+    public int Slot;                 // slot of the pending choice: 0 = hero choice, 1..30 = the card pick being offered; 30 when Ready
     public int MaxSlot = 30;
     public string HeroCardId;        // chosen hero (e.g. "HERO_08"), null before the hero pick
     public List<string> HeroOffers = new List<string>();  // 3 hero card ids while ChoosingHero

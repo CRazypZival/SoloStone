@@ -411,7 +411,7 @@ internal static class LocalLadder
             failure = error ?? "Arena match could not start.";
             return false;
         }
-        catch (Exception problem) { failure = "Arena match could not start: " + problem.Message; return false; }
+        catch (Exception problem) { failure = "Arena match could not start: " + problem.Message + " You can retire the run to collect its reward."; return false; }
     }
 
     // Diamond/Legend-gated achievement feats stay Ranked-only: a Casual match queues them at most at Platinum.
