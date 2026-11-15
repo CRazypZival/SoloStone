@@ -473,7 +473,7 @@ public sealed partial class LocalProfile : IDisposable
     public bool SetNpcDifficulty(string id)
     {
         if (!NpcDifficultyIds.IsSelectable(id)) throw new ArgumentException("NPC difficulty not selectable: " + id);
-        if (NpcDifficulty == id && data.NpcDifficulty != null) return false;
+        if (NpcDifficulty == id) return false;   // picking Hard on an old save (no field) leaves its bytes alone
         var next = Snapshot(); next.NpcDifficulty = id; Commit(next);
         return true;
     }

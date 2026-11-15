@@ -24,6 +24,7 @@ internal static class DifficultySuite
         CoreDecks(world);
         var mm = new LadderMatchmaker(world);
         HardUnchanged(mm);
+        HardPin.Run();
         ShiftScalesWithRank(mm, world);
         CoreStepAtBronze(mm);
         BeginnerServed(mm);
@@ -86,6 +87,13 @@ internal static class DifficultySuite
             Program.Require(cards.Count == 30, "beginner deck has 30 cards: " + deck.Id);
             Program.Require(cards.All(id => id != "CS3_035"), "beginner deck has no Nozdormu: " + deck.Id);
             Program.Require(cards.GroupBy(id => id).All(g => g.Count() <= 2), "beginner deck copy limit: " + deck.Id);
+            foreach (string id in cards.Distinct())
+            {
+                var card = SabberStoneCore.Model.Cards.FromId(id);
+                Program.Require(card != null && card.Rarity != SabberStoneCore.Enums.Rarity.LEGENDARY, "beginner deck has no legendary: " + deck.Id + " " + id);
+                string cls = card.Class.ToString();
+                Program.Require(cls == deck.Class || cls == "NEUTRAL", "beginner deck card is its class or neutral: " + deck.Id + " " + id + " " + cls);
+            }
             Program.Require(!LocalDecks.PlayerCoreStarterDecks.Any(p => p.Name.Equals(deck.Name, StringComparison.OrdinalIgnoreCase)) && names.Add(deck.Name),
                 "beginner deck name is unique: " + deck.Name);
             var starter = LocalDecks.PlayerCoreStarterDecks.Single(p => p.Hero == deck.Hero);
@@ -299,6 +307,16 @@ internal static class DifficultySuite
                 try { LocalDecks.Get(core.Deck.Id); } catch (InvalidOperationException) { refused = true; }
                 Program.Require(refused, "a Core deck stops resolving when the encounter ends");
             }
+            // One NPC_DIFFICULTY line per match, however many matches: a start begins the same encounter twice.
+            var lines = new List<string>();
+            NpcWorldRuntime.DifficultyLog = lines.Add;
+            for (int i = 0; i < 250; i++)
+            {
+                var e = mm.Choose(new MatchRequest(Profile + 6, i, 5, 1030, null, null, NpcDifficulties.Easy)).Encounter;
+                NpcWorldRuntime.Begin(e); NpcWorldRuntime.Begin(e); NpcWorldRuntime.End();
+            }
+            Program.Require(lines.Count == 250 && lines.All(l => l.StartsWith("NPC_DIFFICULTY level=easy ", StringComparison.Ordinal)),
+                "one difficulty line per match: " + lines.Count);
         }
         finally { NpcWorldRuntime.Uninstall(); }
     }

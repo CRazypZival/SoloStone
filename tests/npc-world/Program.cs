@@ -32,6 +32,7 @@ internal static class Program
             if (args.Length == 1 && args[0] == "--deck-library") { DeckLibrarySuite.Run(); return 0; }
             if (args.Length == 1 && args[0] == "--matchmaker") { MatchmakerSuite.Run(); return 0; }
             if (args.Length == 1 && args[0] == "--difficulty") { DifficultySuite.Run(); return 0; }
+            if (args.Length == 1 && args[0] == "--hard-pin-print") { Console.WriteLine(HardPin.Fingerprint()); return 0; }
             if (args.Length == 1 && args[0] == "--magmaw-capped-pass") { CappedPassSuite.RunMagmaw(); return 0; }
             if (args.Length >= 2 && args[0] == "--magmaw-renew") return CappedPassSuite.Renew(args);
             if (args.Length == 1 && args[0] == "--capped-pass") { CappedPassSuite.Run(); return 0; }

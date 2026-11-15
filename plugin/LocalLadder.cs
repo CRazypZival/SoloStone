@@ -333,6 +333,7 @@ internal static class LocalLadder
     private static string rematchSelected, rematchPending;
     private static int rematchMatches = -1;
     private static bool rematchCasual;
+    private static string rematchDifficulty;
     private static NpcEncounter rematchOffer;
     internal static string RematchRefusal { get; private set; }
     internal static void ForgetRematchOffer() { rematchMatches = -1; rematchOffer = null; }
@@ -341,9 +342,9 @@ internal static class LocalLadder
         if (profile == null || screen == "Starting" || screen == "Playing") return null;
         bool casual = NativeUIProjection.CasualPlayMode;   // the picker's Ranked/Casual switch: Rematch is Ranked-only (#37)
         if (rematchMatches == profile.MatchCount && rematchSelected == selected && rematchPending == profile.PendingMatchId
-            && rematchCasual == casual) return rematchOffer;
+            && rematchCasual == casual && rematchDifficulty == profile.NpcDifficulty) return rematchOffer;
         rematchMatches = profile.MatchCount; rematchSelected = selected; rematchPending = profile.PendingMatchId; rematchOffer = null;
-        rematchCasual = casual;
+        rematchCasual = casual; rematchDifficulty = profile.NpcDifficulty;   // Options can change the level while the picker is open
         try
         {
             string refusal = LocalRematch.CasualRefusal;

@@ -674,7 +674,9 @@ internal sealed class NativeProfileMenu : ButtonListMenu
     {
         var back = Plank("SoloStoneDifficultyBack", "save.difficulty.back", NativeStrings.Get("GLOBAL_BACK", "Back"), _ => LeavePace(), false);
         if (kit) KitScale();
-        DifficultyRows(kit, "save.difficulty.set:", () => LocalLadder.Profile.NpcDifficulty, id => {
+        // A delayed rebuild can run after the save closed: no profile reads as the default and selects nothing.
+        DifficultyRows(kit, "save.difficulty.set:", () => LocalLadder.Profile?.NpcDifficulty ?? NpcDifficultyIds.Default, id => {
+            if (LocalLadder.Profile == null) return;
             LocalLadder.Profile.SetNpcDifficulty(id);
             NativeOptionsDifficulty.Sync();
         });

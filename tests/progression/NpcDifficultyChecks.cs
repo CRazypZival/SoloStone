@@ -31,6 +31,7 @@ internal static class NpcDifficultyChecks
         using (var profile = new LocalProfile(old))
         {
             Check(profile.NpcDifficulty == "hard", "a save without the field is Hard");
+            Check(!profile.SetNpcDifficulty("hard") && File.ReadAllBytes(old).SequenceEqual(before), "picking Hard on an old save writes nothing");
             var hard = profile.Begin("player-core-mage", "priest", 11, "npc.a", "npc-dragon-warrior", 1200);
             Check(hard.NpcDifficulty == null, "a Hard match writes no difficulty");
             profile.Settle(hard.Id, "Won", 8, false); profile.AcknowledgeRewardPresentation(profile.History.Last().Id);
