@@ -18,6 +18,9 @@ internal static class PluginSourcePins
                 bool active = !known || condition == "SOLOSTONE_RELEASE";
                 stack.Push((known, on)); on = on && active; continue;
             }
+            // #elif: its condition is not evaluated; inside a SOLOSTONE_RELEASE test it is kept (errs toward finding lab code).
+            if (line.StartsWith("#elif", StringComparison.Ordinal) && stack.Count > 0)
+            { var top = stack.Peek(); if (top.known) on = top.active; continue; }
             if (line.StartsWith("#else", StringComparison.Ordinal) && stack.Count > 0)
             { var top = stack.Peek(); if (top.known) on = top.active && !on; continue; }
             if (line.StartsWith("#endif", StringComparison.Ordinal) && stack.Count > 0) { on = stack.Pop().active; continue; }
@@ -32,9 +35,10 @@ internal static class PluginSourcePins
         var releaseText = string.Join("\n", Directory.GetFiles(Path.Combine(root, "plugin"), "*.cs", SearchOption.AllDirectories)
             .Select(file => ReleaseSource(File.ReadAllText(file))));
         foreach (string labOnly in new[] { "GrantGoldForTest", "MaximumTestGoldGrant", "TypeQuantityForTest", "HandleCraftingTest",
-            "\"OnInputComplete\"", "HoldUntil", "AmountDiagnostics", "GrantCardTokensForTest" })
+            "\"OnInputComplete\"", "HoldUntil", "AmountDiagnostics", "GrantCardTokensForTest", "DoublePress", "DoubleRelease" })
             if (releaseText.Contains(labOnly)) failures.Add("lab-only test-control code reaches the release build: " + labOnly);
-        if (!ReleaseSource("#if !SOLOSTONE_RELEASE\nA\n#else\nB\n#endif\n#if SOLOSTONE_RELEASE\nC\n#endif\n#if X\nD\n#endif").Equals("B\nC\nD"))
+        if (!ReleaseSource("#if !SOLOSTONE_RELEASE\nA\n#else\nB\n#endif\n#if SOLOSTONE_RELEASE\nC\n#endif\n#if X\nD\n#endif").Equals("B\nC\nD")
+            || !ReleaseSource("#if !SOLOSTONE_RELEASE\nA\n#elif X\nE\n#endif").Equals("E"))
             failures.Add("release source filter is wrong");
         string achievementToastSource = File.ReadAllText(Path.Combine(root, "plugin/NativeAchievementToast.cs"));
         if (!achievementToastSource.Contains("AchievementToast.prefab:9fa72c338c657d54fb9f63de21c1e4f8")

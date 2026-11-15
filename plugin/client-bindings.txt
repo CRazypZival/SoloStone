@@ -729,6 +729,7 @@ M	Assembly-CSharp	Actor	GetPremium	TAG_PREMIUM()
 M	Assembly-CSharp	Actor	GetSpell	*
 M	Assembly-CSharp	Actor	IsColliderEnabled	System.Boolean()
 M	Assembly-CSharp	Actor	IsShown	System.Boolean()
+M	Assembly-CSharp	AdjustBuyingAmount	RefreshQuantity	()
 M	Assembly-CSharp	AlertPopup	ButtonPress	*
 M	Assembly-CSharp	AlertPopup	GetInfo	AlertPopup+PopupInfo()
 M	Assembly-CSharp	AlertPopup	Hide	*

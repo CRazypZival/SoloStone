@@ -266,6 +266,9 @@ partial class NativeBundleHarness
     private static bool ready = true, committed, successSent, resultShown;
     private static long sequence, purchasePrice;
     private static int purchaseQuantity = 1;
+    // Production RefreshPackStepperAfterPurchase asks the open page's native stepper again; the double counts the asks.
+    private static int stepperRefreshes;
+    private static void RefreshPackStepperAfterPurchase() => stepperRefreshes++;
     private static float purchaseBegan;
     private static string purchaseFailure;
     private static LocalPurchaseReceipt purchaseReceipt;
@@ -1084,6 +1087,8 @@ partial class NativeBundleHarness
             var foreign = new ProductDataModel { PmtId = 42, Prices = new() { new PriceDataModel { Currency = CurrencyType.GOLD, Amount = 100 } } };
             bool foreignSelect = false; int foreignCap = 7; PackQuantitySelect(foreign, ref foreignSelect); PackBuyCap(foreign, ref foreignCap);
             check(select && !deckSelect && cap == 10 && deckCap == 1 && !foreignSelect && foreignCap == 7, "stepper only on local packs, capped at 1050 / 100 gold");
+            bool nativeYes = true; PackQuantitySelect(deckModel, ref nativeYes); bool foreignYes = true; PackQuantitySelect(foreign, ref foreignYes);
+            check(!nativeYes && foreignYes, "a local non-pack never gets the stepper, even when the native answer was yes; retail answers stay");
             // The page's mutable variant shows N times the unit price under the same PMT: the cap still comes from the ledger quote.
             var shown = new ProductDataModel { PmtId = pmt, Prices = new() { new PriceDataModel { Currency = CurrencyType.GOLD, Amount = 500 } } };
             int shownCap = 1; PackBuyCap(shown, ref shownCap);
@@ -1111,6 +1116,12 @@ partial class NativeBundleHarness
                 Buy(store, new BuyProductEventArgs(refusedPmt, CurrencyType.GOLD, quantity, true));
                 check(transaction == null && profile.PurchaseSequence == receipts, "Buy refuses quantity " + quantity + " of " + refusedPmt);
             }
+            // An order at the page copy's running total (N x unit as the unit price) never reaches Buy: the guard wants the quote.
+            Time.realtimeSinceStartup += 1;
+            int cancelled = manager.Cancelled, shownBefore = dialogs.Shown.Count;
+            manager.PurchaseProduct(model, new PriceDataModel { Currency = CurrencyType.GOLD, Amount = 200 }, 2);
+            check(manager.Bought == 0 && manager.Cancelled == cancelled + 1 && dialogs.Shown.Count == shownBefore && transaction == null
+                && profile.PurchaseSequence == receipts, "order priced at the page total (2 x 100 as unit) refused by the order guard");
             // A failed save takes nothing and grants nothing: no partial batch.
             Time.realtimeSinceStartup += 1;
             int failures = store.Failures;
@@ -1133,7 +1144,9 @@ partial class NativeBundleHarness
             check(profile.PurchaseSequence == receipts + 1 && receipt.ProductId == pack.Id && receipt.Quantity == 10 && receipt.GoldPaid == 1000
                 && receipt.PriceBeforeKit == 1000 && receipt.Granted.Packs.Single().PackType == pack.PackType && receipt.Granted.Packs.Single().Count == 10
                 && profile.Gold == gold - 1000 && profile.UnopenedPacks == packs + 10, "one commit: 10 packs, 1000 gold, one receipt");
+            int refreshesBefore = stepperRefreshes;
             auth.Response(true, tx);
+            check(stepperRefreshes == refreshesBefore + 1, "a successful acknowledgement re-asks the open page's stepper for its limit");
             int after = 1; PackBuyCap(model, ref after);
             check(transaction == null && after == 1, "acknowledged; the cap follows the new balance");
             // The pack page stays open under the purchase window: the press that dismisses it must not order the batch again.

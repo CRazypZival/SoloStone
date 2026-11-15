@@ -185,6 +185,9 @@ internal sealed partial class NativeTestControl
             press.Operation.Phase = press.PressFrame >= 0 ? "fault" : "rejected";
             press.Operation.Detail["error"] = reason + "; reconcile action-status before retry";
             if (press.Operation.Phase == "fault") LatchFault(reason);
+            // A held press (holdMs) must not stay down: the native mouse-up away from the element (release-all).
+            if (press.Gesture == "press" && !press.Right && press.PressFrame >= 0 && NativeUiTree.Alive(press.Target))
+                try { NativeUiTree.Cancel(press.Target); } catch (Exception) { }
             if (press.Gesture == "ui-drag") NativeUiGestures.EndDrag();
             press = null;
         }

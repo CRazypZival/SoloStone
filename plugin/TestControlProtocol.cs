@@ -256,7 +256,7 @@ internal sealed class ControlRequest
             // Lab builds only: add gold to the disposable save (shop live checks: multi-pack buy).
             case "gold-grant": extras = "amount"; Integer("amount", 1, 100000); break;
             // Lab builds only: type TEXT and Enter into the shop's open type-a-number box (StoreQuantityPrompt).
-            case "shop-quantity-type": extras = "text"; if (!Regex.IsMatch(Text("text"), @"\A[0-9-]{1,8}\z")) throw new FormatException("Invalid quantity text"); break;
+            case "shop-quantity-type": extras = "text"; if (!Regex.IsMatch(Text("text"), @"\A-?[0-9]{1,7}\z")) throw new FormatException("Invalid quantity text"); break;
             // Native Collection page flip to one card (CollectionPageManager.JumpToPageWithCard); no click.
             case "collection-jump": extras = "cardId"; if (UiRules.CollectionCardId(Text("cardId")) == null) throw new FormatException("Invalid card ID"); break;
             case "shop-purchase":

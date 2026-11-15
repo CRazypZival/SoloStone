@@ -911,6 +911,7 @@ internal static class NativeShop
         new[] { "Field", "ShopTab", "m_clickable", "*", "", "ui" },
         new[] { "Field", "ShopSubTab", "m_button", "*", "", "ui" },
         new[] { "Field", "ProductPageController", "m_quantityPrompt", "*", "", "ui" },
+        new[] { "Method", "AdjustBuyingAmount", "RefreshQuantity", "", "", "ui" },
         new[] { "Field", "AdjustBuyingAmount", "m_incrementClickable", "*", "", "ui" },
         new[] { "Field", "AdjustBuyingAmount", "m_decrementClickable", "*", "", "ui" },
 #if !SOLOSTONE_RELEASE
@@ -1465,8 +1466,9 @@ internal static class NativeShop
     // the stepper hides + at the cap and - at 1. The ledger re-prices and re-checks every order (Buy, Commit).
     private static void PackQuantitySelect(ProductDataModel __0, ref bool __result)
     {
-        if (!Isolated || __result) return;
-        try { if (LocalPack(__0, out _)) __result = true; }
+        if (!Isolated) return;
+        // A local product decides alone: packs get the stepper, every other local kind never does (one per order).
+        try { if (__0 != null && NativeShopPurchase.TryProduct(__0.PmtId, out _)) __result = LocalPack(__0, out _); }
         catch (Exception error) { Refuse("pack quantity select: " + (error.InnerException ?? error).Message); }
     }
     private static void PackBuyCap(ProductDataModel __0, ref int __result)
@@ -1474,6 +1476,14 @@ internal static class NativeShop
         if (!Isolated) return;
         try { if (LocalPack(__0, out var local)) __result = NativeShopPurchase.AffordableQuantity(local, Profile.Gold, Profile.PurchasePrice(local.Id)); }
         catch (Exception error) { Refuse("pack buy cap: " + (error.InnerException ?? error).Message); __result = 1; }
+    }
+    // After a purchase the open pack page's stepper still holds the limit of the old balance: the client's own
+    // RefreshQuantity asks GetMaxBulkPurchaseCount again (PackBuyCap) and clamps the count to it.
+    private static void RefreshPackStepperAfterPurchase()
+    {
+        var page = Shop.Get()?.ProductPageController?.CurrentProductPage;
+        if (page == null || !page.IsOpen || !LocalPack(page.GetSelectedVariant(), out _) && !LocalPackSelection(page.GetSelectedVariant())) return;
+        foreach (var stepper in page.GetComponentsInChildren<AdjustBuyingAmount>(false)) Call(stepper, "RefreshQuantity");
     }
     private static bool LocalPack(ProductDataModel product, out LocalShopProduct local)
     {
@@ -2992,6 +3002,8 @@ internal static class NativeShop
                 try { Call(__instance, "SetCanTapOutConfirmationUI", true); }
                 finally { __instance.UnblockStoreInterface(); }
             }
+            // The pack page stays open under the window: its stepper re-reads the limit from the new balance (review 2026-11-16).
+            if (__0) RecoverStep("pack stepper refresh", RefreshPackStepperAfterPurchase);
             Trace("ack transaction " + __1.ID + " success " + __0);
         }
         catch (Exception error) { Fail("ack", error); RecoverUI(); }
