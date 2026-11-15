@@ -142,10 +142,10 @@ internal static class WildY0aL3BLegacyProof
             Core2026Proof.Check(p.Opponent.HandZone.Count == oHand, "Pilfer adds nothing to the opponent's hand");
             Core2026Proof.Check(Casts(twin, twin.Player1, id, 40).Select(c => c.Id).SequenceEqual(cards.Select(c => c.Id)), "Pilfer is deterministic on an exact clone");
             End(g);
-            var theirs = Casts(g, p.Opponent, id, 8);
+            var theirs = Casts(g, p.Opponent, id, 60);
             Core2026Proof.Check(theirs.All(c => c.Class != CardClass.MAGE && c.Class != CardClass.NEUTRAL), "Opponent's Pilfer excludes their own class (Mage) and Neutral");
-            Core2026Proof.Check(theirs.Select(c => c.Class).Distinct().Count() >= 3 && theirs.Any(c => c.Class == CardClass.ROGUE || c.Class != CardClass.ROGUE),
-                "Opponent's Pilfer also spans several other classes");
+            Core2026Proof.Check(theirs.Select(c => c.Class).Distinct().Count() >= 3 && theirs.Any(c => c.Class == CardClass.ROGUE),
+                "Opponent's Pilfer also spans several other classes, including the Rogue that cast the first one");
         });
         // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
         HeldForStandard("EX1_185", (g, p, id) => {
@@ -173,7 +173,8 @@ internal static class WildY0aL3BLegacyProof
             var theirs = (Minion)Play(g, p.Opponent, id);
             Core2026Proof.Check(enemyDemon.AttackDamage == 2 && voidwalker.AttackDamage == 1 && theirs.AttackDamage == 5, "Opponent's Siegebreaker buffs only their Demons");
         });
-        WildSetsProof.Case("EX1_191", (g, p, id) => {
+        // held: used by Standard (Victor Nefarius candidate list in engine/.../CATACLYSM/VictorNefarius.cs) until #87
+        HeldForStandard("EX1_191", (g, p, id) => {
             var friend = Summon(p, Squire); var enemy = Summon(p.Opponent, Yeti);
             var held = Add(p, id);
             var targets = WildY0aL3ALegacyProof.Targets(p, held).Distinct().ToList();

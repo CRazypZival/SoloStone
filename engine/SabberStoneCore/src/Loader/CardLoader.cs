@@ -56,9 +56,19 @@ namespace SabberStoneCore.Loader
 					throw new InvalidDataException("Wild identity row changes the dbf of " + entity.Id);
 				if (!new[] { GameTag.CARDTYPE, GameTag.CARD_SET, GameTag.COLLECTIBLE }.All(tag => entity.Tags.Any(t => t.GameTag == tag)))
 					throw new InvalidDataException("Wild identity row missing type/set/collectible: " + entity.Id);
+				if (TagOf(entity, GameTag.CARDTYPE) != (int)baseCards[at].Type)
+					throw new InvalidDataException("Wild identity row changes the card type of " + entity.Id);
+				if (TagOf(entity, GameTag.COLLECTIBLE) != 1)
+					throw new InvalidDataException("Wild identity row is not collectible: " + entity.Id);
 				result[at] = Build(entity, overlay: true);
 			}
 			return result;
+		}
+
+		private static int TagOf(CardFacts.Entity entity, GameTag tag)
+		{
+			foreach (var t in entity.Tags) if (t.GameTag == tag) return (int)t.TagValue;
+			return int.MinValue;
 		}
 
 		// Private tools and tests still build cards from the XML; the engine itself does not.

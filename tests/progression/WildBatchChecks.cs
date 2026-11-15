@@ -33,6 +33,11 @@ internal static class WildBatchChecks
         Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/LocalCardCatalog.cs", "private const string X = \"CS1_112 CS2_029 CS2_032\";") }));
         Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("data/pools/x.json", "{\"cards\":[\"CS2_029\"]}") }));
         CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/LocalDecks.cs", "// CS2_029 only in a comment\nvar other = \"CS2_0290 XCS2_029\";") });
+        Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var t = @\"a\nCS2_029 b\";") }));
+        Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var t = \"\"\"\n  CS2_029\n  \"\"\";") }));
+        Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var a = '\"'; var t = \"CS2_029\";") }));
+        CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var a = '\"'; /* \"CS2_029\" */ var t = \"x\";") });
+        CheckStandardLegacyPools(ids);
         Reject(() => ValidateCases(new[] { "CS2_028" }, Array.Empty<string>()));
         Reject(() => ValidateCases(Array.Empty<string>(), new[] { "CS2_028" }));
         Reject(() => ValidateCases(new[] { "CS2_028" }, new[] { "CS2_028", "CS2_028" }));
@@ -47,16 +52,34 @@ internal static class WildBatchChecks
         Console.WriteLine($"PASS Wild batches: groups={files.Length}; cards={ids.Length}; exactly one case per manifest identity; no Standard overlap");
     }
 
-    // The sources that name card ids Standard uses: the catalog manifests, deck recipes, the native match and NPC tables
-    // (their string literals, comments stripped) and every data file except the pinned client data and FX censuses.
+    // The sources that name card ids Standard uses: every plugin script, the engine's Client set scripts, sim, the test fixtures
+    // (string literals only for C#, comments stripped) and every data file except the pinned client data and FX censuses.
+    // The two NPC ValueData tables are AI weights keyed by card id, not Standard use: excluded by file, on purpose.
+    // private/tools/wild_standard_edit_scan.py mirrors this list.
+    internal static readonly string[] ValueDataFiles = { "plugin/Npc/DeathValueData.cs", "plugin/Npc/TriggerValueData.cs" };
+
     private static IEnumerable<(string Source, string Text)> StandardSources()
     {
-        var files = new List<string> { "plugin/LocalCardCatalog.cs", "plugin/LocalDecks.cs", "plugin/NativeMatch.cs" };
-        files.AddRange(Directory.GetFiles("plugin/Npc", "*.cs", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.Ordinal));
+        static bool Built(string path) => path.Replace('\\', '/').Split('/').Any(part => part is "bin" or "obj" or "out");
+        var files = new List<string>();
+        files.AddRange(Directory.GetFiles("plugin", "*.cs", SearchOption.AllDirectories));
+        files.AddRange(Directory.GetFiles("engine", "*.cs", SearchOption.AllDirectories)
+            .Where(path => path.Replace('\\', '/').Contains("/Client/")));
+        files.AddRange(Directory.GetFiles("sim", "*.cs", SearchOption.AllDirectories));
+        files.AddRange(Directory.GetFiles("tests/fixtures", "*", SearchOption.AllDirectories));
         files.AddRange(Directory.GetFiles("data", "*.json", SearchOption.AllDirectories)
-            .Where(path => !path.Replace('\\', '/').StartsWith("data/carddb/") && !path.Replace('\\', '/').StartsWith("data/fx/"))
-            .OrderBy(path => path, StringComparer.Ordinal));
-        return files.Select(path => (path.Replace('\\', '/'), File.ReadAllText(path)));
+            .Where(path => !path.Replace('\\', '/').StartsWith("data/carddb/") && !path.Replace('\\', '/').StartsWith("data/fx/")));
+        return files.Select(path => path.Replace('\\', '/')).Where(path => !Built(path) && !ValueDataFiles.Contains(path))
+            .Distinct().OrderBy(path => path, StringComparer.Ordinal).Select(path => (path, File.ReadAllText(path)));
+    }
+
+    // The string literals of C# source with comments and char literals removed: regular, verbatim @"..." and raw """...""" strings.
+    internal static string StringLiterals(string text)
+    {
+        var literals = Regex.Matches(text,
+            "//[^\\r\\n]*|/\\*[\\s\\S]*?\\*/|'(?:\\\\.|[^'\\\\])'|\"\"\"[\\s\\S]*?\"\"\"|@\"(?:[^\"]|\"\")*\"|\"(?:\\\\.|[^\"\\\\\r\n])*\"")
+            .Select(match => match.Value).Where(value => value.Contains('"') && !value.StartsWith("//") && !value.StartsWith("/*") && !value.StartsWith("'"));
+        return string.Join("\n", literals);
     }
 
     internal static void CheckNotUsedByStandard(string[] ids, IEnumerable<(string Source, string Text)> sources)
@@ -64,17 +87,36 @@ internal static class WildBatchChecks
         var used = new List<string>();
         foreach (var (source, text) in sources)
         {
-            string body = text;
-            if (source.EndsWith(".cs", StringComparison.Ordinal))
-            {
-                string code = Regex.Replace(text, "//[^\r\n]*|/\\*[\\s\\S]*?\\*/|\"(?:\\\\.|[^\"\\\\\r\n])*\"",
-                    match => match.Value.StartsWith("\"") ? match.Value : "");
-                body = string.Join("\n", Regex.Matches(code, "\"(?:\\\\.|[^\"\\\\\r\n])*\"").Select(match => match.Value));
-            }
+            string body = source.EndsWith(".cs", StringComparison.Ordinal) ? StringLiterals(text) : text;
             var tokens = new HashSet<string>(Regex.Split(body, "[^A-Za-z0-9_]+"), StringComparer.Ordinal);
             used.AddRange(ids.Where(tokens.Contains).Select(id => id + " (" + source + ")"));
         }
         Check(used.Count == 0, "Wild manifest id used by Standard (held until #87): " + string.Join(", ", used));
+    }
+
+    // The legacy generation pools Standard-format random generation draws from still list these Wild ids. Reaching them needs a
+    // Standard-format effect that rolls from AllStandard or Standard/Class/*; the identity rows change the card's text and stats
+    // only for Wild cards, and #141 routes these pools through a format-aware accessor. Pinned: a new listed id in a pool fails.
+    private static readonly string[] StandardPoolIds =
+    {
+        "CS2_057", "CS2_059", "CS2_061", "CS2_063", "CS2_073", "CS2_075", "CS2_077", "CS2_080", "CS2_233",
+        "EX1_124", "EX1_126", "EX1_133", "EX1_137", "EX1_144", "EX1_181", "EX1_182",
+    };
+
+    internal static void CheckStandardLegacyPools(string[] ids)
+    {
+        var root = System.Xml.Linq.XDocument.Load("engine/SabberStoneCore/resources/Data/LegacyGenerationV1.xml").Root;
+        var inPool = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var pool in root.Elements("Pool"))
+        {
+            string name = (string)pool.Attribute("name");
+            if (name != "AllStandard" && !name.StartsWith("Standard/Class/", StringComparison.Ordinal)) continue;
+            foreach (string line in pool.Value.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                if (ids.Contains(line.Substring(0, line.LastIndexOf(':')))) inPool.Add(line.Substring(0, line.LastIndexOf(':')));
+        }
+        Check(inPool.SequenceEqual(StandardPoolIds.OrderBy(id => id, StringComparer.Ordinal)),
+            "Wild ids in the legacy Standard pools changed (pin in WildBatchChecks.StandardPoolIds, see #141): " + string.Join(" ", inPool));
+        Console.WriteLine($"PASS Wild ids in legacy Standard pools: {inPool.Count} pinned (#141)");
     }
 
     // LocalCardCatalog's NewBasicIds must stay Set CORE and Rarity FREE: an identity row for one keeps its base CARD_SET

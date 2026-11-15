@@ -24,7 +24,7 @@ internal static class EnemyBoardCopyProof
             var copy = (Minion)Generic.Copy(p, p.Hero, original, Zone.PLAY, preserveBoardMinionState: true);
             g.DeathProcessingAndAuraUpdate();
             Core2026Proof.Check(copy.Id != original.Id && copy.Controller == p && copy.Zone == p.BoardZone
-                && copy.Damage == 1 && copy.AttackDamage == 4 && copy.BaseHealth == original.Card.Health + 2
+                && copy.Damage == 1 && copy.AttackDamage == 4 && copy.BaseHealth == 4
                 && copy.NumAttacksThisTurn == 0 && copy.IsExhausted && copy.IsSilenced == silenced,
                 "Unpinned_EnemyBoardCopy: current state without enemy aura, identity or spent attacks");
             Core2026Proof.Check((!history || copy.AppliedEnchantments.Count == 1 && copy.AppliedEnchantments[0].Card.Id == "CS2_009e")
@@ -40,7 +40,7 @@ internal static class EnemyBoardCopyProof
                 Core2026Proof.Check(copied.Zone == next.Player1.BoardZone && copied.AttackDamage == 4,
                     "original departure does not remove copy or its buff");
                 copied.Silence(); next.DeathProcessingAndAuraUpdate();
-                Core2026Proof.Check(copied.AttackDamage == 2 && copied.BaseHealth == original.Card.Health && (copied.AppliedEnchantments?.Count ?? 0) == 0
+                Core2026Proof.Check(copied.AttackDamage == 2 && copied.BaseHealth == 2 && (copied.AppliedEnchantments?.Count ?? 0) == 0
                     && ((Minion)next.IdEntityDic[neighbor.Id]).AttackDamage == 4,
                     "Silence removes independent copied enchantment and aura");
             }

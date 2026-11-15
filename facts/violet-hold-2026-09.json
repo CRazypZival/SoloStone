@@ -10742,6 +10742,5 @@
 {"id":"EX1_137","dbf":708,"name":"Headcrack","text":"Deal $2 damage to the enemy hero. <b>Combo:</b> Return this to your hand next turn.","textHash":"d4e68bd993245817","tags":[[48,3],[183,3],[199,7],[201,3],[202,5],[203,3],[220,1],[251,1],[321,1]]},
 {"id":"EX1_144","dbf":365,"name":"Shadowstep","text":"Return a friendly minion to your hand. It_costs (2) less.","textHash":"2e9faafe09dba7c1","tags":[[183,3],[199,7],[201,3],[202,5],[203,1],[251,1],[321,1],[1635,6],[2589,1]]},
 {"id":"EX1_181","dbf":52263,"name":"Call of the Void","text":"Add a random Demon to your hand.","textHash":"185326336095c0b6","tags":[[48,1],[114,0],[183,1635],[199,9],[202,5],[203,1],[321,1],[1635,6]]},
-{"id":"EX1_182","dbf":52264,"name":"Pilfer","text":"Add a random card from another class to_your hand.","textHash":"0f12d900ce73a09c","tags":[[48,1],[114,0],[183,1635],[199,7],[202,5],[203,1],[321,1]]},
-{"id":"EX1_191","dbf":54863,"name":"Plaguebringer","text":"<b>Battlecry:</b> Give a friendly minion <b>Poisonous</b>.","textHash":"0bd1127d22ce1760","tags":[[45,3],[47,3],[48,4],[183,1635],[199,7],[200,11],[202,4],[203,2],[218,1],[321,1]],"refs":[[363,1]]}
+{"id":"EX1_182","dbf":52264,"name":"Pilfer","text":"Add a random card from another class to_your hand.","textHash":"0f12d900ce73a09c","tags":[[48,1],[114,0],[183,1635],[199,7],[202,5],[203,1],[321,1]]}
 ]}

@@ -333,6 +333,7 @@ if (args.Contains("--silence-keywords-only"))
 {
     SilenceValueProof.Run();
     SilenceKeywordsProof.Run();
+    SilenceCantAttackProof.Run();
     return;
 }
 
@@ -373,6 +374,7 @@ if (args.Contains("--standard-sets-only"))
     Batch13TagIsolationProof.Run();
     ForcedAttackBudgetProof.Run();
     BonusEffectsProof.Run();
+    SilenceCantAttackProof.Run();
     EnemyBoardCopyProof.Run();
     DarkGiftProof.Run();
     DarkGiftBehaviourProof.Run();
@@ -613,6 +615,7 @@ CoreReprintsProof.Run();
 Core2026Proof.Run();
 ForcedAttackBudgetProof.Run();
 BonusEffectsProof.Run();
+SilenceCantAttackProof.Run();
 EnemyBoardCopyProof.Run();
 StandardSetsProof.Run();
 WildSetsProof.Run();

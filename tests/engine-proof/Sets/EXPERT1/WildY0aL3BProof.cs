@@ -32,9 +32,10 @@ internal static class WildY0aL3BProof
             Core2026Proof.Check(p.Hero.Weapon == null && p.Hero.AttackDamage == 0, "Blade Flurry destroys the weapon");
             Play(g, p, "CS2_106"); Play(g, p, "CS2_074");
             Core2026Proof.Check(p.Hero.Weapon.AttackDamage == 5, "Fiery War Axe plus Deadly Poison has 5 Attack");
+            var big = Summon(p.Opponent, "CS2_186"); // War Golem 7/7: takes the full 5, so Attack 4 or 6 would show
             Play(g, p, id);
-            Core2026Proof.Check(enemy.Zone.Type == Zone.GRAVEYARD && shield.Damage == 5 || shield.Zone.Type == Zone.GRAVEYARD,
-                "Blade Flurry uses the buffed weapon Attack: exact lethal on the 3 remaining Health, 5 on the next");
+            Core2026Proof.Check((enemy.Zone.Type == Zone.GRAVEYARD && shield.Zone.Type == Zone.GRAVEYARD) && big.Damage == 5,
+                "Blade Flurry uses the buffed weapon Attack: it kills the 3 remaining Health and the 1/1, and deals exactly 5 to a 7/7");
             Core2026Proof.Check(p.Hero.Weapon == null, "Blade Flurry destroyed the buffed weapon");
             var late = Summon(p.Opponent, Yeti);
             Summon(p, Thalnos); Play(g, p, "CS2_080"); Play(g, p, id);

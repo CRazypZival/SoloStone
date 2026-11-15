@@ -244,6 +244,13 @@ internal static class CardFactsProof
         Refused("another dbf", new CardFacts.Entity { Id = sample.Id, AssetId = sample.AssetId + 1, Tags = sample.Tags });
         Refused("a row without set", new CardFacts.Entity { Id = sample.Id, AssetId = sample.AssetId,
             Tags = sample.Tags.Where(t => t.GameTag != SabberStoneCore.Enums.GameTag.CARD_SET).ToArray() });
+        Tag[] Replaced(SabberStoneCore.Enums.GameTag tag, int value) =>
+            sample.Tags.Select(t => t.GameTag == tag ? new Tag(tag, value) : t).ToArray();
+        int type = (int)sample.Tags.First(t => t.GameTag == SabberStoneCore.Enums.GameTag.CARDTYPE).TagValue;
+        Refused("a card type change", new CardFacts.Entity { Id = sample.Id, AssetId = sample.AssetId,
+            Tags = Replaced(SabberStoneCore.Enums.GameTag.CARDTYPE, type == 4 ? 7 : 4) });
+        Refused("a non-collectible row", new CardFacts.Entity { Id = sample.Id, AssetId = sample.AssetId,
+            Tags = Replaced(SabberStoneCore.Enums.GameTag.COLLECTIBLE, 0) });
         bool duplicate = false;
         try { CardLoader.ApplyIdentity(built, new[] { sample, sample }); } catch (InvalidDataException) { duplicate = true; }
         Check(duplicate, "identity refuses a duplicate row");

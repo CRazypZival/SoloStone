@@ -186,11 +186,12 @@ internal static class WildY0aL2BLegacyProof
             Check(buffed.Health == 7, "fixture: Power Word: Shield");
             Kill(g, buffed); Kill(g, enemy); Kill(g, second); Kill(g, third);
             Check(p.NumFriendlyMinionsThatDiedThisTurn == 3, "fixture: three of mine died");
+            Summon(p, "CS2_171"); // an anchor on the right: "right of Whitemane" and "far right" differ
             Replay(g, b => {
                 var q = b.Player1;
-                var w = (Minion)Play(b, q, id);
+                var w = (Minion)StandardSetsProof.PlayAt(b, q, id, 0);
                 Check(w.AttackDamage == 5 && w.Health == 7, "High Inquisitor Whitemane is a 5/7");
-                Check(q.BoardZone.Select(m => m.Card.Id).SequenceEqual(new[] { id, Yeti, "CS2_179", "CS2_200" }),
+                Check(q.BoardZone.Select(m => m.Card.Id).SequenceEqual(new[] { id, Yeti, "CS2_179", "CS2_200", "CS2_171" }),
                     "my dead minions return in the order they died, right of Whitemane: " + string.Join(",", q.BoardZone.Select(m => m.Card.Id)));
                 var back = q.BoardZone.Single(m => m.Card.Id == Yeti);
                 Check(back.Health == 5 && back.Damage == 0 && back.AttackDamage == 4, "they come back fresh, without the old buff");
