@@ -159,6 +159,7 @@ namespace SabberStoneCore.Model.Entities
 			HasCharge = false;
             IsRush = false;
             CantAttackHeroes = false;
+            if (Card.CantAttack && CantAttack) CantAttack = false; // the card's own "Can't attack" is silenceable text; a ban another effect set stays (B16 proof)
 			HasWindfury = false;
             if (this[GameTag.MEGA_WINDFURY] > 0) this[GameTag.MEGA_WINDFURY] = 0;
             if (this[GameTag.IMMUNE_WHILE_ATTACKING] > 0) this[GameTag.IMMUNE_WHILE_ATTACKING] = 0;
