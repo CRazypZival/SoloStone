@@ -172,6 +172,19 @@ internal static class CardFactsProof
             else if (!ReferenceEquals(built[i], applied[i])) differences.Add(built[i].Id + " replaced without an identity row");
         }
         CheckEmpty(differences, "identity rows");
+        // Legacy Standard pools and legality (2021 StandardSets) read an identity card by its base row's set.
+        var baseById = facts.Cards.GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
+        foreach (var row in facts.Identity)
+        {
+            var baseSet = (SabberStoneCore.Enums.CardSet)(int)baseById[row.Id].Tags.First(t => t.GameTag == SabberStoneCore.Enums.GameTag.CARD_SET).TagValue;
+            var card = Cards.FromId(row.Id);
+            bool legacyStandard = Cards.StandardSets.Contains(baseSet);
+            Check(Cards.LegacySet(card) == baseSet, "legacy set of " + row.Id);
+            foreach (var cls in new[] { SabberStoneCore.Enums.CardClass.DEMONHUNTER, SabberStoneCore.Enums.CardClass.DEATHKNIGHT })
+                Check(!Cards.Standard[cls].Contains(card) || legacyStandard, "identity card joins the legacy Standard pool of " + cls + ": " + row.Id);
+            Check(Cards.IsFormatLegal(card, SabberStoneCore.Enums.FormatType.FT_STANDARD) == (legacyStandard && card.Collectible && card.Implemented),
+                "legacy Standard legality of " + row.Id);
+        }
         if (facts.Identity.Length == 0) return;
         var sample = facts.Identity[0];
         void Refused(string what, CardFacts.Entity entity)

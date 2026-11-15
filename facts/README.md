@@ -5,7 +5,7 @@
 > this repository's licences (AGPL, CC BY) cover them. They are here only so the rules engine can show and play the
 > cards. See [NOTICE](../NOTICE) section 5. The locale files described below are the same: Blizzard's card text.
 
-One JSON file per meta. The engine embeds the file and loads every card from it, in file order. A file is frozen once shipped, so a meta reads and plays the same on any client.
+One JSON file per meta. The engine embeds the file and loads every card from it, in file order. A file is frozen once shipped, so a meta reads and plays the same on any client. The one exception (owner ruling, 2026-11-15, for parity with the retail client): Wild identity rows (below) are added for old cards once a Wild wave has proven them, and the golden games they change are re-recorded with a per-game audit.
 
 The file is generated from the client's card definitions by private tooling that is not in the public repository (`tools/gen_card_facts.py`, run after `tools/gen_card_overlay.py`; `--check` fails on a stale file).
 

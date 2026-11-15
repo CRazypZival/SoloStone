@@ -65,6 +65,31 @@ internal static class WildSetsProof
         catch (Exception error) { Failures.Add(id + ": " + error); }
     }
 
+    internal static string[] ManifestIds() => Directory.GetFiles("tests/progression/batches/wild", "*.txt")
+        .OrderBy(path => path, StringComparer.Ordinal)
+        .SelectMany(path => File.ReadAllText(path).TrimEnd('\r', '\n').Split('\n')).Select(line => line.TrimEnd('\r')).ToArray();
+
+    internal static void CheckCoverage(IReadOnlyCollection<string> proven, IReadOnlyCollection<string> listed)
+    {
+        var missing = listed.Except(proven, StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+        var unlisted = proven.Except(listed, StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+        Core2026Proof.Check(missing.Length == 0 && unlisted.Length == 0, "Wild proofs run differ from the manifests: missing "
+            + (missing.Length == 0 ? "none" : string.Join(",", missing)) + "; unlisted " + (unlisted.Length == 0 ? "none" : string.Join(",", unlisted)));
+    }
+
+    // Negative controls for CheckCoverage: a listed card whose Case never ran, and a proven card no manifest lists.
+    internal static void CoverageRefuses()
+    {
+        bool Refused(string[] proven, string[] listed)
+        {
+            try { CheckCoverage(proven, listed); return false; }
+            catch (Exception error) { return error.Message.Contains("differ from the manifests"); }
+        }
+        Core2026Proof.Check(Refused(new[] { "CS2_028" }, new[] { "CS2_028", "CS2_031" }), "coverage refuses a listed card never proven");
+        Core2026Proof.Check(Refused(new[] { "CS2_028", "CS2_031" }, new[] { "CS2_028" }), "coverage refuses an unlisted proven card");
+        CheckCoverage(new[] { "CS2_031", "CS2_028" }, new[] { "CS2_028", "CS2_031" });
+    }
+
     internal static void Run(Action selectedProof = null)
     {
         Failures.Clear();
@@ -73,6 +98,8 @@ internal static class WildSetsProof
         else selectedProof();
         Core2026Proof.Check(Failures.Count == 0, string.Join("\n", Failures));
         Core2026Proof.Check(ProvenIds.Count > 0, "nonempty Wild card proofs");
+        // The manifest check is textual; at run time every listed card (each has an identity row) must have been proven.
+        if (selectedProof == null) { CoverageRefuses(); CheckCoverage(ProvenIds, ManifestIds()); }
         Console.WriteLine($"wild-sets: cards={ProvenIds.Count}; seeds=3; PASS");
     }
 }

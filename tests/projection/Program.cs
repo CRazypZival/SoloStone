@@ -784,8 +784,9 @@ var directDifferences = new (string Id, SabberStoneCore.Enums.GameTag Tag, int E
     ("DS1_055", SabberStoneCore.Enums.GameTag.CARDRACE, 0),
     ("EX1_001", SabberStoneCore.Enums.GameTag.CARDRACE, 0),
     ("EX1_002", SabberStoneCore.Enums.GameTag.CARDRACE, 0),
-    ("EX1_012", SabberStoneCore.Enums.GameTag.CARDRACE, 0),
-    ("EX1_016", SabberStoneCore.Enums.GameTag.CARDRACE, 0),
+    // Undead (11) since the card file's Wild identity rows (facts/README.md) carry their 37.0 client races.
+    ("EX1_012", SabberStoneCore.Enums.GameTag.CARDRACE, 11),
+    ("EX1_016", SabberStoneCore.Enums.GameTag.CARDRACE, 11),
     ("EX1_025t", SabberStoneCore.Enums.GameTag.RARITY, 1),
     ("EX1_045", SabberStoneCore.Enums.GameTag.CANT_ATTACK, 1),
     ("EX1_059", SabberStoneCore.Enums.GameTag.CARDRACE, 0),
