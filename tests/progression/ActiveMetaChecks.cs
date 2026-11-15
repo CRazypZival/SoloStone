@@ -118,6 +118,15 @@ internal static class ClassicWildChecks
                 Check(wild.Count == 0, file + " " + deck.GetProperty("id").GetString() + " holds Wild cards: " + string.Join(",", wild));
             }
         }
+        foreach (string id in new[] { "CORE_CS2_231", "CORE_FP1_011", "CORE_VAN_EX1_572", "CORE_EDR_004" })
+        {
+            SabberStoneCore.Model.Card hidden = null;
+            try { hidden = Cards.FromId(id); } catch (KeyNotFoundException) { }
+            Check(!LocalCardCatalog.IsStandardId(id) && !LocalShop.IsStandardCard(hidden), "a CORE_ prefix alone is not Standard: " + id);
+        }
+        Check(LocalShop.IsStandardCard(Cards.FromId("CORE_EDR_004_2026")) && LocalShop.IsStandardCard(Cards.FromId("CORE_CS2_024"))
+            && LocalShop.IsStandardCard(Cards.FromId("JAIL_831")) && !LocalShop.IsStandardCard(Cards.FromId("CS2_024")),
+            "the shop's Standard check is the engine rule");
         Check(!LocalCardCatalog.IsStandardId("CS2_089") && !LocalCardCatalog.IsStandardId("CS2_097")
             && !LocalProfile.ClassicReprints.ContainsKey("CS2_089") && !LocalProfile.ClassicReprints.ContainsKey("CS2_097"),
             "Holy Light and Truesilver Champion are Wild with no Core reprint");

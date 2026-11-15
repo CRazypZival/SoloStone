@@ -8,8 +8,8 @@ internal static class CatalogueIndexTests
         var all = Cards.All.ToArray();
         var standard = FairPackRules.Eligible(FairPackRules.Standard, FairPackRules.RuleVersion);
         var extras = LocalCardCatalog.ActiveMetaExtraCards;
-        bool IsStandard(SabberStoneCore.Model.Card card) => card.Collectible && card.Implemented
-            && (LocalCardCatalog.IsCore(card.Id) || standard.Any(eligible => eligible.Set == card.Set) || extras.Contains(card.Id));
+        // #87: the engine's Standard rule (active-meta sets incl. Core 1637 and listed extras); a CORE_ prefix alone is not enough.
+        bool IsStandard(SabberStoneCore.Model.Card card) => card.Collectible && card.Implemented && LocalCardCatalog.IsStandard(card);
         var ledger = LocalCardCatalog.Current.Concat(standard)
             .Concat(OfflinePoolPolicy.Load().Members.Where(row => row.Scope == "Standard").Select(row => row.CardId)
                 .Concat(SabberStoneCore.CardSets.Client.StandardSets.CollectibleIds).Select(Cards.FromId).Where(IsStandard))

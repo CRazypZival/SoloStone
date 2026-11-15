@@ -23,6 +23,9 @@ internal static class NativeStarterText
 internal static class NativeStandardText
 {
     internal const string WildDeckHeader = "Wild Cards";
+    internal const string FormatDeckHeader = "Not a Standard Deck";
+    internal static string FormatDeckBody(string format) =>
+        "This is a " + format + " deck. This version of SoloStone plays Standard decks only.";
     internal const int NamedCards = 6;
     internal static string WildDeckBody(IReadOnlyList<string> ids)
     {

@@ -1433,6 +1433,15 @@ internal static partial class NativeUIProbe
             selected = native.ID + "|" + native.Name + "|" + native.HeroCardID + "|" + string.Join(",", native.GetCardsWithCardID().OrderBy(id => id));
             LocalCustomDeck custom = Profile.GetDraft(native.ID);
             var wild = custom == null ? Array.Empty<string>() : Profile.WildCards(custom.Id);
+            string format = custom?.Format ?? LocalProfile.StandardFormat;
+            if (format != LocalProfile.StandardFormat) {
+                log.LogInfo("NATIVE_PICKER_FORMAT_REFUSED deck=" + custom.Id + " format=" + format);
+                DialogManager.Get()?.ShowPopup(new AlertPopup.PopupInfo {
+                    m_headerText = NativeStandardText.FormatDeckHeader, m_text = NativeStandardText.FormatDeckBody(format),
+                    m_responseDisplay = AlertPopup.ResponseDisplay.OK
+                });
+                return;
+            }
             if (wild.Count != 0) {
                 log.LogInfo("NATIVE_PICKER_WILD_REFUSED deck=" + custom.Id + " cards=" + string.Join(",", wild));
                 DialogManager.Get()?.ShowPopup(new AlertPopup.PopupInfo {

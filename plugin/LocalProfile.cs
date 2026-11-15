@@ -719,7 +719,8 @@ public sealed partial class LocalProfile : IDisposable
             throw new ArgumentException("Invalid match setup.");
         if (deck == "custom" || deck.StartsWith("custom:", StringComparison.Ordinal)) {
             LocalCustomDeck saved = deck == "custom" ? CustomDeck : data.CustomDecks.SingleOrDefault(d => "custom:" + d.Id == deck);
-            if (saved == null || !IsDeckComplete(saved.Id)) throw new InvalidOperationException("The saved deck is incomplete.");
+            if (saved == null || !IsDeckComplete(saved.Id))
+                throw new InvalidOperationException(saved == null ? "The saved deck is incomplete." : NotPlayableReason(saved.Id));
         }
         var chosenPet = DeckPet(deck, seed);
         var next = Snapshot();
@@ -1324,6 +1325,18 @@ public sealed partial class LocalProfile : IDisposable
         if (deck == null) return Array.Empty<string>();
         return LocalCardCatalog.NonStandardIds((deck.Cards ?? new LocalDeckCards()).Concat((deck.Sideboards ?? new List<LocalSideboard>())
             .SelectMany(board => (IEnumerable<string>)board?.Cards ?? Array.Empty<string>())));
+    }
+
+    // Why a saved deck cannot be played, for messages: its format, its Wild cards, or missing cards.
+    public string NotPlayableReason(long id)
+    {
+        var deck = GetDraft(id);
+        if (deck == null) return "The saved deck no longer exists.";
+        string format = deck.Format ?? StandardFormat;
+        if (format != StandardFormat) return "The saved deck is a " + format + " deck; only Standard decks can be played.";
+        var wild = WildCards(id);
+        if (wild.Count != 0) return "The saved deck holds Wild cards (" + string.Join(", ", wild) + "); replace them to play Standard.";
+        return "The saved deck is incomplete. Acquire missing cards before playing.";
     }
 
     public bool IsDeckComplete(long id)
@@ -1958,14 +1971,18 @@ public sealed partial class LocalProfile : IDisposable
     private void EnsureBackup(byte[] original, int version)
     {
         string backup = path + ".v" + version + ".bak";
-        if (File.Exists(backup))
+        if (File.Exists(backup) && !SameBytes(backup, original))
         {
-            long backupLength = new FileInfo(backup).Length;
-            if (backupLength > MaximumProfileBytes || backupLength != original.LongLength
-                || !File.ReadAllBytes(backup).SequenceEqual(original))
+            // An older backup of other bytes (the player restored it by hand, played on the old build, then upgraded
+            // again). Never overwrite it: back these bytes up beside it, named by their hash, and go on.
+            string hash;
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+                hash = BitConverter.ToString(sha.ComputeHash(original)).Replace("-", "").Substring(0, 16).ToLowerInvariant();
+            backup = path + ".v" + version + "." + hash + ".bak";
+            if (File.Exists(backup) && !SameBytes(backup, original))
                 throw new InvalidOperationException("Existing V" + version + " backup does not match the profile.");
-            return;
         }
+        if (File.Exists(backup)) return;
         string temporary = backup + ".tmp";
         try
         {
@@ -1977,6 +1994,12 @@ public sealed partial class LocalProfile : IDisposable
             File.Move(temporary, backup);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    private static bool SameBytes(string file, byte[] original)
+    {
+        long length = new FileInfo(file).Length;
+        return length <= MaximumProfileBytes && length == original.LongLength && File.ReadAllBytes(file).SequenceEqual(original);
     }
 
     private static void ValidateV1(LocalProfileData profile)

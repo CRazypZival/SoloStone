@@ -94,7 +94,9 @@ internal static class V16ClassicMigrationTests
         unknown.CustomDecks.Single(deck => deck.Id == Reprinted).Format = "Wild";
         Write(path, unknown);
         using (var reopened = new LocalProfile(path))
-            check(!reopened.IsDeckComplete(Reprinted) && reopened.WildCards(Reprinted).Count == 0, "an unknown deck format loads and is not playable");
+            check(!reopened.IsDeckComplete(Reprinted) && reopened.WildCards(Reprinted).Count == 0
+                && reopened.NotPlayableReason(Reprinted).Contains("Wild deck") && reopened.NotPlayableReason(Mixed).Contains("CS2_182"),
+                "an unknown deck format loads, is not playable and says why; a Wild-card deck names its cards");
         // V14 saves take the same upgrade, with a byte-exact .v14.bak.
         string v14 = V15Fixture(root, "v14-classic", out byte[] v14original, 14);
         using (var profile = new LocalProfile(v14)) check(profile.WildCards(Mixed).SequenceEqual(new[] { "CS2_182" }), "V14 save with Classic decks migrates");
@@ -102,10 +104,16 @@ internal static class V16ClassicMigrationTests
 
         // Failure paths, as for V14: a conflicting backup refuses without touching anything; a failed commit keeps the save
         // and its backup, and the retry with the matching backup finishes the upgrade.
-        path = V15Fixture(root, "v15-bak-collision", out original);
-        File.WriteAllText(path + ".v15.bak", "different");
-        check(Throws(path) && original.SequenceEqual(File.ReadAllBytes(path)) && File.ReadAllText(path + ".v15.bak") == "different",
-            "V16 upgrade refuses a conflicting .v15.bak and changes nothing");
+        // The #87 review case: the player copies .v15.bak back over the save, plays on V15 (other bytes now), and upgrades again.
+        path = V15Fixture(root, "v15-restored-and-played", out original);
+        using (var first = new LocalProfile(path)) { }
+        File.Copy(path + ".v15.bak", path, true);
+        var played = Read(path); played.GoldBalance += 25; Write(path, played);
+        byte[] playedBytes = File.ReadAllBytes(path);
+        using (var again = new LocalProfile(path)) check(again.Gold == played.GoldBalance, "a restored-and-played V15 save upgrades again");
+        check(original.SequenceEqual(File.ReadAllBytes(path + ".v15.bak")) && Read(path).Version == 16
+            && Directory.GetFiles(Path.GetDirectoryName(path)!, "profile.xml.v15.*.bak").Select(File.ReadAllBytes).Any(bytes => bytes.SequenceEqual(playedBytes)),
+            "the first .v15.bak stays and the played V15 bytes get their own backup");
         path = V15Fixture(root, "v15-commit-failure", out original);
         Directory.CreateDirectory(path + ".tmp");
         check(Throws(path) && original.SequenceEqual(File.ReadAllBytes(path)) && original.SequenceEqual(File.ReadAllBytes(path + ".v15.bak")),

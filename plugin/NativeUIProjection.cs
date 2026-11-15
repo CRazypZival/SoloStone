@@ -823,7 +823,7 @@ internal static class NativeUIProjection
             throw new InvalidOperationException("Custom deck identity is invalid.");
         LocalCustomDeck saved = profile.GetDraft(nativeId) ?? throw new InvalidOperationException("Custom deck no longer exists.");
         if (!profile.IsDeckComplete(nativeId))
-            throw new InvalidOperationException("The saved deck is incomplete. Acquire missing cards before playing.");
+            throw new InvalidOperationException(profile.NotPlayableReason(nativeId));
         ValidateCustomStart(profile, nativeId, saved, resolved);
         resolved.WithSideboards(saved.Sideboards, true).Build();
         ValidateMatchDeckBinding(selected, resolved);

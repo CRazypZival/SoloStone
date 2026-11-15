@@ -566,12 +566,14 @@ public sealed class LocalShop
         new HashSet<string>(LocalCardCatalog.ActiveMetaExtraCards, StringComparer.Ordinal));
     internal static bool IsActiveExtraCard(string id) => activeExtraIds.Value.Contains(id);
 #endif
+    // #87: the one Standard rule (active-meta sets, Core 1637, listed extras). A CORE_ prefix alone is not Standard: hidden
+    // Core copies (CORE_HIDDEN, e.g. CORE_CS2_231) and Legacy reprints (CORE_EDR_004) are not in the meta.
     internal static bool IsStandardCard(EngineCard card) => card != null && card.Collectible && card.Implemented
-        && (LocalCardCatalog.IsCore(card.Id) || standardSets.Value.Contains(card.Set)
 #if ENGINE_SOURCE
-            || activeExtraIds.Value.Contains(card.Id)
+        && LocalCardCatalog.IsStandard(card);
+#else
+        && (LocalCardCatalog.IsCore(card.Id) || standardSets.Value.Contains(card.Set));
 #endif
-        );
     internal static IEnumerable<EngineCard> StandardCollectionCards =>
         FairPackRules.Eligible(FairPackRules.Standard, FairPackRules.RuleVersion)
 #if ENGINE_SOURCE
