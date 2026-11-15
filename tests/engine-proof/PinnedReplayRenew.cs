@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HsSim;
@@ -8,8 +9,8 @@ using SabberStoneCore.Enums;
 // It replays the recorded actions on the current engine and reports where the legal-move hash chain and the final state/RNG
 // fingerprint drift. --dump writes each step's canonical state, chosen move and RNG state (run it on the last passing commit);
 // --baseline compares this engine with such a dump and prints what drifted, by label. --write rewrites only `legalShas` and
-// `engineFingerprint`; it needs a baseline and --accept naming exactly the printed labels. It refuses when a recorded action is no
-// longer legal, when the chosen move at a step changed, when any RNG state differs from the baseline, and, without
+// `engineFingerprint`; it needs a baseline and --accept naming exactly the printed labels, including legal moves and unlabelled state.
+// It refuses when a recorded action is no longer legal, when the chosen move at a step changed, when any RNG state differs from the baseline, and, without
 // --accept-behaviour "SHA: reason", when the turn count or the winner changes. Exit 1 reports drift without writing.
 internal static partial class PinnedReplayEngineProof
 {
@@ -70,13 +71,16 @@ internal static partial class PinnedReplayEngineProof
         if (current.Winner != record.Winner) behaviourChanges.Add($"winner {record.Winner} -> {current.Winner}");
         int changedHashes = 0;
         for (int i = 0; i < legalNow.Count; i++) if (i >= record.LegalShas.Count || legalNow[i] != record.LegalShas[i]) changedHashes++;
+        if (fingerprint != replay.EngineFingerprint && drift.Count == 0)
+            drift["unlabelled state"] = new List<string> { "final fingerprint differs without a labelled state change" };
+        if (changedHashes != 0) drift["legal moves"] = new List<string> { changedHashes + " legal-move hashes differ" };
         Console.WriteLine($"{Path.GetFileName(path)}: {changedHashes} of {legalNow.Count} legal-move hashes differ" + (firstDrift < 0 ? "" : $", first at step {firstDrift}")
             + $"; fingerprint {(fingerprint == replay.EngineFingerprint ? "unchanged" : "changed")}");
         foreach (string problem in problems) Console.WriteLine("  PROBLEM " + problem);
         foreach (string change in behaviourChanges) Console.WriteLine("  BEHAVIOUR " + change);
         foreach (var change in drift)
             Console.WriteLine("  " + change.Key + ": " + change.Value.Select(v => v.Split(' ')[0]).Distinct().Count() + " steps, " + change.Value.Count + " changes, first " + change.Value[0]);
-        if (changedHashes == 0 && fingerprint == replay.EngineFingerprint && problems.Count == 0 && behaviourChanges.Count == 0) return 0;
+        if (changedHashes == 0 && fingerprint == replay.EngineFingerprint && problems.Count == 0 && behaviourChanges.Count == 0 && drift.Count == 0) return 0;
         if (problems.Count != 0) { Console.Error.WriteLine("refusing to write: the recording no longer replays as recorded"); return 1; }
         if (baseline == null) Console.WriteLine("  no --baseline: run --dump on the last passing commit to see what drifted");
         if (!write) return 1;
@@ -91,14 +95,14 @@ internal static partial class PinnedReplayEngineProof
         string renewed = legalPattern.Replace(text, "\"legalShas\":[" + string.Join(",", legalNow.Select(h => "\"" + h + "\"")) + "]", 1);
         renewed = renewed.Replace($"\"engineFingerprint\":\"{replay.EngineFingerprint}\"", $"\"engineFingerprint\":\"{fingerprint}\"", StringComparison.Ordinal);
         if (behaviourChanges.Count != 0) // accepted with a reason: the stored outcome follows
-            renewed = Regex.Replace(Regex.Replace(renewed, "\"turns\":\\d+", "\"turns\":" + current.Turns, RegexOptions.None), "\"winner\":\\d+", "\"winner\":" + current.Winner);
+            renewed = RewriteGameOutcome(renewed, current.Turns, current.Winner);
         File.WriteAllText(path, renewed);
         Console.WriteLine($"rewrote {changedHashes} legal-move hashes and the fingerprint ({replay.EngineFingerprint} -> {fingerprint}); actions and decks untouched" + (behaviourChanges.Count != 0 ? "; " + string.Join(", ", behaviourChanges) + " accepted" : "; turns and winner untouched"));
         return 0;
     }
 
     // Proof of the tool itself, on temporary copies of a pinned replay that stores a fingerprint and still matches: an illegal recorded action and a
-    // changed winner are refused with the file left alone; tampered hashes and fingerprint are rewritten back, and nothing else in the file changes.
+    // changed winner, unlabelled state and unaccepted legal hashes are refused without writes; accepted hash/fingerprint renewal preserves every other byte.
     internal static void RenewSelfTest()
     {
         string source = Directory.GetFiles("tests/transport-invariants/replays", "*.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal)
@@ -118,10 +122,44 @@ internal static partial class PinnedReplayEngineProof
             Check(Renew(new[] { "--renew-replay", temp, "--baseline", baseline, "--accept", "", "--write" }) == 1 && File.ReadAllText(temp) == illegal, "renew: an illegal recorded action is refused and nothing is written");
             string fingerprint = new Regex("\"engineFingerprint\":\"([0-9a-f]+)\"").Match(original).Groups[1].Value;
             string firstHash = new Regex("\"legalShas\":\\[\"([0-9a-f]+)\"").Match(original).Groups[1].Value;
+            string hashOnly = original.Replace("\"legalShas\":[\"" + firstHash, "\"legalShas\":[\"" + new string('1', firstHash.Length));
+            File.WriteAllText(temp, hashOnly);
+            Check(Renew(new[] { "--renew-replay", temp, "--baseline", baseline, "--accept", "", "--write" }) == 1
+                && File.ReadAllText(temp) == hashOnly, "renew: unaccepted legal-move-only drift is refused without writing");
+            Check(Renew(new[] { "--renew-replay", temp, "--baseline", baseline, "--accept", "legal moves", "--write" }) == 0
+                && File.ReadAllText(temp) == original, "renew: legal-move-only drift requires its label");
+            string firstStep = Path.Combine(baseline, "000.txt"), snapshot = File.ReadAllText(firstStep);
+            string state = snapshot.Split('\n', 3)[2];
+            string[] unlabelledStates = {
+                state + "|history-facts-v1:unaccepted\n",
+                state.Replace("}\n", "}|location:1:2:0:3\n"),
+                state.Replace("}\n", "}|quest-rewards:[]\n"),
+                state + "{unparsed entity}\n",
+                new Regex("\"Zone\":\\d+").Replace(state, "\"Zone\":999", 1),
+                new Regex("\"Controller\":\\d+").Replace(state, "\"Controller\":999", 1)
+            };
+            File.WriteAllText(temp, original);
+            foreach (string changedState in unlabelledStates)
+            {
+                Check(changedState != state && StateDiff(state, changedState).Any(p => p.Key == "unlabelled state"),
+                    "renew: history/location/quest rewards/unparsed entity/Zone/Controller drift has an acceptance label");
+                File.WriteAllText(firstStep, string.Join("\n", snapshot.Split('\n', 3).Take(2)) + "\n" + changedState);
+                Check(Renew(new[] { "--renew-replay", temp, "--baseline", baseline, "--accept", "", "--write" }) == 1
+                    && File.ReadAllText(temp) == original, "renew: unaccepted state drift is refused and nothing is written");
+            }
+            File.WriteAllText(firstStep, snapshot);
+            Check(StateDiff("{unparsed old}\n", "{unparsed new}\n").Any(p => p.Key == "unlabelled state"),
+                "renew: changes between unparsed entity lines cannot disappear");
+            Check(StateDiff("{\"Id\":1,\"CardId\":\"x\",\"Tags\":{\"1\":1}}\n|history-facts-v1:old",
+                "{\"Id\":1,\"CardId\":\"x\",\"Tags\":{\"1\":2}}\n|history-facts-v1:new").Select(p => p.Key)
+                .ToHashSet().SetEquals(new[] { "x tag 1", "unlabelled state" }), "renew: labelled tags cannot mask unlabelled drift");
+            const string nested = "{\"note\":\"é\",\"turns\":1,\"winner\":2,\"game\":{\"nested\":{\"turns\":3,\"winner\":4},\"turns\":5,\"winner\":6},\"tail\":{\"turns\":7,\"winner\":8}}";
+            Check(RewriteGameOutcome(nested, 50, 60) == nested.Replace("\"turns\":5", "\"turns\":50").Replace("\"winner\":6", "\"winner\":60"),
+                "renew/rerecord: outcome rewrite touches only direct game properties, including with UTF-8 text");
             string tampered = original.Replace(fingerprint, new string('0', fingerprint.Length)).Replace("\"legalShas\":[\"" + firstHash, "\"legalShas\":[\"" + new string('1', firstHash.Length));
             File.WriteAllText(temp, tampered);
             Check(Renew(new[] { "--renew-replay", temp }) == 1, "renew: tampered hashes are reported as drift without --write");
-            Check(Renew(new[] { "--renew-replay", temp, "--baseline", baseline, "--accept", "", "--write" }) == 0, "renew: tampered hashes are rewritten");
+            Check(Renew(new[] { "--renew-replay", temp, "--baseline", baseline, "--accept", "legal moves;unlabelled state", "--write" }) == 0, "renew: tampered hashes are rewritten");
             Check(File.ReadAllText(temp) == original, "renew: only the hashes and the fingerprint were rewritten (the file is byte-identical to the original again)");
             var winner = new Regex("\"winner\":(\\d+)").Match(original);
             Check(winner.Success, "renew: replay stores a winner");
@@ -130,14 +168,15 @@ internal static partial class PinnedReplayEngineProof
             Check(Renew(new[] { "--renew-replay", temp, "--baseline", baseline, "--accept", "", "--write" }) == 1 && File.ReadAllText(temp) == changedWinner, "renew: a changed winner is refused without --accept-behaviour");
         }
         finally { Directory.Delete(dir, true); }
-        Console.WriteLine("PASS pinned replay renewal tool: refuses an illegal action and a changed winner, rewrites only hashes and the fingerprint");
+        Console.WriteLine("PASS pinned replay renewal tool: refuses illegal actions, changed winners and unaccepted state/legal drift; confines outcome rewrites to game");
     }
 
     // `--rerecord-replay PATH --baseline DIR --expect-first-diff STEP [--dump DIR] [--write]`: for a replay whose game really changes after an intended rules change.
     // It regenerates the game from the file's own identity (pinned decks, pool snapshot, seed, random policy; refuses if any cannot be rebuilt)
     // with the same policy stream the recorder uses, and prints the new outcome. Before STEP the baseline dump (from --renew-replay --dump on the
     // last passing commit) must match exactly: chosen move, legal-move hash, RNG state and full state; the first difference must be at STEP.
-    // --write replaces `actions`, `legalShas`, `turns`, `winner` and `engineFingerprint` only.
+    // --write replaces `actions`, `legalShas`, game-record `turns`/`winner` and `engineFingerprint` only.
+    // It leaves `findingsSha` unchanged: validate packet findings with the client-tier replay check afterward.
     internal static int Rerecord(string[] args)
     {
         string path = Path.GetFullPath(args[Array.IndexOf(args, "--rerecord-replay") + 1]);
@@ -190,34 +229,66 @@ internal static partial class PinnedReplayEngineProof
         { Console.Error.WriteLine("refusing: the replay file is not in the expected compact form"); return 1; }
         string renewed = pattern.Replace(text, "\"actions\":[" + string.Join(",", actions) + "]", 1);
         renewed = legalPattern.Replace(renewed, "\"legalShas\":[" + string.Join(",", hashes.Select(h => "\"" + h + "\"")) + "]", 1);
-        renewed = Regex.Replace(renewed, "\"turns\":\\d+", "\"turns\":" + current.Turns, RegexOptions.None);
-        renewed = Regex.Replace(renewed, "\"winner\":\\d+", "\"winner\":" + current.Winner);
+        renewed = RewriteGameOutcome(renewed, current.Turns, current.Winner);
         renewed = renewed.Replace($"\"engineFingerprint\":\"{replay.EngineFingerprint}\"", $"\"engineFingerprint\":\"{fingerprint}\"", StringComparison.Ordinal);
         File.WriteAllText(path, renewed);
         Console.WriteLine($"rewrote actions ({old.Actions.Count} -> {actions.Count}), legal-move hashes, turns, winner and fingerprint; id, decks, pool, seed and policy untouched");
         return 0;
     }
 
-    // Labels: "CARDID tag N" per differing tag, "entity added/removed", "entity card". Example text names the entity id and the values.
+    private static string RewriteGameOutcome(string text, int turns, int winner)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(text);
+        var reader = new Utf8JsonReader(bytes);
+        var edits = new List<(int Start, int Length, string Value)>();
+        bool inGame = false;
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.CurrentDepth == 1 && reader.ValueTextEquals("game"))
+            { reader.Read(); inGame = reader.TokenType == JsonTokenType.StartObject; }
+            else if (inGame && reader.TokenType == JsonTokenType.EndObject && reader.CurrentDepth == 1) break;
+            else if (inGame && reader.TokenType == JsonTokenType.PropertyName && reader.CurrentDepth == 2
+                && (reader.ValueTextEquals("turns") || reader.ValueTextEquals("winner")))
+            {
+                int value = reader.ValueTextEquals("turns") ? turns : winner;
+                reader.Read(); reader.GetInt32();
+                edits.Add((Encoding.UTF8.GetCharCount(bytes.AsSpan(0, (int)reader.TokenStartIndex)),
+                    reader.ValueSpan.Length, value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            }
+        }
+        if (edits.Count != 2) throw new InvalidOperationException("the game record must contain turns and winner");
+        foreach (var edit in edits.OrderByDescending(e => e.Start))
+            text = text.Remove(edit.Start, edit.Length).Insert(edit.Start, edit.Value);
+        return text;
+    }
+
+    // Known entity changes have precise labels; every remaining canonical-state difference requires "unlabelled state".
     internal static IEnumerable<KeyValuePair<string, string>> StateDiff(string before, string after)
     {
-        static Dictionary<int, (string Card, JsonElement Tags)> Entities(string text)
+        static Dictionary<int, (string Card, JsonElement Tags)> Entities(string text, out string unlabelled)
         {
             var map = new Dictionary<int, (string, JsonElement)>();
+            var remaining = new List<string>();
             foreach (string line in text.Split('\n'))
             {
-                if (!line.StartsWith('{')) continue;
+                if (!line.StartsWith('{')) { remaining.Add(line); continue; }
                 string json = line; int bar = json.IndexOf('|'); if (bar > 0) json = json[..bar];
                 try
                 {
-                    var root = JsonDocument.Parse(json).RootElement;
-                    map[root.GetProperty("Id").GetInt32()] = (root.TryGetProperty("CardId", out var card) ? card.GetString() : null, root.GetProperty("Tags"));
+                    using var document = JsonDocument.Parse(json);
+                    var root = document.RootElement;
+                    var tags = root.GetProperty("Tags");
+                    if (tags.ValueKind != JsonValueKind.Object) throw new JsonException("entity tags must be an object");
+                    map.Add(root.GetProperty("Id").GetInt32(), (root.TryGetProperty("CardId", out var card) ? card.GetString() : null, tags.Clone()));
+                    remaining.Add(string.Join(",", root.EnumerateObject().Where(p => p.Name != "CardId" && p.Name != "Tags")) + line[json.Length..]);
                 }
-                catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException) { }
+                catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or OverflowException or ArgumentException)
+                { remaining.Add(line); }
             }
+            unlabelled = string.Join("\n", remaining);
             return map;
         }
-        var a = Entities(before); var b = Entities(after);
+        var a = Entities(before, out string unlabelledBefore); var b = Entities(after, out string unlabelledAfter);
         var result = new List<KeyValuePair<string, string>>();
         foreach (int id in a.Keys.Union(b.Keys).OrderBy(i => i))
         {
@@ -232,6 +303,8 @@ internal static partial class PinnedReplayEngineProof
                 if (va != vb) result.Add(new($"{y.Card} tag {tag}", $"entity {id} {va ?? "absent"} -> {vb ?? "absent"}"));
             }
         }
+        if (unlabelledBefore != unlabelledAfter || before != after && result.Count == 0)
+            result.Add(new("unlabelled state", "canonical state outside parsed entity cards/tags differs"));
         return result;
     }
 }
