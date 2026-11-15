@@ -37,6 +37,10 @@ internal static class WildBatchChecks
         Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var t = \"\"\"\n  CS2_029\n  \"\"\";") }));
         Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var a = '\"'; var t = \"CS2_029\";") }));
         CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var a = '\"'; /* \"CS2_029\" */ var t = \"x\";") });
+        Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var t = $@\"a\n{b} CS2_029\n\";") }));
+        Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var t = @$\"a\n{b} \"\"CS2_029\"\"\n\";") }));
+        Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var a = '\\u0022'; var t = \"CS2_029\";") }));
+        CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/X.cs", "var a = '\\u0022'; var b = '\\x22'; // \"CS2_029\"") });
         CheckStandardLegacyPools(ids);
         Reject(() => ValidateCases(new[] { "CS2_028" }, Array.Empty<string>()));
         Reject(() => ValidateCases(Array.Empty<string>(), new[] { "CS2_028" }));
@@ -77,7 +81,7 @@ internal static class WildBatchChecks
     internal static string StringLiterals(string text)
     {
         var literals = Regex.Matches(text,
-            "//[^\\r\\n]*|/\\*[\\s\\S]*?\\*/|'(?:\\\\.|[^'\\\\])'|\"\"\"[\\s\\S]*?\"\"\"|@\"(?:[^\"]|\"\")*\"|\"(?:\\\\.|[^\"\\\\\r\n])*\"")
+            "//[^\\r\\n]*|/\\*[\\s\\S]*?\\*/|'(?:\\\\(?:u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|x[0-9A-Fa-f]{1,4}|.)|[^'\\\\])'|\\$*\"\"\"[\\s\\S]*?\"\"\"|(?:\\$@|@\\$|@)\"(?:[^\"]|\"\")*\"|\"(?:\\\\.|[^\"\\\\\r\n])*\"")
             .Select(match => match.Value).Where(value => value.Contains('"') && !value.StartsWith("//") && !value.StartsWith("/*") && !value.StartsWith("'"));
         return string.Join("\n", literals);
     }
@@ -94,13 +98,15 @@ internal static class WildBatchChecks
         Check(used.Count == 0, "Wild manifest id used by Standard (held until #87): " + string.Join(", ", used));
     }
 
-    // The legacy generation pools Standard-format random generation draws from still list these Wild ids. Reaching them needs a
-    // Standard-format effect that rolls from AllStandard or Standard/Class/*; the identity rows change the card's text and stats
-    // only for Wild cards, and #141 routes these pools through a format-aware accessor. Pinned: a new listed id in a pool fails.
+    // Membership tripwire, not a guard. The legacy generation pools (LegacyGenerationV1.xml: AllStandard, AllWild, Standard/*,
+    // Wild/*) list every id by name and resolve it to the shared Card object, and an identity row replaces that object, so the
+    // pools return the 37.0 version (Sprint, Cold Blood and the other listed cards) wherever they are read. Live matches run
+    // FT_WILD (plugin/NativeMatch.cs:774), and #141 replaces these pools with a format-aware accessor. Until then this pins the
+    // listed ids that sit in any of them: a new listed id in a pool fails here and needs a look.
     private static readonly string[] StandardPoolIds =
     {
         "CS2_057", "CS2_059", "CS2_061", "CS2_063", "CS2_073", "CS2_075", "CS2_077", "CS2_080", "CS2_233",
-        "EX1_124", "EX1_126", "EX1_133", "EX1_137", "EX1_144", "EX1_181", "EX1_182",
+        "EX1_124", "EX1_126", "EX1_128", "EX1_133", "EX1_137", "EX1_144", "EX1_181", "EX1_182",
     };
 
     internal static void CheckStandardLegacyPools(string[] ids)
@@ -110,13 +116,14 @@ internal static class WildBatchChecks
         foreach (var pool in root.Elements("Pool"))
         {
             string name = (string)pool.Attribute("name");
-            if (name != "AllStandard" && !name.StartsWith("Standard/Class/", StringComparison.Ordinal)) continue;
+            if (name != "AllStandard" && name != "AllWild" && !name.StartsWith("Standard/", StringComparison.Ordinal)
+                && !name.StartsWith("Wild/", StringComparison.Ordinal)) continue;
             foreach (string line in pool.Value.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
                 if (ids.Contains(line.Substring(0, line.LastIndexOf(':')))) inPool.Add(line.Substring(0, line.LastIndexOf(':')));
         }
         Check(inPool.SequenceEqual(StandardPoolIds.OrderBy(id => id, StringComparer.Ordinal)),
-            "Wild ids in the legacy Standard pools changed (pin in WildBatchChecks.StandardPoolIds, see #141): " + string.Join(" ", inPool));
-        Console.WriteLine($"PASS Wild ids in legacy Standard pools: {inPool.Count} pinned (#141)");
+            "Wild ids in the legacy Standard and Wild pools changed (pin in WildBatchChecks.StandardPoolIds, see #141): " + string.Join(" ", inPool));
+        Console.WriteLine($"PASS Wild ids in legacy Standard and Wild pools: {inPool.Count} pinned (#141)");
     }
 
     // LocalCardCatalog's NewBasicIds must stay Set CORE and Rarity FREE: an identity row for one keeps its base CARD_SET
