@@ -10,13 +10,22 @@ using static WildY0aL1BLegacyProof;
 // Wild wave Y0a, lane l1b: Expert1 neutral minions. Run from the group in Sets/LEGACY/WildY0aL1BProof.cs.
 internal static class WildY0aL1BExpertProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case (used by Standard until #87).
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     internal static void Run()
     {
-        WildSetsProof.Case("CS2_181", InjuredBlademaster);
-        WildSetsProof.Case("CS2_227", VentureCoMercenary);
-        WildSetsProof.Case("EX1_004", YoungPriestess);
-        WildSetsProof.Case("EX1_006", AlarmOBot);
-        WildSetsProof.Case("EX1_009", AngryChicken);
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("CS2_181", InjuredBlademaster);
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("CS2_227", VentureCoMercenary);
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_004", YoungPriestess);
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_006", AlarmOBot);
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_009", AngryChicken);
     }
 
     // Proven against their 37.0 identity row (all pass, 2026-11-15) but not registered: see WildY0aL1BLegacyProof.Unregistered.

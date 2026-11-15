@@ -9,6 +9,10 @@ using static Core2026Proof;
 // calls the Legacy half in Sets/LEGACY/WildY0aL3BProof.cs.
 internal static class WildY0aL3BProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case (used by Standard until #87).
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     private const string Yeti = "CS2_182", Squire = "EX1_008", Thalnos = "EX1_012", Shieldmasta = "CS2_179", Fireball = "CS2_029",
         Coin = "GAME_005", Counterspell = "EX1_287";
 
@@ -233,7 +237,8 @@ internal static class WildY0aL3BProof
             Play(g, p.Opponent, id, theirs);
             Core2026Proof.Check(p.Opponent.HandZone.Any(c => c.Card.Id == Yeti && c.Cost == 2) && enemy.Zone.Type == Zone.PLAY, "Opponent's Shadowstep bounces their own minion");
         });
-        WildSetsProof.Case("EX1_145", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_145", (g, p, id) => {
             var spell = Add(p, Fireball); var minionCard = Add(p, Yeti); var oppSpell = Add(p.Opponent, Fireball);
             Core2026Proof.Check(spell.Cost == 4, "Fireball costs 4");
             Play(g, p, id);
@@ -265,7 +270,8 @@ internal static class WildY0aL3BProof
             Play(g, p.Opponent, id);
             Core2026Proof.Check(theirs.Cost == 2 && held.Cost == 4, "Opponent's Preparation discounts only their own spells");
         });
-        WildSetsProof.Case("EX1_274", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_274", (g, p, id) => {
             var arc = (Minion)Play(g, p, id);
             Core2026Proof.Check(arc.AttackDamage == 3 && arc.Health == 3, "Ethereal Arcanist is a 3/3");
             End(g); End(g);
@@ -305,7 +311,8 @@ internal static class WildY0aL3BProof
             End(g);
             Core2026Proof.Check(theirs.AttackDamage == 5 && second.AttackDamage == 7 && third.AttackDamage == 7, "The opponent's Secret grows only their Arcanist, at their turn end");
         });
-        WildSetsProof.Case("EX1_275", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_275", (g, p, id) => {
             var a = Summon(p.Opponent, Yeti); var b = Summon(p.Opponent, Squire); var c = Summon(p.Opponent, Yeti); var d = Summon(p.Opponent, Yeti);
             var mine = Summon(p, Yeti);
             var held = Add(p, id);

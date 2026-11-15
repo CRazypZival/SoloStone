@@ -9,9 +9,14 @@ using static WildY0aL2BProof;
 // Wave Y0a, lane l2b: the Legacy-set cards. The group proof lives in EXPERT1/WildY0aL2BProof.cs and calls Run() below.
 internal static class WildY0aL2BLegacyProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case (used by Standard until #87).
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     internal static void Run()
     {
-        WildSetsProof.Case("EX1_186", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_186", (g, p, id) => {
             var o = p.Opponent;
             Play(g, p, IceBlock);
             var empty = (Minion)Play(g, p, id);
@@ -48,7 +53,8 @@ internal static class WildY0aL2BLegacyProof
             Check(p.SecretZone.Count == 0, "the opponent's Infiltrator destroys my Secret");
         });
 
-        WildSetsProof.Case("EX1_187", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_187", (g, p, id) => {
             var devourer = (Minion)Play(g, p, id);
             Check(devourer.AttackDamage == 4 && devourer.Health == 8 && devourer.Card.IsRace(Race.ELEMENTAL), "Arcane Devourer is a 4/8 Elemental");
             Play(g, p, Moonfire, p.Opponent.Hero);
@@ -84,7 +90,8 @@ internal static class WildY0aL2BLegacyProof
             Check(second.AttackDamage == 8, "a dead Devourer does not matter");
         });
 
-        WildSetsProof.Case("EX1_188", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_188", (g, p, id) => {
             var pool = new HashSet<string>();
             for (int i = 0; i < 8; i++)
             {
@@ -125,7 +132,8 @@ internal static class WildY0aL2BLegacyProof
             });
         });
 
-        WildSetsProof.Case("EX1_189", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_189", (g, p, id) => {
             Trim(p, 0);
             var ids = new HashSet<string>();
             for (int i = 0; i < 6; i++)
@@ -170,7 +178,8 @@ internal static class WildY0aL2BLegacyProof
                 "with Brann the second Legendary burns on a full hand");
         });
 
-        WildSetsProof.Case("EX1_190", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_190", (g, p, id) => {
             var buffed = Summon(p, Yeti); var second = Summon(p, "CS2_179"); var third = Summon(p, "CS2_200");
             var enemy = Summon(p.Opponent, Yeti);
             Play(g, p, "CS2_004", buffed);

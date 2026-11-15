@@ -9,6 +9,10 @@ using static Core2026Proof;
 // Sets/EXPERT1/WildY0aL3BProof.cs (group names are unique) and calls Run here.
 internal static class WildY0aL3BLegacyProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case (used by Standard until #87).
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     private const string Yeti = "CS2_182", Squire = "EX1_008", Thalnos = "EX1_012", Voidwalker = "CS2_065", Coin = "GAME_005";
 
     internal static void Run()
@@ -33,7 +37,8 @@ internal static class WildY0aL3BLegacyProof
             p.Hero.Weapon.Durability = 1; HeroAttack(g, p, p.Opponent.Hero);
             Core2026Proof.Check(p.Hero.Weapon == null, "the blade breaks at 0 Durability");
         });
-        WildSetsProof.Case("EX1_129", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_129", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var shield = Summon(p.Opponent, Squire); var mine = Summon(p, Yeti);
             int hand = p.HandZone.Count, deck = p.DeckZone.Count, oHand = p.Opponent.HandZone.Count, oDeck = p.Opponent.DeckZone.Count;
             Play(g, p, id);
@@ -57,7 +62,8 @@ internal static class WildY0aL3BLegacyProof
             Play(g, p.Opponent, id);
             Core2026Proof.Check(theirs.Zone.Type == Zone.PLAY && !theirs.HasDivineShield && p.Opponent.DeckZone.Count == oDeck - 2, "Opponent's Fan of Knives hits my minions and draws from their deck");
         });
-        WildSetsProof.Case("EX1_179", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_179", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var mine = Summon(p, Yeti); var shield = Summon(p.Opponent, Squire);
             var held = Add(p, id);
             var targets = WildY0aL3ALegacyProof.Targets(p, held);
@@ -96,7 +102,8 @@ internal static class WildY0aL3BLegacyProof
             Play(g, p.Opponent, id, theirs);
             Core2026Proof.Check(p.Opponent.DeckZone.Count == oDeck - 1, "Opponent's Icicle draws from their own deck");
         });
-        WildSetsProof.Case("EX1_180", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_180", (g, p, id) => {
             int oHand = p.Opponent.HandZone.Count, ownDeck = p.DeckZone.Count;
             var twin = g.CloneExact(history: true);
             var cards = Casts(g, p, id, 8);
@@ -140,7 +147,8 @@ internal static class WildY0aL3BLegacyProof
             Core2026Proof.Check(theirs.Select(c => c.Class).Distinct().Count() >= 3 && theirs.Any(c => c.Class == CardClass.ROGUE || c.Class != CardClass.ROGUE),
                 "Opponent's Pilfer also spans several other classes");
         });
-        WildSetsProof.Case("EX1_185", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_185", (g, p, id) => {
             var voidwalker = Summon(p, Voidwalker); var yeti = Summon(p, Yeti); var enemyDemon = Summon(p.Opponent, Voidwalker);
             var heldDemon = Add(p, Voidwalker);
             var source = (Minion)Play(g, p, id);

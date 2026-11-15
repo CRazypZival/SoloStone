@@ -10,6 +10,10 @@ using static Core2026Proof;
 // EX1_399, EX1_506 and EX1_508 are BLOCKED-STANDARD (LocalCardCatalog.NewBasicIds): see WildY0aL2BLegacyProof.Blocked_*.
 internal static class WildY0aL2BProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case (used by Standard until #87).
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     internal const string Yeti = "CS2_182", Moonfire = "CS2_008", Murloc = "CS2_168", Heal = "CS2_007", Mark = "CS2_009",
         IceBarrier = "EX1_289", Counterspell = "EX1_287", MirrorEntity = "EX1_294", IceBlock = "EX1_295", Boar = "CS2_171";
 
@@ -18,7 +22,8 @@ internal static class WildY0aL2BProof
     {
         WildY0aL2BLegacyProof.Run();
 
-        WildSetsProof.Case("EX1_249", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_249", (g, p, id) => {
             var baron = (Minion)Play(g, p, id);
             Check(baron.AttackDamage == 7 && baron.Health == 7, "Baron Geddon is a 7/7");
             var friend = Summon(p, Yeti); var enemy = Summon(p.Opponent, Yeti);
@@ -54,7 +59,8 @@ internal static class WildY0aL2BProof
             Check(p.Opponent.Hero.Damage == hero, "a dead Baron deals nothing");
         });
 
-        WildSetsProof.Case("EX1_283", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_283", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var hiding = Summon(p.Opponent, "CS2_059");
             var friend = Summon(p, Yeti); var ownHiding = Summon(p, "CS2_059");
             var held = Add(p, id);
@@ -85,7 +91,8 @@ internal static class WildY0aL2BProof
             Check(ownHiding.IsFrozen && !second.IsFrozen, "a friendly Stealth minion is a legal target");
         });
 
-        WildSetsProof.Case("EX1_284", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_284", (g, p, id) => {
             Trim(p, 0);
             int deck = p.DeckZone.Count;
             var drake = (Minion)Add(p, id); int hand = p.HandZone.Count;
@@ -116,7 +123,8 @@ internal static class WildY0aL2BProof
             Check(p.HandZone.Count == cards && p.Hero.Damage > life, "with an empty deck the Battlecry costs fatigue damage");
         });
 
-        WildSetsProof.Case("EX1_298", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_298", (g, p, id) => {
             var rag = (Minion)Play(g, p, id);
             Check(rag.AttackDamage == 8 && rag.Health == 8 && rag.CantAttack, "Ragnaros is an 8/8 that can't attack");
             var friend = Summon(p, Yeti);
@@ -157,9 +165,12 @@ internal static class WildY0aL2BProof
             Check(p.Opponent.Hero.Armor == 200, "Silence removes the end-of-turn damage");
         });
 
-        WildSetsProof.Case("EX1_390", (g, p, id) => Enrage(g, p, id, 2, 3, taunt: true, windfury: false));
-        WildSetsProof.Case("EX1_393", (g, p, id) => Enrage(g, p, id, 2, 3, taunt: false, windfury: false));
-        WildSetsProof.Case("EX1_412", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_390", (g, p, id) => Enrage(g, p, id, 2, 3, taunt: true, windfury: false));
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_393", (g, p, id) => Enrage(g, p, id, 2, 3, taunt: false, windfury: false));
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_412", (g, p, id) => {
             Enrage(g, p, id, 3, 1, taunt: false, windfury: true);
             StandardSetsProof.ParkBoard(p); StandardSetsProof.ParkBoard(p.Opponent);
             var worgen = Summon(p, id);
@@ -177,8 +188,10 @@ internal static class WildY0aL2BProof
             Check(!worgen.HasWindfury && worgen.AttackDamage == 3, "healed Worgen loses Windfury and the bonus");
         });
 
-        WildSetsProof.Case("EX1_396", (g, p, id) => Taunt(g, p, id, 1, 7));
-        WildSetsProof.Case("EX1_405", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_396", (g, p, id) => Taunt(g, p, id, 1, 7));
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_405", (g, p, id) => {
             var card = Cards.FromId(id);
             Check(card.IsRace(Race.DRAENEI) && card.ATK == 0 && card.Health == 4 && card.Cost == 1, "Shieldbearer is a 0/4 Draenei for 1");
             Taunt(g, p, id, 0, 4);
@@ -187,7 +200,8 @@ internal static class WildY0aL2BProof
                 "a 0 Attack minion has no attack option");
         });
 
-        WildSetsProof.Case("EX1_507", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_507", (g, p, id) => {
             var raider = Summon(p, Murloc); var yeti = Summon(p, Yeti); var foe = Summon(p.Opponent, Murloc);
             var held = Add(p, Murloc);
             var warleader = (Minion)Play(g, p, id);
@@ -212,7 +226,8 @@ internal static class WildY0aL2BProof
             Check(raider.AttackDamage == 3, "death of the last Warleader removes the bonus");
         });
 
-        WildSetsProof.Case("EX1_509", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs, LocalDecks.cs or data/) until #87
+        HeldForStandard("EX1_509", (g, p, id) => {
             var caller = (Minion)Play(g, p, id);
             Check(caller.AttackDamage == 1 && caller.Health == 2, "Murloc Tidecaller is a 1/2 that ignores its own arrival");
             Play(g, p, Murloc);
