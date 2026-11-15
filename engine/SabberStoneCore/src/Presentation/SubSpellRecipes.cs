@@ -38,6 +38,17 @@ namespace SabberStoneCore.Presentation
             // FIR_909 repeated-cast live cleanup accepted 2026-11-02; same per-hit missile, including spell fan-out.
             // Grouped full-board waves keep their existing pulses; the remaining quarantined routes are listed in docs/design/damage-fx-coverage-20261027.md.
             Add("FIR_909 DINO_406 END_025 EDR_255 JAIL_801 CATA_585 CATA_582 CATA_303 ONY_018t2 BE_554 BE_153 BE_153t CAP_101 FIR_916 FIR_939 JAIL_307 TLC_227", VisualPhase.Damage, "ReuseFX_Fire_Missile_Fireball_Medium_Super_Simultaneous:161d5760bd9de1e41baf4c5611e61eed");
+            // Delayed damage, one missile per hit. Neither CardDef authors a play or trigger spell (census: empty, no trigger
+            // paths), so the substitute follows the spell school: Sigil of Cinder is Fel (Demon Hunter), so Demonic Assault's
+            // authored fel fire missile; Flames of Infinity is Fire, so the admitted medium Fireball. Sigil of Cinder fires in its
+            // SIGIL-keyed TRIGGER block at its owner's next turn start, Flames of Infinity in its Secret TRIGGER block. Shot
+            // from the public hero: the waiting actor leaves SECRET inside the block, and an opponent's Secret is no public
+            // origin. PowerHistory.Visual marks both RequirePublicOrigin, so the plugin shows the missile only once the
+            // block's source is public or was named-revealed before its trigger.
+            Add("FIR_902", VisualPhase.Damage, "ReuseFX_Fel_Fire_Missile_Small_Super_Quick:c09acf66646f50c4f9396a863c1e8b90",
+                block: BlockType.TRIGGER, keyword: (int)Actions.SigilRules.Sigil);
+            Add("END_024", VisualPhase.Damage, "ReuseFX_Fire_Missile_Fireball_Medium_Super_Simultaneous:161d5760bd9de1e41baf4c5611e61eed",
+                block: BlockType.TRIGGER);
             // Erupting Volcano: native CardDef has no authored play spell (empty census), so the activation's resolved hits
             // had splats but no missile. Board location is the visual origin, as for Past Silvermoon; same missile as the spell routes.
             Add("CATA_584", VisualPhase.Damage, "ReuseFX_Fire_Missile_Fireball_Medium_Super_Simultaneous:161d5760bd9de1e41baf4c5611e61eed", source: VisualSource.Effect);
