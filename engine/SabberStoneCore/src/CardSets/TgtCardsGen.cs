@@ -565,10 +565,10 @@ namespace SabberStoneCore.CardSets
 			}));
 
 			// ---------------------------------------- MINION - HUNTER
-			// [AT_063] Acidmaw - COST:7 [ATK:4/HP:2]
+			// [AT_063] Acidmaw - COST:3 [ATK:4/HP:2]
 			// - Race: beast, Set: tgt, Rarity: legendary
 			// --------------------------------------------------------
-			// Text: Whenever another minion takes damage, destroy it.
+			// Text: Whenever an enemy minion takes damage, destroy it.
 			// --------------------------------------------------------
 			// GameTag:
 			// - ELITE = 1
@@ -578,7 +578,7 @@ namespace SabberStoneCore.CardSets
 				Trigger = TriggerBuilder
 					.Type(TriggerType.TAKE_DAMAGE)
 					.SetTask(new DestroyTask(EntityType.TARGET))
-					.SetSource(TriggerSource.ALL_MINIONS_EXCEPT_SELF)
+					.SetSource(TriggerSource.OP_MINIONS)
 					.GetTrigger()
 			}));
 
@@ -586,7 +586,7 @@ namespace SabberStoneCore.CardSets
 			// [AT_063t] Dreadscale - COST:3 [ATK:4/HP:2]
 			// - Race: beast, Set: tgt, Rarity: legendary
 			// --------------------------------------------------------
-			// Text: At the end of your turn, deal 1 damage to all other minions.
+			// Text: At the end of your turn, deal 1 damage to all enemies.
 			// --------------------------------------------------------
 			// GameTag:
 			// - ELITE = 1
@@ -595,7 +595,7 @@ namespace SabberStoneCore.CardSets
 			{
 				Trigger = TriggerBuilder
 					.Type(TriggerType.TURN_END)
-					.SetTask(new DamageTask(1, EntityType.ALLMINIONS_NOSOURCE))
+					.SetTask(new DamageTask(1, EntityType.ENEMIES))
 					.GetTrigger()
 			}));
 
@@ -638,10 +638,10 @@ namespace SabberStoneCore.CardSets
 			}));
 
 			// ----------------------------------------- SPELL - HUNTER
-			// [AT_061] Lock and Load - COST:2
+			// [AT_061] Lock and Load - COST:0
 			// - Set: tgt, Rarity: epic
 			// --------------------------------------------------------
-			// Text: Each time you cast a spell this turn, add a random Hunter card to your hand.
+			// Text: Each time you cast a spell this turn, get a random Hunter card.
 			// --------------------------------------------------------
 			cards.Add("AT_061", new CardDef(new Power
 			{
@@ -1503,7 +1503,7 @@ namespace SabberStoneCore.CardSets
 		private static void Shaman(IDictionary<string, CardDef> cards)
 		{
 			// ---------------------------------------- MINION - SHAMAN
-			// [AT_046] Tuskarr Totemic - COST:3 [ATK:3/HP:2]
+			// [AT_046] Tuskarr Totemic - COST:2 [ATK:3/HP:2]
 			// - Set: tgt, Rarity: common
 			// --------------------------------------------------------
 			// Text: <b>Battlecry:</b> Summon a random basic Totem.
@@ -1513,11 +1513,22 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_046", new CardDef(new Power
 			{
-				PowerTask = ComplexTask.SummonRandomBasicTotem
+				// The Totem appears to the right of Tuskarr, like every Battlecry summon.
+				PowerTask = ComplexTask.Create(
+					new IncludeTask(EntityType.SOURCE),
+					new FuncPlayablesTask(list =>
+					{
+						list[0].Game.OnRandomHappened(true);
+						return new[]
+						{
+							Entity.FromCard(list[0].Controller, Cards.BasicTotems[list[0].Game.Random.Next(4)])
+						};
+					}),
+					new SummonTask(SummonSide.RIGHT))
 			}));
 
 			// ---------------------------------------- MINION - SHAMAN
-			// [AT_047] Draenei Totemcarver - COST:4 [ATK:4/HP:4]
+			// [AT_047] Draenei Totemcarver - COST:4 [ATK:4/HP:5]
 			// - Set: tgt, Rarity: rare
 			// --------------------------------------------------------
 			// Text: <b>Battlecry:</b> Gain +1/+1 for each friendly Totem.
@@ -1540,13 +1551,18 @@ namespace SabberStoneCore.CardSets
 			// [AT_049] Thunder Bluff Valiant - COST:5 [ATK:3/HP:6]
 			// - Set: tgt, Rarity: rare
 			// --------------------------------------------------------
-			// Text: <b>Inspire:</b> Give your Totems +2 Attack.
+			// Text: <b>Battlecry and Inspire:</b> Give your Totems +2 Attack.
 			// --------------------------------------------------------
 			// GameTag:
+			// - BATTLECRY = 1
 			// - INSPIRE = 1
 			// --------------------------------------------------------
 			cards.Add("AT_049", new CardDef(new Power
 			{
+				PowerTask = ComplexTask.Create(
+					new IncludeTask(EntityType.MINIONS),
+					new FilterStackTask(SelfCondition.IsRace(Race.TOTEM)),
+					new AddEnchantmentTask("AT_049e", EntityType.STACK)),
 				Trigger = TriggerBuilder
 					.Type(TriggerType.INSPIRE)
 					.SetTask(ComplexTask.Create(
@@ -1591,7 +1607,7 @@ namespace SabberStoneCore.CardSets
 			// [AT_048] Healing Wave - COST:3
 			// - Set: tgt, Rarity: rare
 			// --------------------------------------------------------
-			// Text: Restore #7 Health. Reveal a minion in each deck. If yours costs more, Restore #14 instead.
+			// Text: Restore #8 Health. Reveal a minion in each deck. If yours costs more, restore #16 instead.
 			// --------------------------------------------------------
 			// PlayReq:
 			// - REQ_TARGET_TO_PLAY = 0
@@ -1599,8 +1615,8 @@ namespace SabberStoneCore.CardSets
 			cards.Add("AT_048", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_TARGET_TO_PLAY,0}}, new Power
 			{
 				PowerTask = new RevealTask(
-						new HealTask(14, EntityType.TARGET),
-						new HealTask(7, EntityType.TARGET))
+						new HealTask(16, EntityType.TARGET),
+						new HealTask(8, EntityType.TARGET))
 			}));
 
 			// ----------------------------------------- SPELL - SHAMAN
@@ -1627,7 +1643,7 @@ namespace SabberStoneCore.CardSets
 			// [AT_053] Ancestral Knowledge - COST:2
 			// - Set: tgt, Rarity: common
 			// --------------------------------------------------------
-			// Text: Draw 2 cards. <b>Overload:</b> (2)
+			// Text: Draw 2 cards. <b>Overload:</b> (1)
 			// --------------------------------------------------------
 			// GameTag:
 			// - OVERLOAD = 2
@@ -1639,13 +1655,13 @@ namespace SabberStoneCore.CardSets
 			}));
 
 			// ---------------------------------------- WEAPON - SHAMAN
-			// [AT_050] Charged Hammer - COST:4 [ATK:2/HP:0]
+			// [AT_050] Charged Hammer - COST:3 [ATK:2/HP:0]
 			// - Set: tgt, Rarity: epic
 			// --------------------------------------------------------
 			// Text: <b>Deathrattle:</b> Your Hero Power becomes 'Deal 2 damage.'
 			// --------------------------------------------------------
 			// GameTag:
-			// - DURABILITY = 4
+			// - DURABILITY = 3
 			// - DEATHRATTLE = 1
 			// --------------------------------------------------------
 			cards.Add("AT_050", new CardDef(new Power
