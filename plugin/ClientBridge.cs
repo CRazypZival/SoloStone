@@ -481,10 +481,11 @@ internal static class ClientBridge
             // Opponents' Pets off starts the match without it (NativeOpponentPetsOption.Gate).
             try
             {
-                string ownedPet = NpcPetSeats.For(record, LocalShop.Default, LocalLadder.Profile?.Ladder.StarIndex ?? 0)?.CardId;
+                string ownedPet = null;
 #if ENGINE_SOURCE
-                if (scenario?.NpcPet != null) ownedPet = scenario.NpcPet; // debug scenario npcPet: the NPC owns this pet this match
+                ownedPet = scenario?.NpcPet; // debug scenario npcPet: the NPC owns this pet this match
 #endif
+                if (ownedPet == null) ownedPet = NpcPetSeats.For(record, LocalShop.Default, LocalLadder.Profile?.Ladder.StarIndex ?? 0)?.CardId;
                 match.OpponentPetCard = NativeOpponentPetsOption.Gate(ownedPet);
             }
             catch (Exception error) { match.OpponentPetCard = NativeOpponentPetsOption.Gate(null); log.LogWarning("NPC pet unavailable: " + error.Message); }
