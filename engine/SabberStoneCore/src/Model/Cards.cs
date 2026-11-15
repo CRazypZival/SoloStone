@@ -236,9 +236,18 @@ namespace SabberStoneCore.Model
 
 		// The legacy StandardSets test (2021 sets) reads a Wild identity row's card by its base row's set, so a 37.0 set change
 		// (Hall of Fame cards back in EXPERT1) neither joins the legacy Standard pools nor changes legacy Standard legality.
-		private static readonly Dictionary<string, CardSet> LegacySets = CardFacts.Embedded.Identity.ToDictionary(e => e.Id,
-			e => (CardSet)(int)CardFacts.Embedded.Cards.First(b => b.Id == e.Id).Tags.First(t => t.GameTag == GameTag.CARD_SET).TagValue,
-			StringComparer.Ordinal);
+		private static readonly Dictionary<string, CardSet> LegacySets = BaseSets(CardFacts.Embedded);
+
+		// One pass over the base rows: the first base row per identity id (as the loader places it), its CARD_SET.
+		private static Dictionary<string, CardSet> BaseSets(CardFacts.Document facts)
+		{
+			var wanted = new HashSet<string>(facts.Identity.Select(e => e.Id), StringComparer.Ordinal);
+			var firstBase = new Dictionary<string, CardFacts.Entity>(wanted.Count, StringComparer.Ordinal);
+			foreach (CardFacts.Entity entity in facts.Cards)
+				if (wanted.Contains(entity.Id) && !firstBase.ContainsKey(entity.Id)) firstBase.Add(entity.Id, entity);
+			return facts.Identity.ToDictionary(e => e.Id,
+				e => (CardSet)(int)firstBase[e.Id].Tags.First(t => t.GameTag == GameTag.CARD_SET).TagValue, StringComparer.Ordinal);
+		}
 
 		internal static CardSet LegacySet(Card card) => LegacySets.TryGetValue(card.Id, out CardSet set) ? set : card.Set;
 

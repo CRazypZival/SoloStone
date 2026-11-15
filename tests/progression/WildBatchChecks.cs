@@ -16,6 +16,14 @@ internal static class WildBatchChecks
         // The card file carries the 37.0 identity of exactly the listed cards (private tools/gen_card_facts.py writes it).
         Check(IdentityIds().OrderBy(id => id, StringComparer.Ordinal).SequenceEqual(ids.OrderBy(id => id, StringComparer.Ordinal)),
             "Wild manifests and the card file's identity rows differ; regenerate the card file");
+        int kept = CatalogSets("facts/violet-hold-2026-09.json");
+        var identityIds = new HashSet<string>(IdentityIds(), StringComparer.Ordinal);
+        foreach (string id in LocalCardCatalog.NewBasicIds.Where(identityIds.Contains))
+            Check(Cards.FromId(id).Set == CardSet.CORE && Cards.FromId(id).Rarity == Rarity.FREE, "engine Basic catalog identity: " + id);
+        Reject(() => CheckCatalogRows(new[] { ("CS2_025", new Dictionary<int, int> { [183] = 1635, [203] = (int)Rarity.FREE }) }));
+        Reject(() => CheckCatalogRows(new[] { ("CS2_025", new Dictionary<int, int> { [183] = (int)CardSet.CORE, [203] = (int)Rarity.COMMON }) }));
+        CheckCatalogRows(new[] { ("CS2_025", new Dictionary<int, int> { [183] = (int)CardSet.CORE, [203] = (int)Rarity.FREE }) });
+        Console.WriteLine($"PASS Wild identity catalog sets: {kept} NewBasicIds identity rows keep CORE/FREE");
         Reject(() => ValidateCard("CORE_CS2_188"));
         // The shared Standard loader is deliberately nonrecursive: Wild manifests cannot affect its frozen registry.
         Check(StandardBatchData.Load("tests/progression/batches").Values.SelectMany(batch => batch).All(id => !ids.Contains(id)),
@@ -32,6 +40,31 @@ internal static class WildBatchChecks
         Check(ReadCases(new[] { "// WildSetsProof.Case(\"COMMENT\", Scenario);\nWildSetsProof.Case(\"CS2_028\", Scenario);" })
             .SequenceEqual(new[] { "CS2_028" }), "commented cases do not count");
         Console.WriteLine($"PASS Wild batches: groups={files.Length}; cards={ids.Length}; exactly one case per manifest identity; no Standard overlap");
+    }
+
+    // LocalCardCatalog's NewBasicIds must stay Set CORE and Rarity FREE: an identity row for one keeps its base CARD_SET
+    // (private tools/gen_card_facts.py, SET_KEPT_MANIFESTS). Returns how many identity rows of the file it checked.
+    internal static int CatalogSets(string factsPath)
+    {
+        using var facts = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(factsPath));
+        var rows = new List<(string, Dictionary<int, int>)>();
+        if (facts.RootElement.TryGetProperty("identity", out var identity))
+            foreach (var row in identity.EnumerateArray())
+                rows.Add((row.GetProperty("id").GetString(), row.GetProperty("tags").EnumerateArray()
+                    .ToDictionary(pair => pair[0].GetInt32(), pair => pair[1].GetInt32())));
+        return CheckCatalogRows(rows);
+    }
+
+    private static int CheckCatalogRows(IEnumerable<(string Id, Dictionary<int, int> Tags)> rows)
+    {
+        int count = 0;
+        foreach (var (id, tags) in rows.Where(row => LocalCardCatalog.NewBasicIds.Contains(row.Id)))
+        {
+            Check(tags.GetValueOrDefault(183) == (int)CardSet.CORE && tags.GetValueOrDefault(203) == (int)Rarity.FREE,
+                "identity row of a NewBasicIds card must keep Set CORE and Rarity FREE: " + id);
+            count++;
+        }
+        return count;
     }
 
     private static string[] IdentityIds()
