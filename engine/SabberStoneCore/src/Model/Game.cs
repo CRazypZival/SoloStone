@@ -821,7 +821,8 @@ namespace SabberStoneCore.Model
 
 			HistoryFacts.FreezeInitial(this);
             Actions.PayloadRules.CaptureTracking(this);
-            int preparedFull = PowerHistory.Full.Count, preparedLast = PowerHistory.Last.Count;
+            // PowerHistory is null when History is off; opening is set only when it is on.
+            int preparedFull = opening != null ? PowerHistory.Full.Count : 0, preparedLast = opening != null ? PowerHistory.Last.Count : 0;
             CardSets.Client.Sets.AzalinaSoulsever.PrepareDecks(this);
             DeckbuildingRules.Prepare(this);
             // Deckbuilding cards (Azalina's copies, Beatrix's sideboard copies) are starting deck cards: the client must create
