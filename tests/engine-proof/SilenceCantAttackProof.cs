@@ -7,8 +7,10 @@ using SabberStoneCore.Model.Entities;
 using static Core2026Proof;
 
 // Minion.Silence clears a card's own printed "Can't attack" (tag 227 on the base row: Ragnaros the Firelord EX1_298, Ancient
-// Watcher EX1_045), and nothing else: a ban another effect set stays, as SilenceValueProof pins for the Cursed Chains lease
-// (CATA_496 text: "It can't attack this turn", a turn-scoped enchantment: Silence returns the minion and the lease ban ends with it), a Sleep attachment keeps its own rule.
+// Watcher EX1_045), and nothing else. The positive cases are retail behaviour (Silence removes card text). The effect-ban, Sleep
+// and Cursed Chains cases are ENGINE REGRESSION GUARDS, not retail pins: they record what the engine did before and after the
+// Silence line, and the source for "a ban another effect set stays" is B16TimersBoundaryProof.Unpinned_Control, an unpinned
+// assumption. Where retail differs, change the engine and these expectations together.
 internal static class SilenceCantAttackProof
 {
     private const string Silence = "BE_228", Yeti = "CS2_182";
@@ -60,7 +62,7 @@ internal static class SilenceCantAttackProof
             yeti.Silence();
             Core2026Proof.Check(yeti.CantAttack, "Silence does not clear a ban another effect set");
 
-            // Sleep (Tranquil Clearing) is an enchantment: its own rule decides, not the printed-ban line.
+            // ENGINE REGRESSION GUARD, not a retail pin: Sleep (Tranquil Clearing) is an enchantment; Silence removes it as any enchantment.
             var sleeper = Summon(game.Player1, Yeti);
             var source = Summon(game.Player1, Yeti);
             PlayLockRules.Sleep(sleeper, source, "MEND_044e3");
@@ -70,7 +72,8 @@ internal static class SilenceCantAttackProof
             Core2026Proof.Check(sleeper.CantAttack == PlayLockRules.IsSleeping(sleeper) && PlayLockRules.IsSleeping(sleeper) == SLEEP_AFTER_SILENCE,
                 "Sleep after Silence follows the enchantment rule only (was " + before + ")");
 
-            // Cursed Chains: the lease ban is a turn-scoped enchantment; Silence returns the minion and removes it (the printed-ban line is not involved: Yeti has none).
+            // ENGINE REGRESSION GUARD, not a retail pin: the Cursed Chains lease ban is a turn-scoped enchantment; Silence returns the minion and
+            // removes it (the printed-ban line is not involved: Yeti has none).
             var g = HeraldProof.New(CardClass.WARLOCK); var p = g.CurrentPlayer;
             var victim = Summon(p.Opponent, Yeti);
             Play(g, p, "CATA_496", victim);
@@ -81,6 +84,29 @@ internal static class SilenceCantAttackProof
                 v.Silence();
                 Core2026Proof.Check(v.Controller == branch.ControllerById(p.Opponent.Id) && v.CantAttack == CHAINS_AFTER_SILENCE,
                     "Cursed Chains after Silence: control returns, the turn ban " + (CHAINS_AFTER_SILENCE ? "stays" : "ends"));
+            }
+        }
+        // ENGINE REGRESSION GUARD, not a retail pin: a card with its own 227 AND a ban from another effect (Ragnaros under Sleep, and
+        // under Cursed Chains). Silence removes the enchantment and the printed ban, so he can attack afterwards.
+        foreach (bool history in new[] { true, false })
+        {
+            var game = New(history);
+            var rag = Summon(game.Player1, "EX1_298"); var anchor = Summon(game.Player1, Yeti);
+            PlayLockRules.Sleep(rag, anchor, "MEND_044e3");
+            Core2026Proof.Check(rag.CantAttack && PlayLockRules.IsSleeping(rag) && rag.Card.CantAttack, "fixture: Ragnaros asleep with his own ban");
+            rag.Silence();
+            Core2026Proof.Check(!PlayLockRules.IsSleeping(rag) && !rag.CantAttack, "Ragnaros under Sleep, after Silence: both bans gone");
+
+            var g = HeraldProof.New(CardClass.WARLOCK); var p = g.CurrentPlayer;
+            var enemyRag = Summon(p.Opponent, "EX1_298");
+            Play(g, p, "CATA_496", enemyRag);
+            foreach (var branch in Branches(g, true))
+            {
+                var r = (Minion)branch.IdEntityDic[enemyRag.Id];
+                Core2026Proof.Check(r.CantAttack && r.Card.CantAttack, "fixture: leased Ragnaros has both bans");
+                r.Silence();
+                Core2026Proof.Check(r.Controller == branch.ControllerById(p.Opponent.Id) && !r.CantAttack,
+                    "Ragnaros under Cursed Chains, after Silence: control returns, both bans gone");
             }
         }
         WaterElementalFreeze();
