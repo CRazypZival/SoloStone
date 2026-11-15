@@ -816,7 +816,14 @@ namespace SabberStoneCore.Model.Entities
 			if (value < 0)
 				value = 0;
 			else if (destroyOnLethal && BaseHealth <= value)
+			{
+				// A death that comes only from damage is marked (an entity tag, so clones and snapshots keep it): until the
+				// death check, healing, a Health buff or an aura that lifts Health above 0 rescues the minion. An explicit
+				// Destroy or a Poisonous hit is not marked and stays final.
+				bool pending = ToBeDestroyed, marked = this is Minion && NativeTags.ContainsKey(Actions.HealingRules.DamageWound);
 				ToBeDestroyed = true;
+				if (this is Minion && ToBeDestroyed && (!pending || marked)) NativeTags[Actions.HealingRules.DamageWound] = 1;
+			}
 
 			if (_logging)
 				Game.Log(LogLevel.DEBUG, BlockType.TRIGGER, "Entity", !Game.Logging ? "" : $"{this} set data {GameTag.DAMAGE} to {value}");

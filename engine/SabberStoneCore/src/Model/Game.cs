@@ -1359,6 +1359,9 @@ namespace SabberStoneCore.Model
             using var resolution = Resolution.Enter(ResolutionKind.DeathCreation);
             // A later trigger can consume/transform a pending victim before death creation.
             DeadMinions.RemoveAll(minion => minion.Zone != minion.Controller.BoardZone);
+            // Retail: damage alone leaves a minion mortally wounded only until this step; one lifted above 0 Health by a heal,
+            // a Health buff or an aura survives. A Deathrattle heal comes after this step and cannot undo the death.
+            DeadMinions.RemoveAll(minion => { bool rescued = minion.RescuedFromDamageWound; minion.SettleDamageWound(); return rescued; });
             Actions.DeathContextRules.CaptureBatch(this);
             Actions.PayloadRules.CaptureDeaths(this);
 			if (ClearWeapons != null)

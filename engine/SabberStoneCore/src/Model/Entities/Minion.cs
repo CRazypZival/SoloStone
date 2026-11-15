@@ -376,6 +376,17 @@ namespace SabberStoneCore.Model.Entities
 
         }
 
+		/// <summary>The pending death comes from damage alone and Health is above 0 again: the death check spares it.</summary>
+		internal bool RescuedFromDamageWound => NativeTags.ContainsKey(Actions.HealingRules.DamageWound) && base.ToBeDestroyed && Health > 0;
+
+		/// <summary>Called by the death check: drops the damage mark (and the pending death when it was rescued).</summary>
+		internal void SettleDamageWound()
+		{
+			bool rescued = RescuedFromDamageWound;
+			NativeTags.Remove(Actions.HealingRules.DamageWound);
+			if (rescued) base.ToBeDestroyed = false;
+		}
+
 		/// <summary>Forgets cached Attack and Health so the next read takes them from the current card.</summary>
 		internal void DropCachedStats()
 		{
@@ -633,11 +644,14 @@ namespace SabberStoneCore.Model.Entities
 
 		public override bool ToBeDestroyed
 		{
-			get => base.ToBeDestroyed;
+			// A damage wound lifted above 0 Health before the death check no longer counts as pending.
+			get => base.ToBeDestroyed && !RescuedFromDamageWound;
 
 			set
 			{
 				if (value && IsDormant) return;
+				// Destroying it explicitly, or resetting it, ends the damage-only wound.
+				NativeTags.Remove(Actions.HealingRules.DamageWound);
 				if (value == base.ToBeDestroyed)
 					return;
 				base.ToBeDestroyed = value;

@@ -18,6 +18,9 @@ internal static class TargetingRulesProof
             ("#120 nothing left", RandomDamageWithNothingElseLeft),
             ("#121 mass transform skips Untouchable", MassTransformSkipsUntouchable),
             ("#138 transform resets stats", TransformResetsStats),
+            ("#123 heal before death check", HealBeforeDeathCheck),
+            ("#123 buff, aura, clone", BuffAndAuraRescue),
+            ("#123 heal after death check", HealAfterDeathCheck),
             ("#121 Untouchable sweep", UntouchableSweep),
             ("#120 mortally wounded sweep", MortallyWoundedSweep),
             ("#139 Slime 'em! empty boards", SlimeEmEmptyBoards) };
@@ -122,6 +125,91 @@ internal static class TargetingRulesProof
         Verify(tirion.AttackDamage == 8 && tirion.Health == 8, "Tirion is printed 8/8");
         Play(g2, p2, "CS2_022", tirion);
         Verify(tirion.AttackDamage == 1 && tirion.Health == 1, $"Polymorph on Tirion gives {tirion.AttackDamage}/{tirion.Health}");
+    }
+
+    // #123: a minion damaged to 0 or less and lifted above 0 Health before the death check lives; damage is the only wound that rescue
+    // covers, and the mark goes with the entity (clone) and out of the death check.
+    private static void HealBeforeDeathCheck()
+    {
+        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+        var m = Summon(p.Opponent, "CS2_182"); // 4/5
+        m.Damage = 6; Verify(m.ToBeDestroyed && m.IsDead && m.Health == -1, "damage wound is pending");
+        m.TakeHeal(p.Hero, 3);
+        Verify(!m.IsDead && !m.ToBeDestroyed, "healed above 0: no longer dead");
+        g.DeathProcessingAndAuraUpdate();
+        Verify(m.Zone.Type == Zone.PLAY && m.Health == 2 && !m.ToBeDestroyed && !m.NativeTags.ContainsKey((GameTag)31420), "healed above 0 before the death check: survives, mark cleared");
+        m.Damage = 5; g.DeathProcessingAndAuraUpdate();
+        Verify(m.Zone.Type == Zone.GRAVEYARD, "a rescued minion wounded again still dies");
+
+        var d = Summon(p.Opponent, "CS2_182");
+        d.Damage = 6; d.TakeHeal(p.Hero, 1);
+        Verify(d.IsDead, "still at 0 or less after the heal: dead");
+        g.DeathProcessingAndAuraUpdate();
+        Verify(d.Zone.Type == Zone.GRAVEYARD, "still at 0 or less after the heal: dies");
+
+        var e = Summon(p.Opponent, "CS2_182");
+        e.Damage = 1; e.Destroy(); e.TakeHeal(p.Hero, 1);
+        g.DeathProcessingAndAuraUpdate();
+        Verify(e.Zone.Type == Zone.GRAVEYARD, "explicit Destroy is not undone by healing");
+
+        var f = Summon(p.Opponent, "CS2_182");
+        f.Damage = 6; f.Destroy(); f.TakeHeal(p.Hero, 3);
+        Verify(f.IsDead, "damage wound plus explicit Destroy: dead");
+        g.DeathProcessingAndAuraUpdate();
+        Verify(f.Zone.Type == Zone.GRAVEYARD, "damage wound plus explicit Destroy: dies");
+
+        // Destroy first, damage after: still an explicit destroy.
+        var h = Summon(p.Opponent, "CS2_182");
+        h.Destroy(); h.Damage = 6; h.TakeHeal(p.Hero, 3);
+        g.DeathProcessingAndAuraUpdate();
+        Verify(h.Zone.Type == Zone.GRAVEYARD, "Destroy then damage then heal: dies");
+    }
+
+    // #123: other ways to lift Health above 0 before the death check.
+    private static void BuffAndAuraRescue()
+    {
+        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+        var m = Summon(p.Opponent, "CS2_182"); m.Damage = 6;                 // 4/5, Health -1
+        new SabberStoneCore.Tasks.SimpleTasks.AddEnchantmentTask("CS2_092e", SabberStoneCore.Tasks.SimpleTasks.EntityType.TARGET).Process(g, p, p.Hero, m); // Blessing of Kings: +4/+4 -> Health 3
+        Verify(!m.IsDead && m.Health == 3, $"Health buff lifts it above 0 (Health {m.Health})");
+        g.DeathProcessingAndAuraUpdate();
+        Verify(m.Zone.Type == Zone.PLAY, "Health buff before the death check: survives");
+
+        var n = Summon(p.Opponent, "CS2_182"); n.Damage = 5;                 // Health 0, pending
+        Verify(n.IsDead && n.ToBeDestroyed, "wounded to 0");
+        var aura = Summon(p.Opponent, "CS2_222");                            // Stormwind Champion: others +1/+1
+        g.DeathProcessingAndAuraUpdate();
+        Verify(n.Zone.Type == Zone.PLAY && n.Health == 1, $"aura lifts Health above 0 before the death check: survives (zone {n.Zone.Type}, Health {n.Health})");
+        Verify(aura.Zone.Type == Zone.PLAY, "aura source untouched");
+
+        var o = Summon(p.Opponent, "CS2_182"); o.Damage = 6;
+        g.DeathProcessingAndAuraUpdate();
+        Verify(o.Zone.Type == Zone.GRAVEYARD || o.Health > 0 && o.Zone.Type == Zone.PLAY, "state is consistent");
+        // The aura makes Health 0 here, so the minion with 1 more damage than the aura covers dies.
+        Verify(o.Zone.Type == Zone.GRAVEYARD, $"aura does not cover the whole wound: dies (Health {o.Health})");
+
+        // A mark survives CloneExact: the copy rescues and kills like the original.
+        var g2 = QuestLifecycleProof.Fixture(); var p2 = g2.Player1;
+        var w = Summon(p2.Opponent, "CS2_182"); w.Damage = 6;
+        var clone = g2.CloneExact();
+        var cw = (Minion)clone.IdEntityDic[w.Id];
+        Verify(cw.NativeTags.ContainsKey((GameTag)31420) && cw.IsDead, "the clone keeps the damage mark");
+        cw.TakeHeal(clone.Player1.Hero, 3); clone.DeathProcessingAndAuraUpdate();
+        Verify(cw.Zone.Type == Zone.PLAY, "clone: healed before the check, survives");
+        g2.DeathProcessingAndAuraUpdate();
+        Verify(w.Zone.Type == Zone.GRAVEYARD, "original: untouched by the clone's heal, dies");
+    }
+
+    // #123 as reported: death creation removes every mortally wounded minion before any Deathrattle; a later heal cannot revive.
+    private static void HealAfterDeathCheck()
+    {
+        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+        var m = Summon(p.Opponent, "CS2_182"); m.Damage = 6;
+        g.DeathProcessingAndAuraUpdate();
+        Verify(m.Zone.Type == Zone.GRAVEYARD, "mortally wounded minion dies at the death check");
+        m.TakeHeal(p.Hero, 10);
+        g.DeathProcessingAndAuraUpdate();
+        Verify(m.Zone.Type == Zone.GRAVEYARD && !p.Opponent.BoardZone.Contains(m), "a heal after the death check cannot revive it");
     }
 
     // Runs each part of a sweep on its own so one failing card does not hide the others.
