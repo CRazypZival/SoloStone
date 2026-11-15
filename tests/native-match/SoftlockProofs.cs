@@ -248,4 +248,38 @@ internal static partial class Program
         Check(found > 0, "the NPC played a Forefather in the seed search");
         Console.WriteLine($"PASS NPC Forefather guess: {found} games, the guess result follows the pick only (#115)");
     }
+
+    // Curious Glimmerroot shares the guess's client conceal spell: the same TARGET row, naming the offer that started in the opponent's deck.
+    private static void GlimmerrootGuessNative()
+    {
+        int cases = 0;
+        foreach (int pick in new[] { 0, 1, 2 })
+        {
+            var capture = new Capture();
+            var scenario = DebugScenario.Parse("humanHand=UNG_035\nhumanSeat=first");
+            var match = new NativeMatch(capture.Send, "mage", "mage", 8427) { DebugScenario = scenario, StartingPlayer = scenario.FirstPlayer };
+            match.Start();
+            match.SendChoices(capture.Last<EntityChoices>(17).Id, new List<int>());
+            var game = match.Game; var player = game.Player1; player.BaseMana = 10; player.UsedMana = 0;
+            var source = player.HandZone.Single(c => c.Card.Id == "UNG_035");
+            FlushFieldHistory(match); Invoke0(match, "SendHumanOptions");
+            var before = capture.Last<AllOptions>(14);
+            int play = before.Options.FindIndex(o => o.MainOption?.Id == match.WireReturnId(source.Id));
+            Check(play >= 0, "Glimmerroot playable");
+            var option = before.Options[play].MainOption;
+            int target = option.Targets.Count > 0 ? option.Targets[0].Id : 0;
+            match.SendOption(before.Id, play, target, -1, 1);
+            Check(player.Choice != null, "Glimmerroot offers its choice");
+            var offer = capture.Last<EntityChoices>(17);
+            int cursor = capture.Packets.Count;
+            Check(!GuessTargets(capture, 0).Any(), "Glimmerroot: no result before the pick");
+            match.SendChoices(offer.Id, new List<int> { offer.Entities[pick] });
+            var deck = game.Player2.DeckCards.Select(c => c.Id).ToHashSet();
+            var rows = DeckDiscoverWireHistory(capture, cursor);
+            var targets = rows.Where(r => r.HasMetaData && r.MetaData.Type == HistoryMeta.Type.TARGET && offer.Entities.Contains(r.MetaData.Info.FirstOrDefault())).ToList();
+            Check(targets.Count == 1 && deck.Contains(game.IdEntityDic[targets[0].MetaData.Info[0]].Card.Id), "Glimmerroot: one TARGET row names the offer from the opponent's deck, found " + targets.Count);
+            cases++;
+        }
+        Console.WriteLine($"PASS Curious Glimmerroot: {cases} picks, the result row names the opponent's deck card (#115)");
+    }
 }

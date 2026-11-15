@@ -6214,7 +6214,7 @@ public sealed class NativeMatch
     // and the guess was right when it was chosen. Without that row the spell never ends: the choice stays (clientChoiceId,
     // mustWaitForChoices) and the power queue stays stalled (#115, lane 1 2026-11-15). The row may only exist in the ANSWER's history:
     // earlier it would give the correct card away.
-    private static readonly HashSet<string> GuessChoiceSources = new HashSet<string>(StringComparer.Ordinal) { "TIME_041" };
+    private static readonly HashSet<string> GuessChoiceSources = new HashSet<string>(StringComparer.Ordinal) { "TIME_041", "UNG_035", "CORE_UNG_035" };
     private (int Source, int Target)? guessResult;
 
     // Offers are client ids; toEngine maps one to its engine entity; picks are engine ids. With no correct offer (the enemy hand was
@@ -6226,8 +6226,12 @@ public sealed class NativeMatch
         if (choices == null || choices.ChoiceType != ChoiceType.GENERAL || offers == null || offers.Count == 0
             || !Game.IdEntityDic.TryGetValue(choices.SourceId, out var source) || !GuessChoiceSources.Contains(source.Card.Id)) return;
         var chosen = new HashSet<int>(picks ?? Enumerable.Empty<int>());
+        // Curious Glimmerroot (legacy ChoiceAction.GLIMMERROOT, same client conceal spell, lane 1 2026-11-15): the correct offer is the
+        // card that started in the opponent's deck; Forefather marks it with CorrectAnswer.
+        var opponentDeck = source.Controller.Opponent.DeckCards.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
+        bool glimmerroot = source.Card.Id.EndsWith("UNG_035", StringComparison.Ordinal);
         int target = offers.FirstOrDefault(id => Game.IdEntityDic.TryGetValue(toEngine(id), out var offer)
-            && offer[SabberStoneCore.Actions.DiscoverRealRules.CorrectAnswer] == 1);
+            && (glimmerroot ? opponentDeck.Contains(offer.Card.Id) : offer[SabberStoneCore.Actions.DiscoverRealRules.CorrectAnswer] == 1));
         if (target == 0) target = offers.FirstOrDefault(id => !chosen.Contains(toEngine(id)));
         if (target != 0) guessResult = (choices.SourceId, target);
     }
