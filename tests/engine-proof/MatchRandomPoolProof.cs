@@ -42,8 +42,9 @@ internal static class MatchRandomPoolProof
         LegacyIdentity();
         Isolation();
         PolicySurvives();
+        ReplayGate();
         Console.WriteLine("PASS match random pools: Standard membership and current values, current-cost buckets, Wild hook, " +
-            "legacy list identity, per-manifest isolation, clone/snapshot policy");
+            "legacy list identity, per-manifest isolation, clone/snapshot policy, record version gate");
     }
 
     private static void Membership()
@@ -97,6 +98,7 @@ internal static class MatchRandomPoolProof
             Check(classAndNeutral.All(c => byId[c.Id].Classes.Contains(name) || byId[c.Id].Classes.Contains("NEUTRAL")), cls + ": class+neutral");
             Check(classAndNeutral.Count == pool0.All.Count(c => byId[c.Id].Classes.Contains(name) || byId[c.Id].Classes.Contains("NEUTRAL")), cls + ": class+neutral complete");
             Check(pool0.Secrets(cls).All(c => c.IsSecret) && pool0.Secrets(cls).Count == classAndNeutral.Count(c => c.IsSecret), cls + ": secrets");
+            Console.WriteLine($"  {cls}: class {classOnly.Count}, class+neutral {classAndNeutral.Count}, secrets {pool0.Secrets(cls).Count}");
         }
         // A multi-class card counts for every class it lists.
         var multi = manifest.Standard.Where(m => m.Type != "HERO" && m.Classes.Count(c => c != "NEUTRAL") > 1).ToArray();
@@ -203,6 +205,30 @@ internal static class MatchRandomPoolProof
             var ca = a.ClassAndNeutral(cls); var cb = b.ClassAndNeutral(cls);
             Check(ca.All(c => installedIds.Contains(c.Id)) && cb.All(c => pinnedIds.Contains(c.Id)), "class lists stay in their manifest " + cls);
         }
+    }
+
+    // The sim records the policy version in every new record; a record without it (schema 3 written before #141) and a
+    // schema-2 record replay on the frozen lists. Same gate as Dark Gifts.
+    private static void ReplayGate()
+    {
+        HsSim.GameRecord Record(string version, int schema) => new HsSim.GameRecord {
+            ReplaySchema = schema, Suite = "core-2026", Player = "core-2026-1", Opponent = "core-2026-1", Seed = 3, Policy = "random",
+            PoolPolicyVersion = schema == 3 ? PinnedPoolFixture.Manifest.PolicyVersion : null,
+            PoolManifestHash = schema == 3 ? PinnedPoolFixture.Hash : null, RandomPoolPolicyVersion = version };
+        var versioned = HsSim.Simulation.Create(Record(MatchRandomPool.PolicyVersion, 3), replay: true, pools: PinnedPoolFixture.Manifest);
+        Check(!Cards.RandomPool(versioned).Legacy && Cards.RandomPool(versioned).ManifestHash == PinnedPoolFixture.Hash, "a versioned schema-3 record replays on its pinned manifest");
+        var unversioned = HsSim.Simulation.Create(Record(null, 3), replay: true, pools: PinnedPoolFixture.Manifest);
+        Check(Cards.RandomPool(unversioned).Legacy, "an unversioned schema-3 record replays on the frozen lists");
+        var schema2 = HsSim.Simulation.Create(Record(null, 2), replay: true);
+        Check(Cards.RandomPool(schema2).Legacy, "a schema-2 record replays on the frozen lists");
+        var fresh = Record(null, 3); fresh.ReplaySchema = null; fresh.PoolPolicyVersion = null; fresh.PoolManifestHash = null;
+        var live = HsSim.Simulation.Create(fresh, replay: false);
+        Check(fresh.RandomPoolPolicyVersion == MatchRandomPool.PolicyVersion && !Cards.RandomPool(live).Legacy && live.PoolFormat == GenerationFormat.Standard && live.FormatType == FormatType.FT_WILD,
+            "a new record pins the policy, plays the Standard pool and keeps FT_WILD");
+        bool refused = false;
+        try { HsSim.Simulation.Create(Record("match-random/99", 3), replay: true, pools: PinnedPoolFixture.Manifest); }
+        catch (HsSim.InvariantException) { refused = true; }
+        Check(refused, "a record naming another policy version is refused");
     }
 
     private static void PolicySurvives()

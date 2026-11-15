@@ -322,6 +322,7 @@ public static class Program
         var others = new List<string>();
         if (old.PoolPolicyVersion != fresh.PoolPolicyVersion) others.Add($"poolPolicyVersion {old.PoolPolicyVersion ?? "none"}->{fresh.PoolPolicyVersion ?? "none"}");
         if (old.DarkGiftPolicyVersion != fresh.DarkGiftPolicyVersion) others.Add($"darkGiftPolicyVersion {old.DarkGiftPolicyVersion ?? "none"}->{fresh.DarkGiftPolicyVersion ?? "none"}");
+        if (old.RandomPoolPolicyVersion != fresh.RandomPoolPolicyVersion) others.Add($"randomPoolPolicyVersion {old.RandomPoolPolicyVersion ?? "none"}->{fresh.RandomPoolPolicyVersion ?? "none"}");
         if (old.Failure != null) others.Add("recorded failure dropped");
         int actions = Differing(old.Actions, fresh.Actions), legal = Differing(old.LegalShas, fresh.LegalShas);
         behaviour = actions > 0 || legal > 0 || old.Turns != fresh.Turns || old.Winner != fresh.Winner || others.Count > 0;
@@ -366,6 +367,7 @@ public static class Program
             fresh.PoolPolicyVersion = null;
             fresh.PoolManifestHash = null;
             fresh.DarkGiftPolicyVersion = null;
+            fresh.RandomPoolPolicyVersion = null;
         }
         Validate(fresh);
         return fresh;
@@ -482,6 +484,16 @@ public static class Program
         int probes = 0, completed = 0, deterministic = 0;
         var reprintsPlayed = new HashSet<string>(StringComparer.Ordinal);
         var reprintsTraded = new HashSet<string>(StringComparer.Ordinal);
+#if SOURCE_ENGINE
+        // Census of the legacy random tasks: which cards reach the match random pool, and whether any live
+        // (non-replay) game takes the frozen legacy branch. None may.
+        var poolCallers = new System.Collections.Concurrent.ConcurrentDictionary<string, int>(StringComparer.Ordinal);
+        int legacyPoolCalls = 0;
+        SabberStoneCore.Model.RandomPools.MatchRandomPool.Census = (card, legacy) => {
+            poolCallers.AddOrUpdate(card ?? "(no source)", 1, (_, n) => n + 1);
+            if (legacy) System.Threading.Interlocked.Increment(ref legacyPoolCalls);
+        };
+#endif
         for (int i = 0; i < count; i++)
         {
             string first = ids[random.Index(ids.Length)], second = ids[random.Index(ids.Length)];
@@ -536,6 +548,11 @@ public static class Program
             }
             if ((i + 1) % 25 == 0) Console.Error.WriteLine($"fuzz progress {i + 1}/{count}; failed={failures.Values.Sum()}");
         }
+#if SOURCE_ENGINE
+        SabberStoneCore.Model.RandomPools.MatchRandomPool.Census = null;
+        Console.Error.WriteLine($"fuzz pool census: legacyBranchCalls={legacyPoolCalls}; callers={poolCallers.Count} [{string.Join(",", poolCallers.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => p.Key + "x" + p.Value))}]");
+        if (legacyPoolCalls != 0) { failures["pool.legacy-branch-in-live-game"] = legacyPoolCalls; }
+#endif
         Console.Error.WriteLine($"fuzz: games={count}; failures={failures.Values.Sum()}; completed={completed}; deterministic={deterministic}; cloneProbes={cloneProbes.ToString().ToLowerInvariant()}; cloneProbesPassed={probes}; reprintsPlayed={reprintsPlayed.Count}; reprintsTraded={JsonSerializer.Serialize(reprintsTraded.Order(StringComparer.Ordinal))}; invariants={JsonSerializer.Serialize(failures)}; wall={watch.Elapsed.TotalSeconds:F3}s");
         return failures.Count == 0 ? 0 : 1;
     }

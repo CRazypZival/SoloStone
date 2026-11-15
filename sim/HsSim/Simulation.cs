@@ -20,6 +20,9 @@ public sealed class GameRecord
     public string PoolManifestHash { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string DarkGiftPolicyVersion { get; set; }
+    // Records written before the random pool policy existed carry none and replay on the frozen legacy lists.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string RandomPoolPolicyVersion { get; set; }
     public string Id { get; set; }
     public string Suite { get; set; }
     public string Player { get; set; }
@@ -207,6 +210,8 @@ public static class Simulation
                 throw new InvariantException("replay.pool", "offline pool policy/manifest mismatch");
             if (record.DarkGiftPolicyVersion != null && record.DarkGiftPolicyVersion != DarkGifts.PolicyVersion)
                 throw new InvariantException("replay.dark-gift", "Dark Gift policy mismatch");
+            if (record.RandomPoolPolicyVersion != null && record.RandomPoolPolicyVersion != SabberStoneCore.Model.RandomPools.MatchRandomPool.PolicyVersion)
+                throw new InvariantException("replay.random-pool", "random pool policy mismatch");
             pools = manifest;
         }
 #else
@@ -237,6 +242,10 @@ public static class Simulation
 #if SOURCE_ENGINE
             EnableCorpses = true, // matches NativeMatch.Start: Corpses are tracked in every game (owner, 2026-10-21)
             LegacyPoolReplay = replay && record.ReplaySchema == 2,
+            // An unversioned record replays on the frozen legacy lists, like unversioned Dark Gifts below. Live matches
+            // run as FT_WILD yet play the Standard pool, so the pool policy is set explicitly (the default).
+            UnversionedRandomPoolReplay = replay && record.ReplaySchema == 3 && record.RandomPoolPolicyVersion == null,
+            PoolFormat = SabberStoneCore.Config.GenerationFormat.Standard,
             ReplayPools = pools,
             Player1Sideboards = Sideboards(first), Player2Sideboards = Sideboards(second),
 #endif
@@ -253,6 +262,7 @@ public static class Simulation
             record.PoolPolicyVersion = game.OfflinePools.PolicyVersion;
             record.PoolManifestHash = game.OfflinePools.Hash;
             record.DarkGiftPolicyVersion = DarkGifts.PolicyVersion;
+            record.RandomPoolPolicyVersion = SabberStoneCore.Model.RandomPools.MatchRandomPool.PolicyVersion;
         }
 #else
         if (!replay)
