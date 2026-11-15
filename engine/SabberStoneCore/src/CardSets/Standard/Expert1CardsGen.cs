@@ -4639,7 +4639,7 @@ namespace SabberStoneCore.CardSets.Standard
 			cards.Add("EX1_103", new CardDef(new Power
 			{
 				PowerTask = ComplexTask.Create(
-					new IncludeTask(EntityType.MINIONS),
+					new IncludeTask(EntityType.MINIONS_NOSOURCE),
 					new FilterStackTask(SelfCondition.IsRace(Race.MURLOC)),
 					new AddEnchantmentTask("EX1_103e", EntityType.STACK))
 			}));
