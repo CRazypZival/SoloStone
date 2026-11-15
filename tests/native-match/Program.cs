@@ -97,6 +97,7 @@ internal static partial class Program
         if (args.Contains("--locations-only")) { NativeMatch.ClockFreeBot = true; LocationActivationHistory(); LocationOptions(); return; }
         if (args.Contains("--plague-only")) { NativeMatch.ClockFreeBot = true; PlagueAttackShuffle(); FreshDeckShuffleHistory(); ArrivalCastsWhenDrawn(); return; }
         if (args.Contains("--shuffle-choice-only")) { NativeMatch.ClockFreeBot = true; DiscoveredShuffleCompletion(); return; }
+        if (args.Contains("--adaptive-tag-only")) { NativeMatch.ClockFreeBot = true; AdaptiveTagHistory(); return; }
         if (args.Contains("--shuffle-only")) { NativeMatch.ClockFreeBot = true; GeneratedShuffleHistory(); return; }
         if (args.Contains("--shuffle-batch-only")) { NativeMatch.ClockFreeBot = true; ShuffleBatchHistory(); return; }
         if (args.Contains("--hero-skin-only")) { HeroSkinPresentationTests(); return; }
@@ -232,6 +233,7 @@ internal static partial class Program
         ChaosStrikeHistory();
         CthunNativeProof();
         HolyBolaHistory();
+        AdaptiveTagHistory();
         GeneratedShuffleHistory();
         ShuffleBatchHistory();
         ModernSubSpellHistory();

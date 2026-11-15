@@ -105,6 +105,10 @@ namespace SabberStoneCore.Auras
 					{
 						new Effect(_tag, _operator, _lastValue).RemoveFrom(_owner);
 						new Effect(_tag, _operator, value).ApplyTo(_owner);
+						// RemoveFrom sends the printed value; ApplyTo (SET) writes the entity with no history. Send the
+						// effective value, or the client keeps the printed one and the engine/client tags disagree (#152).
+						if (_owner.Game.History && _owner[_tag] != _owner.Card[_tag])
+							_owner.Game.PowerHistory.Add(Kettle.PowerHistoryBuilder.TagChange(_owner.Id, _tag, _owner[_tag]));
 					}
 				}
 				else
