@@ -15,6 +15,7 @@ public static class NpcWorldRuntime
     public static CasualMatchmaker Casual { get; private set; }
     // Arena (#6) opponents: drafted decks met by run record; null when no Arena catalog loaded (Arena matches then refuse to start).
     public static ArenaMatchmaker Arena { get; private set; }
+    public const string ArenaReason = "arena";
 
     private static readonly object planGate = new object();
     private static readonly Dictionary<string, DeckPlan> plans = new Dictionary<string, DeckPlan>(StringComparer.Ordinal);
@@ -42,6 +43,7 @@ public static class NpcWorldRuntime
         // Lazy: built on first use by an inferred-prior brain only, so boot never depends on it.
         var population = new Lazy<IReadOnlyList<PopulationDeck>>(() => world.Catalogs.Decks.Population());
         NpcWorldHooks.Population = () => population.Value;
+        NpcWorldHooks.ArenaPopulation = null;
     }
 
     // The Casual catalog's decks must already be in World.Catalogs.Decks (CasualDeckCatalog.MergeInto): plans and
@@ -63,6 +65,7 @@ public static class NpcWorldRuntime
         var missing = catalog.Decks.FirstOrDefault(d => !ReferenceEquals(World.Catalogs.Decks.Find(d.Id), d));
         if (missing != null) throw new InvalidOperationException("Arena deck not merged into the world library: " + missing.Id);
         Arena = new ArenaMatchmaker(World, catalog);
+        var population = catalog.Library.ArenaPopulation(); NpcWorldHooks.ArenaPopulation = () => population;
     }
 
     // Tests and failed boot: back to the golden-only behaviour.
@@ -209,7 +212,10 @@ public static class NpcWorldRuntime
             inferred = false;
             Say(DecorationLog, "npc deck inference unavailable; class prior for this match: " + error.GetType().Name + ": " + error.Message);
         }
-        Active = inferred ? encounter.WithReplyPrior(ReplyPrior.Inferred) : encounter;
+        // Arena: the opponent's deck was drafted, so the NPC predicts its hand from the drafted decks, not constructed lists.
+        // Only an Arena encounter (Reason "arena") gets it; every other match keeps its own prior and the same encounter object.
+        Active = encounter.Reason == ArenaReason && ArenaReplyTable.DeckCount() > 0 ? encounter.WithReplyPrior(ReplyPrior.Arena)
+            : inferred ? encounter.WithReplyPrior(ReplyPrior.Inferred) : encounter;
     }
 
     public static void End() { Active = null; }

@@ -26,6 +26,7 @@ internal static class ArenaSuite
         Pools(rankedWorld, casualWorld, world, ranked, merged, casual);
         var matchmaker = new ArenaMatchmaker(world, arena, null, SyntheticNpcWorld.StubProfile);
         Queue(world, arena, matchmaker);
+        ReplyTable(arena, matchmaker);
         Console.WriteLine("arena suite passed");
     }
 
@@ -83,6 +84,59 @@ internal static class ArenaSuite
             served++;
         }
         Program.Require(served == 300, "queues sampled");
+    }
+
+    // The Arena reply prior: a table of the drafted decks, used by an Arena encounter only (every other encounter keeps the object
+    // it was given, so Ranked and Casual search exactly as before).
+    private static void ReplyTable(ArenaDeckCatalog arena, ArenaMatchmaker matchmaker)
+    {
+        var saved = NpcWorldHooks.ArenaPopulation;
+        try
+        {
+            var population = arena.Library.ArenaPopulation();
+            Program.Require(population.Count == 200 && population.All(p => p.Cards.Count == 30), "Arena population: 200 lists of 30 cards");
+            NpcWorldHooks.ArenaPopulation = null;
+            Program.Require(ReferenceEquals(ArenaReplyTable.For(SabberStoneCore.Enums.CardClass.MAGE), CardFrequencies.ForOrEmpty(SabberStoneCore.Enums.CardClass.MAGE)),
+                "no Arena population: the class prior");
+            NpcWorldHooks.ArenaPopulation = () => population;
+            foreach (var heroClass in population.Select(p => p.Class).Distinct())
+            {
+                var table = ArenaReplyTable.For(heroClass);
+                Program.Require(ReferenceEquals(table, ArenaReplyTable.For(heroClass)), "the table is built once");
+                Program.Require(table.All(f => f.Weight > 0 && !double.IsNaN(f.Weight)) && table.Select(f => f.CardId).Distinct().Count() == table.Count, "table rows are unique and positive: " + heroClass);
+                Program.Require(table.All(f => LocalDecks.IsAllowedInDeck(SabberStoneCore.Model.Cards.FromId(f.CardId), heroClass)), "the table holds only cards the class may play: " + heroClass);
+                Program.Require(table.Count >= CardFrequencies.ForOrEmpty(heroClass).Count, "every legal card stays possible: " + heroClass);
+                var seen = new HashSet<string>(population.Where(p => p.Class == heroClass).SelectMany(p => p.Cards));
+                double drafted = seen.Sum(id => table.First(f => f.CardId == id).Weight), rest = table.Where(f => !seen.Contains(f.CardId)).Sum(f => f.Weight);
+                Program.Require(drafted > rest, "weight sits on drafted cards: " + heroClass);
+            }
+            // A card a draft holds three times is a legal triple in the table (constructed tables cap at 2).
+            var triple = population.SelectMany(p => p.Cards.GroupBy(c => c).Where(g => g.Count() >= 3).Select(g => (p.Class, g.Key))).First();
+            Program.Require(ArenaReplyTable.For(triple.Item1).First(f => f.CardId == triple.Item2).Copies >= 3, "a triple copy is kept");
+            Program.Require(CardFrequencies.Sample(ArenaReplyTable.For(SabberStoneCore.Enums.CardClass.MAGE), 3, 6, 6, 5).Count > 0, "the table samples hands");
+
+            // The Arena encounter alone reads it.
+            var chosen = matchmaker.Choose(new ArenaRequest(31, 0, 0, 0, null, null));   // the suite's stub builder gives no profile
+            var arenaEncounter = new NpcEncounter(chosen.Npc, chosen.Deck, chosen.Skill, chosen.Personality, NpcCatalog.All[0], chosen.Rating, chosen.MatchSeed, chosen.Reason);
+            NpcWorldRuntime.InferredReplyPrior = null;
+            NpcWorldRuntime.Begin(arenaEncounter);
+            var live = NpcWorldRuntime.Active;
+            Program.Require(live != arenaEncounter && live.Profile.Budget.Brain.ReplyPrior == ReplyPrior.Arena && live.Deck == arenaEncounter.Deck && live.Reason == "arena"
+                && live.MatchSeed == arenaEncounter.MatchSeed && ReferenceEquals(live.Profile.Fixes, arenaEncounter.Profile.Fixes), "an Arena match reads the Arena table and nothing else changes");
+            var other = new NpcEncounter(arenaEncounter.Npc, arenaEncounter.Deck, arenaEncounter.Skill, arenaEncounter.Personality, arenaEncounter.Profile, arenaEncounter.Rating, arenaEncounter.MatchSeed, "hidden-rating");
+            NpcWorldRuntime.Begin(other);
+            Program.Require(ReferenceEquals(NpcWorldRuntime.Active, other), "a ranked or Casual encounter keeps its own prior");
+            NpcWorldRuntime.InferredReplyPrior = () => true;
+            NpcWorldRuntime.Begin(arenaEncounter);
+            Program.Require(NpcWorldRuntime.Active.Profile.Budget.Brain.ReplyPrior == ReplyPrior.Arena, "an Arena match keeps the Arena table when the inference option is on");
+            NpcWorldHooks.ArenaPopulation = null;
+            NpcWorldRuntime.InferredReplyPrior = null;
+            NpcWorldRuntime.Begin(arenaEncounter);
+            Program.Require(ReferenceEquals(NpcWorldRuntime.Active, arenaEncounter), "no Arena population: the Arena match keeps the encounter itself");
+            // The prior never reaches the evaluator of another brain: Class stays the default.
+            Program.Require(new BrainOptions().ReplyPrior == ReplyPrior.Class && arenaEncounter.Profile.Budget.Brain?.ReplyPrior != ReplyPrior.Arena, "Class remains the default prior");
+        }
+        finally { NpcWorldHooks.ArenaPopulation = saved; NpcWorldRuntime.InferredReplyPrior = null; NpcWorldRuntime.End(); }
     }
 
     private static void Queue(NpcWorld world, ArenaDeckCatalog arena, ArenaMatchmaker matchmaker)
