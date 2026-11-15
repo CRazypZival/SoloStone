@@ -106,7 +106,7 @@ internal static class AcolyteOfDeathProof
             if (ambusherFirst)
             {
                 ambusher = (Minion)Play(branch, owner, "FP1_026");
-                sidekick = (Minion)Play(branch, owner, "RLK_958");
+                sidekick = (Minion)Play(branch, owner, "RLK_958", ambusher); // the Ambusher is Undead (37.0): the Battlecry needs its target
             }
             else
             {
