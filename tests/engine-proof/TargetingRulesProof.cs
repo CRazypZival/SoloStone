@@ -1,6 +1,7 @@
 using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
+using SabberStoneCore.Actions;
 using static Core2026Proof;
 
 // Regression proofs for the targeting rules: random damage and destroy skip mortally wounded characters (#120), mass effects skip
@@ -16,6 +17,8 @@ internal static class TargetingRulesProof
         var cases = new (string, Action)[] {
             ("#120 random damage skips mortally wounded", RandomDamageSkipsMortallyWounded),
             ("#120 nothing left", RandomDamageWithNothingElseLeft),
+            ("#120 inline random picks", InlineRandomPicks),
+            ("#120 Deathwing and Flames", DeathwingAndFlames),
             ("#121 mass transform skips Untouchable", MassTransformSkipsUntouchable),
             ("#138 transform resets stats", TransformResetsStats),
             ("#123 heal before death check", HealBeforeDeathCheck),
@@ -65,6 +68,68 @@ internal static class TargetingRulesProof
             death.ToBeDestroyed = true; g.DeathProcessingAndAuraUpdate();
             Verify(enemyMinion.Damage == 9 && hero.Damage == 29, $"seed {seed}: no candidate left, nothing is hit (minion {enemyMinion.Damage}, hero {hero.Damage})");
         }
+    }
+
+    // #120: Deathrattles and spells that build and run their own RandomTask: a Wisp (1 Health) that the first ping kills must not be
+    // picked again by the second Deathrattle while it is still pending death.
+    private static void InlineRandomPicks()
+    {
+        var failures = new List<string>();
+        foreach (string id in new[] { "EDR_110", "CATA_580t" })
+        {
+            bool wispFirst = false;
+            for (int seed = 1; seed <= 40; seed++)
+                Parts(failures, id + " seed " + seed, () => {
+                    var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(seed);
+                    var wisp = Summon(p.Opponent, "CS2_231"); var big = Summon(p.Opponent, "CS2_182");
+                    var a = Summon(p, id); var b = Summon(p, id);
+                    a[GameTag.TAG_SCRIPT_DATA_NUM_1] = 5; b[GameTag.TAG_SCRIPT_DATA_NUM_1] = 5; // Soldier damage; Sporegnasher ignores it
+                    a.ToBeDestroyed = true; b.ToBeDestroyed = true;
+                    g.DeathProcessingAndAuraUpdate();
+                    Verify(wisp.Damage <= (id == "EDR_110" ? 1 : 5), $"{id} seed {seed}: the dead Wisp was hit again (damage {wisp.Damage})");
+                    if (wisp.Zone.Type == Zone.GRAVEYARD && big.Damage > 0) wispFirst = true;
+                });
+            if (!failures.Any(f => f.StartsWith(id))) Verify(wispFirst, id + ": the Wisp-first ordering was exercised");
+        }
+        // Spells: Aeon Rend (two random enemies), Cease to Exist (random enemy minion destroyed).
+        for (int seed = 1; seed <= 25; seed++)
+        {
+            int sd = seed;
+            Parts(failures, "Aeon Rend seed " + sd, () => {
+                var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(sd);
+                var live = Summon(p.Opponent, "CS2_182"); var dead = Wounded(p.Opponent); int damage = dead.Damage;
+                Cast(g, p, "TIME_441");
+                Verify(dead.Damage == damage && live.Damage == 4, $"Aeon Rend seed {sd}: both hits land on live targets (dead {dead.Damage}, live {live.Damage})");
+            });
+            Parts(failures, "Cease to Exist seed " + sd, () => {
+                var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(sd);
+                var live = Summon(p.Opponent, "CS2_182"); var dead = Wounded(p.Opponent);
+                Cast(g, p, "TIME_433"); g.DeathProcessingAndAuraUpdate();
+                Verify(live.Zone.Type == Zone.GRAVEYARD, $"Cease to Exist seed {sd}: the live minion is the pick");
+            });
+        }
+        if (failures.Count != 0) throw new Exception(string.Join("; ", failures.Take(12)));
+    }
+
+    // #120: Deathwing option 1 (Topple, destroys the highest-Health enemy minion) and Flames of Infinity skip a mortally wounded minion.
+    private static void DeathwingAndFlames()
+    {
+        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+        p[HeraldRules.Progress] = 0;
+        var live = Summon(p.Opponent, "CS2_231");
+        var hero = Add(p, "CATA_190h"); PlayEntity(g, p, hero);
+        Verify(p.Choice != null, "Deathwing offers its Cataclysms");
+        var wounded = Wounded(p.Opponent);
+        B14H3LifecycleProof.Answer(g, "CATA_190t11");
+        Verify(live.Zone.Type == Zone.GRAVEYARD, "Topple destroys the live minion, not the pending one");
+
+        var g2 = QuestLifecycleProof.Fixture(); var p2 = g2.Player1;
+        var flames = Add(p2.Opponent, "END_024");
+        var victim = Summon(p2, "CS2_182");
+        var tall = Wounded(p2);
+        Cards.FromId("END_024").Power.Trigger.SingleTask.Process(g2, p2.Opponent, flames, null, null);
+        g2.DeathProcessingAndAuraUpdate();
+        Verify(victim.Zone.Type == Zone.GRAVEYARD, "Flames of Infinity hits the live minion, not the pending one");
     }
 
     // #121: Archmage Rafaam transforms every non-Rafaam minion except an Untouchable one.
