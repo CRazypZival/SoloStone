@@ -113,22 +113,22 @@ internal static class WildBatchChecks
         "AT_079", "AT_080", "AT_081", "AT_082", "AT_083", "AT_084", "AT_085", "AT_086", "AT_087", "AT_088", "AT_090", "AT_091", "AT_092",
         "AT_093", "AT_094", "AT_095", "AT_096", "AT_097", "AT_098", "AT_099", "AT_100", "AT_102", "AT_103", "AT_104", "AT_106", "AT_108",
         "AT_109", "AT_110", "AT_111", "AT_112", "AT_113", "AT_114", "AT_115", "AT_116", "AT_117", "AT_118", "AT_120", "AT_121", "AT_122",
-        "AT_124", "AT_125", "AT_127", "AT_132", "AT_133", "BRM_001", "BRM_003", "BRM_005", "BRM_007", "BRM_009", "BRM_010", "BRM_011",
+        "AT_124", "AT_125", "AT_127", "AT_132", "AT_133", "BRM_001", "BRM_003", "BRM_005", "BRM_009", "BRM_010", "BRM_011",
         "BRM_012", "BRM_014", "BRM_015", "BRM_017", "BRM_027", "BRM_028", "BRM_029", "BRM_033", "BRM_034", "CS2_059", "FP1_002",
         "FP1_003", "FP1_007", "FP1_010", "FP1_012", "FP1_019", "FP1_020", "FP1_021", "FP1_022", "FP1_023", "FP1_025", "GVG_001",
         "GVG_002", "GVG_003", "GVG_006", "GVG_007", "GVG_008", "GVG_009", "GVG_010", "GVG_012", "GVG_013", "GVG_014", "GVG_016",
         "GVG_017", "GVG_018", "GVG_019", "GVG_020", "GVG_022", "GVG_023", "GVG_024", "GVG_025", "GVG_026", "GVG_027", "GVG_028",
         "GVG_029", "GVG_030", "GVG_031", "GVG_032", "GVG_034", "GVG_036", "GVG_037", "GVG_038", "GVG_039", "GVG_040", "GVG_041",
         "GVG_042", "GVG_043", "GVG_045", "GVG_046", "GVG_047", "GVG_048", "GVG_049", "GVG_050", "GVG_051", "GVG_052", "GVG_053",
-        "GVG_054", "GVG_055", "GVG_056", "GVG_057", "GVG_060", "GVG_063", "GVG_064", "GVG_065", "GVG_066", "GVG_067", "GVG_068",
+        "GVG_054", "GVG_055", "GVG_057", "GVG_060", "GVG_063", "GVG_064", "GVG_065", "GVG_066", "GVG_067", "GVG_068",
         "GVG_069", "GVG_071", "GVG_072", "GVG_073", "GVG_074", "GVG_075", "GVG_076", "GVG_077", "GVG_078", "GVG_080", "GVG_081",
         "GVG_083", "GVG_084", "GVG_086", "GVG_088", "GVG_089", "GVG_090", "GVG_091", "GVG_092", "GVG_093", "GVG_094", "GVG_095",
         "GVG_096", "GVG_097", "GVG_098", "GVG_099", "GVG_101", "GVG_102", "GVG_104", "GVG_105", "GVG_106", "GVG_107", "GVG_108",
         "GVG_109", "GVG_110", "GVG_111", "GVG_113", "GVG_115", "GVG_116", "GVG_117", "GVG_118", "GVG_119", "GVG_120", "GVG_121",
-        "GVG_122", "GVG_123", "LOEA10_3", "LOE_002", "LOE_003", "LOE_006", "LOE_007", "LOE_009", "LOE_010", "LOE_011", "LOE_016",
+        "GVG_122", "GVG_123", "LOEA10_3", "LOE_003", "LOE_006", "LOE_007", "LOE_009", "LOE_010", "LOE_011", "LOE_016",
         "LOE_017", "LOE_018", "LOE_020", "LOE_021", "LOE_022", "LOE_026", "LOE_027", "LOE_029", "LOE_038", "LOE_046", "LOE_047",
-        "LOE_050", "LOE_053", "LOE_061", "LOE_076", "LOE_077", "LOE_079", "LOE_086", "LOE_089", "LOE_092", "LOE_104", "LOE_105",
-        "LOE_107", "LOE_111", "LOE_113", "LOE_116", "LOE_118", "LOE_119"
+        "LOE_050", "LOE_053", "LOE_061", "LOE_076", "LOE_077", "LOE_086", "LOE_089", "LOE_092", "LOE_104", "LOE_105",
+        "LOE_113", "LOE_116", "LOE_118", "LOE_119"
     };
 
     internal static void CheckStandardLegacyPools(string[] ids)

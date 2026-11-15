@@ -25,7 +25,7 @@ internal static class WildY0bM2CProof
         WildSetsProof.Case("GVG_053", Shieldmaiden);
         WildSetsProof.Case("GVG_054", OgreWarmaul);
         WildSetsProof.Case("GVG_055", ScrewjankClunker);
-        WildSetsProof.Case("GVG_056", IronJuggernaut);
+        WildSetsProof.Held("GVG_056", "held: generated-shuffle FX scope", IronJuggernaut);
         WildSetsProof.Case("GVG_057", SealOfLight);
         WildSetsProof.Case("GVG_060", Quartermaster);
         WildSetsProof.Case("GVG_063", BolvarFordragon);

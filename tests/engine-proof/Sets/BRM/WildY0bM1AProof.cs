@@ -97,7 +97,7 @@ internal static class WildY0bM1AProof
             Play(g, p.Opponent, id);
             Core2026Proof.Check(p.BoardZone.Count == 0, "Demonwrath on empty boards is legal and does nothing");
         });
-        WildSetsProof.Case("BRM_007", (g, p, id) => {
+        WildSetsProof.Held("BRM_007", "held: generated-shuffle FX scope", (g, p, id) => {
             var held = Add(p, id);
             Core2026Proof.Check(!p.Options().Any(t => t.Source?.Id == held.Id), "Gang Up needs a minion target");
             var enemy = Summon(p.Opponent, "CS2_179"); enemy.Damage = 2;

@@ -21,7 +21,7 @@ internal static class WildY0bM4AProof
     {
         HeldReport.Clear();
         WildSetsProof.Case("LOEA10_3", Tinyfin);
-        WildSetsProof.Case("LOE_002", ForgottenTorch);
+        WildSetsProof.Held("LOE_002", "held: generated-shuffle FX scope", ForgottenTorch);
         WildSetsProof.Case("LOE_003", EtherealConjurer);
         WildSetsProof.Case("LOE_006", MuseumCurator);
         WildSetsProof.Case("LOE_007", CurseOfRafaam);

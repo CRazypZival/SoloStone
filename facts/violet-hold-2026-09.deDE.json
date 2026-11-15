@@ -3372,7 +3372,7 @@
 "GVG_054":["489a1e9a","Chance von 50_%, einen anderen Feind anzugreifen."],
 "GVG_055":["f2a68e43","<b>Kampfschrei:</b> Verleiht einem befreundeten Mech +2/+2."],
 "GVG_055e":["b28c8372","+2/+2."],
-"GVG_056":["5b8ee224","<b>Kampfschrei und Todesröcheln:</b> Mischt eine Mine in das Deck Eures Gegners. Wenn sie gezogen wird, verursacht sie 10 Schaden."],
+"GVG_056":["1a9a2ec2","[x]<b>Kampfschrei:</b> Mischt eine Mine\nin das Deck Eures Gegners. Wenn\nsie gezogen wird, verursacht\nsie 10 Schaden."],
 "GVG_056t":["8a2a44ca","[x]<b>Beim Ziehen gewirkt</b>.\nIhr erleidet 10 Schaden."],
 "GVG_057":["90678278","Stellt bei Eurem Helden #4 Leben wieder her und verleiht ihm +2 Angriff in diesem Zug."],
 "GVG_057a":["f0b6c85b","+2 Angriff in diesem Zug."],

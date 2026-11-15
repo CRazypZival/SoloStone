@@ -3372,7 +3372,7 @@
 "GVG_054":["489a1e9a","50% de probabilidad de atacar al enemigo que no es."],
 "GVG_055":["f2a68e43","<b>Grito de batalla:</b> Otorga +2/+2 a un robot amistoso."],
 "GVG_055e":["b28c8372","+2/+2."],
-"GVG_056":["5b8ee224","<b>Grito de batalla y Último aliento:</b> Mete una mina en el mazo de tu oponente. Cuando la roba, explota y le inflige 10 p. de daño."],
+"GVG_056":["1a9a2ec2","<b>Grito de batalla:</b>\nMete una mina en el mazo de tu oponente. Cuando la roba, le inflige 10 p. de daño."],
 "GVG_056t":["8a2a44ca","[x]<b>Este hechizo se lanza al robarlo</b>.\nRecibes 10 p. de daño."],
 "GVG_057":["90678278","[x]Restaura #4 p. de salud\na tu héroe y le otorga\n+2 p. de ataque este turno."],
 "GVG_057a":["f0b6c85b","+2 p. de ataque este turno."],

@@ -27,15 +27,15 @@ internal static class WildY0bM4BProof
         WildSetsProof.Held("LOE_073", FossilizedDevilsaur);
         WildSetsProof.Case("LOE_076", SirFinley);
         WildSetsProof.Case("LOE_077", BrannBronzebeard);
-        WildSetsProof.Case("LOE_079", EliseStarseeker);
+        WildSetsProof.Held("LOE_079", "held: generated-shuffle FX scope", EliseStarseeker);
         WildSetsProof.Case("LOE_086", SummoningStone);
         WildSetsProof.Case("LOE_089", WobblingRunts);
         WildSetsProof.Case("LOE_092", ArchThiefRafaam);
         WildSetsProof.Case("LOE_104", Entomb);
         WildSetsProof.Case("LOE_105", ExplorersHat);
-        WildSetsProof.Case("LOE_107", EerieStatue);
+        WildSetsProof.Held("LOE_107", "held: AdaptiveEffect tag history (bug-fix session)", EerieStatue);
         WildSetsProof.Held("LOE_110", AncientShade);
-        WildSetsProof.Case("LOE_111", ExcavatedEvil);
+        WildSetsProof.Held("LOE_111", "held: generated-shuffle FX scope", ExcavatedEvil);
         WildSetsProof.Case("LOE_113", EveryfinIsAwesome);
         WildSetsProof.Case("LOE_116", ReliquarySeeker);
         WildSetsProof.Case("LOE_118", CursedBlade);

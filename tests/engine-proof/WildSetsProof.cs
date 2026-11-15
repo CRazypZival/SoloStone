@@ -74,7 +74,9 @@ internal static class WildSetsProof
     /// <summary>A proof of a card held back from the manifest because Standard uses it (hold rule, #87/#141): never registered, run only
     /// with WILD_HELD=1, prints PASS or FAIL and never throws. The card's script is at base, so a scenario that states the 37.0
     /// behaviour FAILS until the card is released with a Standard golden audit.</summary>
-    internal static void Held(string id, Action<Game, Controller, string> scenario)
+    internal static void Held(string id, string reason, Action<Game, Controller, string> scenario) { Held(id, scenario, reason); }
+
+    internal static void Held(string id, Action<Game, Controller, string> scenario, string reason = null)
     {
         if (Environment.GetEnvironmentVariable("WILD_HELD") != "1") return;
         try
@@ -93,9 +95,9 @@ internal static class WildSetsProof
                 }
                 scenario(game, game.Player1, id);
             }
-            Console.WriteLine("HELD " + id + " PASS (not registered)");
+            Console.WriteLine("HELD " + id + " PASS (not registered)" + (reason == null ? "" : "; " + reason));
         }
-        catch (Exception error) { Console.WriteLine("HELD " + id + " FAIL (script at base, not registered): " + error.Message); }
+        catch (Exception error) { Console.WriteLine("HELD " + id + " FAIL (not registered" + (reason == null ? ", script at base" : "; " + reason) + "): " + error.Message); }
     }
 
     internal static string[] ManifestIds() => Directory.GetFiles("tests/progression/batches/wild", "*.txt")

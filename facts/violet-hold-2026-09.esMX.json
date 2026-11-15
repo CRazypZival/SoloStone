@@ -3372,7 +3372,7 @@
 "GVG_054":["489a1e9a","50% de probabilidades de atacar al enemigo equivocado."],
 "GVG_055":["f2a68e43","<b>Grito de batalla:</b> otorga +2/+2 a un Meca aliado."],
 "GVG_055e":["b28c8372","+2/+2."],
-"GVG_056":["5b8ee224","<b>Grito de batalla y Estertor:</b> Coloca una Mina en el mazo de tu adversario. Cuando la robe, ¡explotará_por_10_de_daño!"],
+"GVG_056":["1a9a2ec2","<b>Grito de batalla:</b> coloca una Mina en el mazo de tu oponente. Cuando la robe, explotará por 10 de daño."],
 "GVG_056t":["8a2a44ca","<b>Se juega al robarla</b> Recibes 10 de daño."],
 "GVG_057":["90678278","Restaura #4 de Salud a tu héroe y le otorga +2 de Ataque durante este turno."],
 "GVG_057a":["f0b6c85b","+2 de Ataque en este turno."],
