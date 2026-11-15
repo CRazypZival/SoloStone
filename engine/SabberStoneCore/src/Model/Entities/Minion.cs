@@ -385,7 +385,19 @@ namespace SabberStoneCore.Model.Entities
 		{
 			bool rescued = RescuedFromDamageWound;
 			NativeTags.Remove(Actions.HealingRules.DamageWound);
-			if (rescued) base.ToBeDestroyed = false;
+			if (rescued)
+			{
+				base.ToBeDestroyed = false;
+				ClearPendingDeathCause();
+			}
+		}
+
+		internal void ClearPendingDeathCause()
+		{
+			ClearHistoryDeathCause();
+			NativeTags.Remove(Actions.DeathContextRules.PendingTracker);
+			NativeTags.Remove(Actions.DeathContextRules.FatalOrdinal);
+			NativeTags.Remove(Actions.DeathContextRules.FatalSource);
 		}
 
 		/// <summary>Forgets cached Attack and Health so the next read takes them from the current card.</summary>

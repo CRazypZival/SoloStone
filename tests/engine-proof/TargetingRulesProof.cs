@@ -22,6 +22,8 @@ internal static class TargetingRulesProof
             ("#121 mass transform skips Untouchable", MassTransformSkipsUntouchable),
             ("#138 transform resets stats", TransformResetsStats),
             ("#123 heal before death check", HealBeforeDeathCheck),
+            ("#123 rescued death attribution", RescuedDeathAttribution),
+            ("#123 rescued combat kill tracking", RescuedCombatKillTracking),
             ("#123 buff, aura, clone", BuffAndAuraRescue),
             ("#123 heal after death check", HealAfterDeathCheck),
             ("#123 real damage path, Poisonous", RealDamageAndPoison),
@@ -126,23 +128,31 @@ internal static class TargetingRulesProof
     // #120: Deathwing option 1 (Topple, destroys the highest-Health enemy minion) and Flames of Infinity skip a mortally wounded minion.
     private static void DeathwingAndFlames()
     {
-        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
-        p[HeraldRules.Progress] = 0;
-        var live = Summon(p.Opponent, "CS2_231");
-        var hero = Add(p, "CATA_190h"); PlayEntity(g, p, hero);
-        Verify(p.Choice != null, "Deathwing offers its Cataclysms");
-        var wounded = Wounded(p.Opponent);
-        B14H3LifecycleProof.Answer(g, "CATA_190t11");
-        Verify(live.Zone.Type == Zone.GRAVEYARD, "Topple destroys the live minion, not the pending one");
-
-        var g2 = QuestLifecycleProof.Fixture(); var p2 = g2.Player1;
-        var flames = Add(p2.Opponent, "END_024");
-        var victim = Summon(p2, "CS2_182");
-        var tall = Wounded(p2);
-        Cards.FromId("END_024").Power.Trigger.SingleTask.Process(g2, p2.Opponent, flames, null, null);
-        g2.DeathProcessingAndAuraUpdate();
-        Verify(victim.Zone.Type == Zone.GRAVEYARD, "Flames of Infinity hits the live minion, not the pending one");
+        var failures = new List<string>();
+        Parts(failures, "Deathwing", () => {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+            p[HeraldRules.Progress] = 0;
+            var live = Summon(p.Opponent, "CS2_231");
+            var hero = Add(p, "CATA_190h"); PlayEntity(g, p, hero);
+            Verify(p.Choice != null, "Deathwing offers its Cataclysms");
+            var tallest = Summon(p.Opponent, "CS2_200"); tallest.Destroy();
+            Verify(tallest.Health > live.Health && tallest.IsDead, "Topple pending candidate is tallest");
+            B14H3LifecycleProof.Answer(g, "CATA_190t11");
+            Verify(live.Zone.Type == Zone.GRAVEYARD, "Topple destroys the live minion, not the pending one");
+        });
+        Parts(failures, "Flames", () => {
+            var g2 = QuestLifecycleProof.Fixture(); var p2 = g2.Player1;
+            var flames = Add(p2.Opponent, "END_024");
+            var victim = Summon(p2, "CS2_182");
+            var tall = Summon(p2, "CS2_200"); tall.Destroy();
+            Verify(tall.Health > victim.Health && tall.IsDead, "Flames pending candidate is tallest");
+            Cards.FromId("END_024").Power.Trigger.SingleTask.Process(g2, p2.Opponent, flames, null, null);
+            g2.DeathProcessingAndAuraUpdate();
+            Verify(victim.Zone.Type == Zone.GRAVEYARD, "Flames of Infinity hits the live minion, not the pending one");
+        });
+        Verify(failures.Count == 0, string.Join("; ", failures));
     }
+
 
     // #121: Archmage Rafaam transforms every non-Rafaam minion except an Untouchable one.
     private static void MassTransformSkipsUntouchable()
@@ -240,6 +250,60 @@ internal static class TargetingRulesProof
         h.Destroy(); h.Damage = 6; h.TakeHeal(p.Hero, 3);
         g.DeathProcessingAndAuraUpdate();
         Verify(h.Zone.Type == Zone.GRAVEYARD, "Destroy then damage then heal: dies");
+    }
+
+    // A rescued fatal hit must not own a later death, even when the next lethal hit precedes the death check.
+    private static void RescuedDeathAttribution()
+    {
+        var failures = new List<string>();
+        foreach (bool settle in new[] { true, false })
+            Parts(failures, "settle=" + settle, () => {
+                var g = HistoryFactsProof.Fixture(); var p = g.Player1;
+                var first = Add(p, "CS2_029"); var second = Add(p.Opponent, "CS2_029");
+                var victim = Summon(p.Opponent, "CS2_182");
+                victim.TakeDamage(first, 6); victim.TakeHeal(p.Hero, 3);
+                if (settle) { g.DeathProcessingAndAuraUpdate(); End(g); }
+                victim.TakeDamage(second, victim.Health); g.DeathProcessingAndAuraUpdate();
+                var death = g.HistoryFacts.Query.Deaths().Single(f => f.EntityId == victim.Id);
+                var hit = g.HistoryFacts.Query.Damage().Single(f => f.VictimId == victim.Id && f.SourceId == second.Id);
+                Verify(death.SourceId == second.Id && death.SourceControllerId == p.Opponent.Id
+                    && death.Cause == HistoryDeathCause.SpellOrEffect && death.FatalDamageSequence == hit.Sequence,
+                    $"rescued death credits new source {second.Id}, got {death.SourceId} (settle={settle})");
+            });
+        Verify(failures.Count == 0, string.Join("; ", failures));
+    }
+
+    private static void RescuedCombatKillTracking()
+    {
+        var failures = new List<string>();
+        foreach (bool weapon in new[] { true, false })
+            foreach (bool settle in new[] { true, false })
+                Parts(failures, $"weapon={weapon} settle={settle}", () => {
+                    var g = HistoryFactsProof.Fixture(); var p = g.Player1;
+                    IPlayable tracker; ICharacter attacker;
+                    if (weapon) { Play(g, p, "CORE_RLK_086"); tracker = p.Hero.Weapon; attacker = p.Hero; }
+                    else { var ursoc = Summon(p, "EDR_819"); ursoc.IsAttacking = true; tracker = ursoc; attacker = ursoc; }
+                    var victim = Summon(p.Opponent, "CS2_182");
+                    victim[DeathContextRules.CaptureDeath] = 1;
+                    victim.TakeDamage(attacker, 6, combat: true);
+                    Verify(victim[DeathContextRules.PendingTracker] == tracker.Id && victim[DeathContextRules.FatalSource] == attacker.Id,
+                        "fatal combat hit records tracker and source");
+                    victim.TakeHeal(p.Hero, 3);
+                    if (settle)
+                    {
+                        g.DeathProcessingAndAuraUpdate();
+                        Verify(new[] { DeathContextRules.PendingTracker, DeathContextRules.FatalOrdinal, DeathContextRules.FatalSource }
+                            .All(tag => !victim.NativeTags.ContainsKey(tag)), "rescue clears all fatal tracker tags");
+                    }
+                    victim.TakeDamage(p.Opponent.Hero, victim.Health); g.DeathProcessingAndAuraUpdate();
+                    Verify(PayloadRules.Entries(tracker, DeathContextRules.KillKey).Length == 0,
+                        "rescued victim must not enter combat kill payload");
+                    if (weapon) p.Hero.Weapon.Durability = 0;
+                    else ((Minion)tracker).Destroy();
+                    g.DeathProcessingAndAuraUpdate();
+                    Verify(!p.BoardZone.Any(m => m.Card.Id == victim.Card.Id), "tracker Deathrattle does not summon rescued victim");
+                });
+        Verify(failures.Count == 0, string.Join("; ", failures));
     }
 
     // #123: other ways to lift Health above 0 before the death check.

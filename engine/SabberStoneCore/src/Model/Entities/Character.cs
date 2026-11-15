@@ -456,6 +456,8 @@ namespace SabberStoneCore.Model.Entities
             int healthBefore = Health;
             bool fatalCandidate = !ToBeDestroyed && Health > 0;
             bool woundMarked = minion != null && NativeTags.ContainsKey(Actions.HealingRules.DamageWound);
+            // A rescue may be followed by another hit before the death check settles the old wound.
+            if (woundMarked && fatalCandidate) minion.ClearPendingDeathCause();
             var poisonSource = minion != null && amount > 0 && (!ToBeDestroyed || woundMarked)
                 ? PoisonousDamageSource(source, combat) : null;
             if (!healthReplaced)
