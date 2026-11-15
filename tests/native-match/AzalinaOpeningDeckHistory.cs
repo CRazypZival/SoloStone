@@ -3,43 +3,54 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using PegasusGame;
+using SabberStoneCore.Actions;
 using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 using EngineZone = SabberStoneCore.Enums.Zone;
 
 internal static partial class Program
 {
-    // Azalina Soulsever adds 20 copies of the opponent's cards to its owner's starting deck before the opening draw. They were
-    // created outside any zone and then added to the deck, so each went out as a FULL_ENTITY with its card id and ZONE=INVALID.
-    // The client drew a copy dealt into the opening hand face up at the deck, half off the right edge of the screen, during the
-    // VS intro (Steam Deck playtest 2026-11-15). Every copy must look like any other starting deck card: an anonymous DECK
-    // FULL_ENTITY, revealed only by the SHOW_ENTITY that moves it into the opening hand.
+    // Deckbuilding cards add starting deck cards before the opening draw: Azalina Soulsever 20 copies of the opponent's cards,
+    // Beatrix (Pure Paladin NPC) 10 copies of her sideboard pick. Azalina's copies were created outside any zone, so a copy went
+    // out as a FULL_ENTITY with its card id, and every such card was created inside the opening TRIGGER block, after the game.
+    // The client placed it at the deck zone's transform, so a copy dealt into the opening hand showed face up half off the right
+    // edge of the screen during the VS intro (Steam Deck playtest 2026-11-15). Every such card must look like an original deck
+    // card: an anonymous DECK FULL_ENTITY before the opening block, revealed only by the SHOW_ENTITY that deals it into a hand.
     [GroupProof("azalina-opening-deck", ProofKind.Native)]
     private static void AzalinaOpeningDeckHistory()
     {
         var own = new[] { "JAIL_430" }.Concat(Enumerable.Repeat("CS2_231", 19)).Select(Cards.FromId).ToList();
-        var bot = Enumerable.Repeat("CS2_182", 15).Concat(Enumerable.Repeat("CS2_120", 15)).ToArray();
-        int handCopies = 0, deckCopies = 0;
+        var bot = LocalDecks.Get("npc-pure-paladin");
+        Check(bot != null && bot.CardIds.Contains(DeckbuildingRules.Beatrix), "fixture opponent must be the Beatrix Pure Paladin deck");
+        int handCopies = 0, deckCopies = 0, beatrixCopies = 0;
         foreach (int seat in new[] { 1, 2 })
         for (int seed = 1; seed <= 6; seed++)
         {
             var capture = new Capture();
             var match = new NativeMatch(capture.Send, Cards.FromId("HERO_09"), own, seed) { StartingPlayer = seat };
-            typeof(NativeMatch).GetField("opponentDeck", BindingFlags.Instance | BindingFlags.NonPublic)
-                .SetValue(match, new LocalDeck("Azalina fixture opponent", "HERO_04", bot));
+            typeof(NativeMatch).GetField("opponentDeck", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(match, bot);
             match.Start();
             var game = match.Game;
+            string run = " (seed " + seed + ", seat " + seat + ")";
+            // Everything sent up to and including the human mulligan choice; the first packet holds the game and the opening block.
+            var opening = ((PowerHistory)capture.Packets.First(p => p.Id == 19).Message).List;
+            int block = opening.FindIndex(r => r.HasPowerStart);
+            Check(block > 0 && opening.Take(block).Any(r => r.HasCreateGame), "first packet must open with the game, then a block" + run);
+            var rows = capture.Packets.Where(p => p.Id == 19).SelectMany(p => ((PowerHistory)p.Message).List).ToList();
+            var late = opening.Skip(block).Where(r => r.HasFullEntity && TagValue(r.FullEntity.Tags, GameTag.ZONE) == (int)EngineZone.DECK)
+                .Select(r => r.FullEntity.Entity).ToArray();
+            Check(late.Length == 0, "starting deck cards created inside the opening block: " + string.Join(",", late) + run);
+
             int azalina = game.IdEntityDic.Values.Single(e => e.Controller == game.Player1 && e.Card.Id == "JAIL_430").Id;
             var copies = game.IdEntityDic.Values.Where(e => e.Controller == game.Player1 && e.Id != azalina
                 && e[GameTag.CREATOR] == azalina).ToArray();
-            Check(copies.Length == 20, "Azalina must add 20 copies, got " + copies.Length + " (seed " + seed + ", seat " + seat + ")");
-            // Everything sent up to and including the human mulligan choice.
-            var rows = capture.Packets.Where(p => p.Id == 19).SelectMany(p => ((PowerHistory)p.Message).List).ToList();
+            Check(copies.Length == 20, "Azalina must add 20 copies, got " + copies.Length + run);
             foreach (var copy in copies)
             {
-                string where = copy.Card.Id + "#" + copy.Id + " seed " + seed + " seat " + seat;
+                string where = copy.Card.Id + "#" + copy.Id + run;
                 var fulls = rows.Where(r => r.HasFullEntity && r.FullEntity.Entity == copy.Id).ToArray();
-                Check(fulls.Length == 1, "copy must be created once: " + where);
+                Check(fulls.Length == 1 && opening.IndexOf(fulls[0]) is int index && index >= 0 && index < block,
+                    "copy must be created once, before the opening block: " + where);
                 Check(string.IsNullOrEmpty(fulls[0].FullEntity.Name), "copy FULL_ENTITY names its card: " + where);
                 Check(TagValue(fulls[0].FullEntity.Tags, GameTag.ZONE) == (int)EngineZone.DECK,
                     "copy FULL_ENTITY is not created in DECK (zone " + TagValue(fulls[0].FullEntity.Tags, GameTag.ZONE) + "): " + where);
@@ -58,9 +69,20 @@ internal static partial class Program
                     Check(copy.Zone.Type == EngineZone.DECK && shows.Length == 0, "deck copy revealed in the opening: " + where);
                 }
             }
+            int beatrix = game.IdEntityDic.Values.Single(e => e.Controller == game.Player2 && e.Card.Id == DeckbuildingRules.Beatrix).Id;
+            var sideboard = game.IdEntityDic.Values.Where(e => e.Controller == game.Player2 && e[GameTag.CREATOR] == beatrix
+                && (e.Zone.Type == EngineZone.DECK || e.Zone.Type == EngineZone.HAND)).ToArray();
+            Check(sideboard.Length == 10, "Beatrix must add 10 copies, got " + sideboard.Length + run);
+            foreach (var copy in sideboard)
+            {
+                beatrixCopies++;
+                Check(!rows.Any(r => r.HasFullEntity && r.FullEntity.Entity == copy.Id && !string.IsNullOrEmpty(r.FullEntity.Name))
+                    && !rows.Any(r => r.HasShowEntity && r.ShowEntity.Entity == copy.Id && !string.IsNullOrEmpty(r.ShowEntity.Name)),
+                    "NPC Beatrix copy identity sent to the human: " + copy.Card.Id + "#" + copy.Id + run);
+            }
         }
         Check(handCopies > 0 && deckCopies > 0, "fixture must deal copies into the opening hand and keep others in the deck");
         Console.WriteLine("PASS azalina opening deck: " + handCopies + " opening-hand copies revealed once into HAND, "
-            + deckCopies + " deck copies anonymous");
+            + deckCopies + " deck copies and " + beatrixCopies + " NPC Beatrix copies anonymous, all created with the game");
     }
 }
