@@ -24,9 +24,11 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 //       unchanged. Excludes heroAttack=npc with attackLethal=1 (that wounds the same hero). Human side only; capture/live-check staging for heal cards.)
 //   humanBoardDamage=N   (1..999: every minion humanBoard summoned takes N damage but keeps at least 1 Health, so none dies; locations
 //       are unaffected. Needs humanBoard; applied after humanBoardStats, so the clamp uses the staged Health.)
-//   humanHeroPower=CARDID   (a constructed HERO_POWER card (not Battlegrounds, Mercenaries, Tavern Brawl, tutorial or mission ones): after the boards are placed the human hero's hero power is replaced by it, through the
-//       engine's ReplaceHeroPower task, the path heroPowerUpgrade and hero cards use, so the native client sees an ordinary hero power
-//       swap. Human side only; capture/live-check staging for hero-power effects. Give mana with humanMana/humanManaRaw.)
+//   humanHeroPower=CARDID   (any HERO_POWER card outside the Battlegrounds, Mercenaries, Tavern Brawl, tutorial and mission sets; the
+//       filter is by set only, so adventure/boss and cheat/debug powers also pass. After the boards are placed the human hero's hero
+//       power is replaced by it, through the engine's ReplaceHeroPower task, the path heroPowerUpgrade and hero cards use, so the native
+//       client sees an ordinary hero power swap. Human side only; capture/live-check staging for hero-power effects. Give mana with
+//       humanMana/humanManaRaw.)
 //   npcSummonStats=CARDID,ATK,HEALTH   (for the rest of this match every minion with that card id the NPC side summons gets those
 //       base stats, Attack 0..9999 and Health 1..9999: a game-local AfterSummon handler, never a card definition. Capture-only.)
 //   humanHandMods=CARDID,COST,ATK,HEALTH,PREMIUM,...   (groups of five; '-' = unchanged, spells use -,- for attack and health.
