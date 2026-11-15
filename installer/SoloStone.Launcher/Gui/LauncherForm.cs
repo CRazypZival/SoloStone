@@ -31,6 +31,7 @@ namespace SoloStone
             firewall = Ui.Button("launcher.firewall", Texts.FixFirewall), uninstall = Ui.Button("launcher.uninstall", Texts.Uninstall);
         readonly System.Windows.Forms.Timer retryTimer = new System.Windows.Forms.Timer { Interval = 2000 };
         readonly CancellationTokenSource skipUpdate = new CancellationTokenSource();
+        CancellationTokenSource applying = new CancellationTokenSource(); // one per install, so Skip update can stop a slow download
         bool updating, confirmingUninstall, retrying;
         internal string UninstallerPath;
         internal bool DeleteSavesChosen;
@@ -89,19 +90,21 @@ namespace SoloStone
         }
         void Wire() {
             accept.CheckedChanged += (s, e) => { if (!updating) { model.ConfirmWarning(accept.Checked); Render(); } };
-            skip.Click += (s, e) => { skipUpdate.Cancel(); skip.Enabled = false; };
+            skip.Click += (s, e) => { skipUpdate.Cancel(); applying.Cancel(); skip.Enabled = false; };
             installUpdate.Click += (s, e) => {
                 if (!model.CanConfirmUpdate) return;
                 model.Busy("Installing the update…"); Render();
-                Background(() => runner.ConfirmUpdate(CancellationToken.None));
+                applying = new CancellationTokenSource(); var token = applying.Token;
+                Background(() => runner.ConfirmUpdate(token));
             };
             updateNow.Click += (s, e) => {
                 if (!model.CanOffer) return;
                 model.Busy("Installing the update…"); Render();
-                Background(() => runner.UpdateNow(CancellationToken.None));
+                applying = new CancellationTokenSource(); var token = applying.Token;
+                Background(() => runner.UpdateNow(token));
             };
-            later.Click += (s, e) => { if (model.CanOffer) Background(() => runner.Later()); };
-            skipVersion.Click += (s, e) => { if (model.CanSkipVersion) Background(() => runner.SkipVersion()); };
+            later.Click += (s, e) => { if (model.CanOffer) { runner.Later(); } };
+            skipVersion.Click += (s, e) => { if (model.CanSkipVersion) { model.Busy("Saving your choice…"); Render(); Background(() => runner.SkipVersion()); } };
             play.Click += (s, e) => Play();
             rollback.Click += (s, e) => { if (model.CanRollback) { model.Busy("Rolling back…"); Render(); Background(() => runner.RollBack()); } };
             restore.Click += (s, e) => { if (model.CanRestoreBackup) { string id = model.BackupId; model.Busy("Restoring your saves…"); Render(); Background(() => { runner.RestoreBackup(id); }); } };
@@ -155,7 +158,7 @@ namespace SoloStone
                 update.Visible = model.UpdateText.Length != 0; update.SetText(model.UpdateText);
                 bar.Visible = model.UpdateBusy;
                 updateButtons.Visible = model.CanSkip || model.CanConfirmUpdate || model.CanOffer;
-                skip.Visible = model.UpdateBusy; skip.Enabled = model.CanSkip && !skipUpdate.IsCancellationRequested;
+                skip.Visible = model.UpdateBusy; skip.Enabled = model.CanSkip && (model.Update == UpdateUi.Applying ? !applying.IsCancellationRequested : !skipUpdate.IsCancellationRequested);
                 updateNow.Visible = model.CanOffer; updateNow.Enabled = model.CanOffer;
                 later.Visible = model.CanOffer; later.Enabled = model.CanOffer;
                 skipVersion.Visible = model.CanOffer; skipVersion.Enabled = model.CanSkipVersion;
@@ -175,7 +178,7 @@ namespace SoloStone
             stack.PerformLayout();
         }
         protected override void Dispose(bool disposing) {
-            if (disposing) skipUpdate.Dispose();
+            if (disposing) { skipUpdate.Dispose(); applying.Dispose(); }
             base.Dispose(disposing);
         }
     }

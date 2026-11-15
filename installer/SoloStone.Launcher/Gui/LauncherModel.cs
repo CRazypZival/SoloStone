@@ -15,7 +15,7 @@ namespace SoloStone
         bool AfterHelper { get; } // A helper opened this launcher, so its note is news, and the update it reports on must not start again here.
         StatusReport Status();                                           // reads only, no network
         UpdateStatus Check(CancellationToken cancel);                    // the only network use
-        UpdateResult Apply(bool acceptWarning, CancellationToken cancel);
+        UpdateResult Apply(bool acceptWarning, CancellationToken cancel, string offeredVersion); // offeredVersion: install only this one
         void Restart();                                                  // start Root\app\SoloStone.exe again and exit this process
         int Launch(bool acceptWarning, Action<string> progress);         // no network from here on
         RollbackResult Rollback();
@@ -52,7 +52,7 @@ namespace SoloStone
         public bool CanPlay => Idle && Installed && Kind != VerdictKind.Block && (Kind != VerdictKind.Warning || WarningConfirmed) && !UpdateBusy;
         public bool ShowWarning => Installed && Kind == VerdictKind.Warning;
         public bool CanConfirmWarning => ShowWarning && Idle;
-        public bool CanSkip => Phase == LauncherPhase.Starting && UpdateBusy;
+        public bool CanSkip => (Phase == LauncherPhase.Starting && UpdateBusy) || Update == UpdateUi.Applying;
         public bool CanOffer => Idle && Update == UpdateUi.Offered;
         public bool CanSkipVersion => CanOffer && !string.IsNullOrEmpty(OfferedVersion);
         public bool CanConfirmUpdate => Idle && Update == UpdateUi.NeedsConfirmation && PendingUpdate != null;
@@ -100,14 +100,15 @@ namespace SoloStone
             UpdateText = "SoloStone " + status.Latest?.Version + " is available, but you skipped it.";
         }
         public void UpdateLater() { Update = UpdateUi.Declined; OfferedVersion = null; UpdateText = "No update this time. SoloStone will ask again next time."; }
-        public void VersionSkipped(string version) { Update = UpdateUi.Declined; OfferedVersion = null; UpdateText = "Skipped SoloStone " + version + ". SoloStone will ask again when a newer version is out."; }
-        public void UpdateApplying() { Update = UpdateUi.Applying; UpdateText = "Downloading and checking the update…"; }
+        public void VersionSkipped(string version) { Notice = ""; NoticeIsProblem = false; Update = UpdateUi.Declined; OfferedVersion = null; UpdateText = "Skipped SoloStone " + version + ". SoloStone will ask again when a newer version is out."; }
+        public void UpdateApplying() { Notice = ""; NoticeIsProblem = false; Update = UpdateUi.Applying; UpdateText = "Downloading and checking the update…"; }
         public void UpdateApplied(UpdateResult result) {
             UpdateText = result.Message ?? "";
             switch (result.Outcome) {
                 case UpdateOutcome.Swapped: Update = UpdateUi.Swapped; UpdateText = result.Message; break;
                 case UpdateOutcome.NeedsConfirmation: Update = UpdateUi.NeedsConfirmation; PendingUpdate = result; break;
                 case UpdateOutcome.Held: Update = UpdateUi.Held; break;
+                case UpdateOutcome.NewerOffered: Update = UpdateUi.Offered; OfferedVersion = result.Version; break;
                 case UpdateOutcome.Nothing: Update = UpdateUi.UpToDate; break;
                 default: Update = UpdateUi.Failed; break;
             }
@@ -222,7 +223,7 @@ namespace SoloStone
             return restart;
         }
         // Check only. A newer release is offered, not installed: the player picks Update now, Later or Skip this version.
-        bool CheckAndApply(bool acceptWarning, CancellationToken cancel, bool checkFirst) {
+        bool CheckAndApply(bool acceptWarning, CancellationToken cancel, bool checkFirst, string offered = null) {
             bool checking = checkFirst;
             try {
                 if (checkFirst) {
@@ -237,7 +238,7 @@ namespace SoloStone
                 }
                 checking = false;
                 post(model.UpdateApplying);
-                var result = ops.Apply(acceptWarning, cancel);
+                var result = ops.Apply(acceptWarning, cancel, offered);
                 post(() => model.UpdateApplied(result));
                 return result.Outcome == UpdateOutcome.Swapped;
             }
@@ -245,13 +246,13 @@ namespace SoloStone
             catch (Exception e) when (Messages.Expected(e)) { string message = Messages.Friendly(e); post(() => { if (checking) model.UpdateChecked(new UpdateStatus { State = UpdateState.Failed, Message = "Couldn't check for updates." }); else model.UpdateFailed(message); }); return false; }
         }
         // After the player confirmed a Warning verdict on the new release.
-        public bool ConfirmUpdate(CancellationToken skip) => ApplyChosen(true, skip);
+        public bool ConfirmUpdate(CancellationToken skip) => ApplyChosen(true, skip, model.PendingUpdate?.Version);
         // After the player chose Update now. The warning path, if any, asks again on its own.
-        public bool UpdateNow(CancellationToken skip) => ApplyChosen(false, skip);
-        bool ApplyChosen(bool acceptWarning, CancellationToken skip) {
+        public bool UpdateNow(CancellationToken skip) => ApplyChosen(false, skip, model.OfferedVersion);
+        bool ApplyChosen(bool acceptWarning, CancellationToken skip, string offered) {
             bool restart;
             using (ops.Lease()) {
-                restart = CheckAndApply(acceptWarning, skip, false);
+                restart = CheckAndApply(acceptWarning, skip, false, offered);
                 if (!restart) { try { var report = ops.Status(); post(() => model.ApplyReport(report)); } catch (Exception e) when (Messages.Expected(e)) { } post(model.Ready); }
             }
             if (restart) Restart();
@@ -264,7 +265,7 @@ namespace SoloStone
             if (string.IsNullOrEmpty(version)) return;
             try {
                 using (ops.Lease()) { ops.SkipVersion(version); }
-                post(() => model.VersionSkipped(version));
+                post(() => { model.VersionSkipped(version); model.Ready(); });
             }
             catch (Exception e) when (Messages.Expected(e)) { string message = Messages.Friendly(e); post(() => model.Failure(message)); }
         }

@@ -59,13 +59,18 @@ sealed class FakeLauncherOps : ILauncherOps
     public int LaunchCode; public Exception LaunchFails, CheckFails, FirewallFails; public bool? AcceptedWarning; public bool? AppliedAccepting;
     public int OpenLeases;
     sealed class Lease : IDisposable { readonly FakeLauncherOps o; public Lease(FakeLauncherOps o) { this.o = o; o.OpenLeases++; o.Calls.Add("Lease"); } public void Dispose() { o.OpenLeases--; o.Calls.Add("Unlease"); } }
-    IDisposable ILauncherOps.Lease() => new Lease(this);
+    public Exception LeaseFails, SkipFails; public string LatestNow, AppliedOffered;
+    IDisposable ILauncherOps.Lease() { if (LeaseFails != null) throw LeaseFails; return new Lease(this); }
     public Exception ResumeFails;
     public bool AfterHelper { get; set; }
     public ResumeOutcome Resume() { Calls.Add("Resume"); if (ResumeFails != null) throw ResumeFails; return Resumed; }
     public StatusReport Status() { Calls.Add("Status"); return Report; }
     public UpdateStatus Check(CancellationToken cancel) { Calls.Add("Check"); if (CheckFails != null) throw CheckFails; cancel.ThrowIfCancellationRequested(); return Checked; }
-    public UpdateResult Apply(bool acceptWarning, CancellationToken cancel) { Calls.Add("Apply"); AppliedAccepting = acceptWarning; cancel.ThrowIfCancellationRequested(); return Applied; }
+    public UpdateResult Apply(bool acceptWarning, CancellationToken cancel, string offeredVersion) {
+        Calls.Add("Apply"); AppliedAccepting = acceptWarning; AppliedOffered = offeredVersion; cancel.ThrowIfCancellationRequested();
+        if (LatestNow != null && offeredVersion != null && LatestNow != offeredVersion) return new UpdateResult { Outcome = UpdateOutcome.NewerOffered, Version = LatestNow, Message = "SoloStone " + LatestNow + " is available." };
+        return Applied;
+    }
     public void Restart() { Calls.Add("Restart:leases=" + OpenLeases); }
     public int Launch(bool acceptWarning, Action<string> progress) {
         Calls.Add("Launch"); AcceptedWarning = acceptWarning;
@@ -78,7 +83,7 @@ sealed class FakeLauncherOps : ILauncherOps
     public void SaveUpdatesSetting(bool on) { Calls.Add("SaveUpdatesSetting:" + on); }
     public string Skipped;
     public string SkippedVersion() { Calls.Add("SkippedVersion"); return Skipped; }
-    public void SkipVersion(string version) { Calls.Add("SkipVersion:" + version); Skipped = version; }
+    public void SkipVersion(string version) { Calls.Add("SkipVersion:" + version); if (SkipFails != null) throw SkipFails; Skipped = version; }
     public void RepairFirewall() { Calls.Add("RepairFirewall"); if (FirewallFails != null) { var e = FirewallFails; FirewallFails = null; throw e; } }
 }
 
@@ -361,6 +366,36 @@ static partial class Program
         ops = new FakeLauncherOps { Checked = avail, Applied = new UpdateResult { Outcome = UpdateOutcome.Swapped, Message = "installed" } };
         m = Started(ops); runner = new LauncherRunner(m, ops, Inline);
         Check(runner.UpdateNow(CancellationToken.None) && ops.Calls.Count(c => c == "Apply") == 1 && m.Update == UpdateUi.Swapped, "Update now still swaps and restarts");
+        // Fix round: notice, cancel, race, newer release, failing save.
+        ops = new FakeLauncherOps { Checked = avail, Applied = new UpdateResult { Outcome = UpdateOutcome.NeedsConfirmation, Version = "0.3.0", Message = "careful" } };
+        m = Started(ops); runner = new LauncherRunner(m, ops, Inline);
+        m.Busy("Installing the update…"); Check(m.Notice != "", "the form shows a busy notice");
+        runner.UpdateNow(CancellationToken.None);
+        Check(m.Notice == "" && m.Update == UpdateUi.NeedsConfirmation && m.Phase == LauncherPhase.Ready && ops.AppliedOffered == "0.3.0", "no stale 'Installing' notice, and the offered version is passed");
+        ops = new FakeLauncherOps { Checked = avail };
+        m = Started(ops); runner = new LauncherRunner(m, ops, Inline);
+        var cancel = new CancellationTokenSource(); cancel.Cancel();
+        m.Busy("Installing the update…");
+        runner.UpdateNow(cancel.Token);
+        Check(m.Update == UpdateUi.Skipped && m.CanPlay && m.Phase == LauncherPhase.Ready && m.Notice == "" && ops.OpenLeases == 0, "cancelling Update now ends it and Play is on");
+        var applying = new LauncherModel(); applying.BeginStart(); applying.ApplyReport(Report()); applying.Ready(); applying.UpdateApplying();
+        Check(applying.CanSkip && !applying.CanPlay, "while installing, Skip update is live");
+        ops = new FakeLauncherOps { Checked = avail, LatestNow = "0.3.5" };
+        m = Started(ops); runner = new LauncherRunner(m, ops, Inline);
+        Check(!runner.UpdateNow(CancellationToken.None) && m.Update == UpdateUi.Offered && m.OfferedVersion == "0.3.5" && m.CanOffer && m.UpdateText.Contains("0.3.5"), "a newer release than the offered one is re-offered, not installed");
+        m = Started(ops = new FakeLauncherOps { Checked = avail }); runner = new LauncherRunner(m, ops, Inline);
+        m.Busy("Saving your choice…"); runner.SkipVersion();
+        Check(m.Phase == LauncherPhase.Ready && m.Notice == "" && m.Update == UpdateUi.Declined, "Skip this version settles the busy state");
+        ops = new FakeLauncherOps { Checked = avail, SkipFails = new IOException("disk full") };
+        m = Started(ops); runner = new LauncherRunner(m, ops, Inline);
+        m.Busy("Saving your choice…"); runner.SkipVersion();
+        Check(ops.Skipped == null && m.NoticeIsProblem && m.Phase == LauncherPhase.Ready && m.Update == UpdateUi.Offered && ops.OpenLeases == 0, "a failed save is reported, the offer stays");
+        ops = new FakeLauncherOps { Checked = avail };
+        m = Started(ops); runner = new LauncherRunner(m, ops, Inline); ops.LeaseFails = new IOException("busy");
+        m.Busy("Saving your choice…"); runner.SkipVersion();
+        Check(ops.Skipped == null && m.NoticeIsProblem && m.Phase == LauncherPhase.Ready && m.Update == UpdateUi.Offered, "a lease failure is reported, nothing saved");
+        string settingsSource = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "launcher-source", "Program.cs")) + File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "launcher-source", "Gui", "WindowsOps.cs"));
+        Check(!settingsSource.Contains("new Settings") && settingsSource.Contains("Settings.SaveChecks(o.Root") && settingsSource.Contains("Settings.SaveChecks(root, checkForUpdates)") && settingsSource.Contains("Settings.SaveChecks(root, on)"), "the CLI settings command, the wizard and the launcher switch all keep the skipped version");
         // Held, failed, off, not configured, up to date.
         foreach (var (state, ui) in new[] { (UpdateState.Held, UpdateUi.Held), (UpdateState.Failed, UpdateUi.Failed), (UpdateState.Off, UpdateUi.Off), (UpdateState.NotConfigured, UpdateUi.NotConfigured), (UpdateState.UpToDate, UpdateUi.UpToDate), (UpdateState.Busy, UpdateUi.Failed) }) {
             ops = new FakeLauncherOps { Checked = new UpdateStatus { State = state, Message = "message for " + state } };
@@ -407,7 +442,8 @@ static partial class Program
         m = Started(new FakeLauncherOps { Report = Report(AllowVerdict()) }, preAccepted: true); Check(!m.WarningConfirmed, "an Allow client never holds a stale tick");
         // Play and all network finished.
         ops = new FakeLauncherOps { Checked = new UpdateStatus { State = UpdateState.Available }, Applied = new UpdateResult { Outcome = UpdateOutcome.Nothing, Message = "" } };
-        m = new LauncherModel(); runner = new LauncherRunner(m, ops, Inline); runner.Start(CancellationToken.None);
+        m = new LauncherModel(); runner = new LauncherRunner(m, ops, Inline); runner.Start(CancellationToken.None); runner.UpdateNow(CancellationToken.None);
+        Check(ops.Calls.Contains("Apply") && ops.Calls.Contains("Check"), "the update calls ran before Play");
         int before = ops.Calls.Count; runner.Play(false);
         Check(ops.Calls.Skip(before).All(c => c == "Lease" || c == "Launch" || c == "Unlease" || c == "Status") && ops.Calls.IndexOf("Launch") > ops.Calls.LastIndexOf("Apply") && ops.Calls.IndexOf("Launch") > ops.Calls.LastIndexOf("Check"), "every update call finishes before the launch");
         var starting = new LauncherModel(); starting.BeginStart();
