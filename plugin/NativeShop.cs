@@ -1241,6 +1241,10 @@ internal static class NativeShop
             if (transaction != null || confirmation != null) { Trace("click ignored: purchase pending"); return false; }
             if (kitQuestion != null) { Trace("click ignored: deck kit question open"); return false; }
             if (!NativeShopPurchase.QuantityAllowed(local, __3)) { Refuse("purchase click quantity " + __3 + " for " + local.Id); return false; }
+            // Packs are the one repeatable kind and are bought from their page, which stays open under the purchase window:
+            // the press that dismisses the window must not order the same batch again (the tile cooldown, on the page).
+            if (local.Kind == "Pack" && NativeShopClicks.PackCoolingDown(Time.realtimeSinceStartup, purchaseWindowAt))
+            { Trace("pack buy ignored: purchase window cooldown"); return false; }
             // Every route, kind and quantity: the native gold-deficit stop is silent, so a short balance is said here.
             string blocker = local.Kind == "Deck" ? Profile.DeckPurchaseBlocker(local.RecipeId) : null;
             if (blocker != null) { ShowPurchaseFailure("solostone-purchase-refused", blocker); return false; }
@@ -2320,8 +2324,6 @@ internal static class NativeShop
 #endif
 
 #if !SOLOSTONE_RELEASE
-    // Test-control only: the browser scroller's height inputs (registered items, dividers, viewport) along its scroll axis.
-#if !SOLOSTONE_RELEASE
     // Test control (shop-pack-buy): the open local page's selection, its native quantity stepper and the price the Buy
     // button draws. Read only; null while no product page is open.
     internal static MiniJSON.JsonNode AmountDiagnostics()
@@ -2358,7 +2360,7 @@ internal static class NativeShop
         }
         catch (Exception error) { return new MiniJSON.JsonNode { { "error", (error.InnerException ?? error).Message } }; }
     }
-#endif
+    // Test-control only: the browser scroller's height inputs (registered items, dividers, viewport) along its scroll axis.
     internal static MiniJSON.JsonNode ScrollDiagnostics()
     {
         try
@@ -3177,7 +3179,10 @@ internal static class NativeShop
     private const string BuyButtonSuffix = "1 Option/ProductBuyButton/ProductBuyButton/Container";
     // #57 live 2026-10-28: a price on sale (kit decks) uses the same single-price widget under "Discount Option".
     private const string DiscountBuyButtonSuffix = "Discount Option/ProductBuyButton/ProductBuyButton/Container";
-    internal static bool IsSingleBuyPath(Func<string, bool> matches) => matches(BuyButtonSuffix) || matches(DiscountBuyButtonSuffix);
+    // Live 2026-11-15: a pack page with the quantity stepper draws its gold price in the "Arrow Adjust Option" widget.
+    private const string StepperBuyButtonSuffix = "Arrow Adjust Option/ProductBuyButton/ProductBuyButton/Container";
+    internal static bool IsSingleBuyPath(Func<string, bool> matches) =>
+        matches(BuyButtonSuffix) || matches(DiscountBuyButtonSuffix) || matches(StepperBuyButtonSuffix);
     private static readonly NativeShopControlCache controlCache = new NativeShopControlCache();
     private static bool ControlContext(Shop shop, out ProductPage currentPage, out bool localPage)
     {

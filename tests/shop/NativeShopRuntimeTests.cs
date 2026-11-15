@@ -1108,7 +1108,7 @@ partial class NativeBundleHarness
                 "failed save: no packs, no debit, no receipt");
             auth.Response(false, transaction);
             check(transaction == null && auth == null, "failure acknowledged");
-            // Success: one receipt grants 10 packs and takes 1000 gold; the native order and success data carry the quantity.
+            // Success: one receipt grants 10 packs and takes 1000 gold; the native pending order carries the quantity.
             Time.realtimeSinceStartup += 1;
             Click(pack, 10);
             var tx = transaction;
@@ -1122,6 +1122,16 @@ partial class NativeBundleHarness
             auth.Response(true, tx);
             int after = 1; PackBuyCap(model, ref after);
             check(transaction == null && after == 1, "acknowledged; the cap follows the new balance");
+            // The pack page stays open under the purchase window: the press that dismisses it must not order the batch again.
+            float acked = Time.realtimeSinceStartup; int startedNow = manager.Started, popupsNow = dialogs.Shown.Count;
+            Time.realtimeSinceStartup = acked + 0.2f;
+            manager.PurchaseProduct(model, model.Prices[0], 10);
+            check(manager.Started == startedNow && transaction == null && dialogs.Shown.Count == popupsNow && profile.PurchaseSequence == receipts + 1,
+                "page Buy within 0.5 s of the window closing: ignored, no order or popup");
+            Time.realtimeSinceStartup = acked + 0.6f;
+            manager.PurchaseProduct(model, model.Prices[0], 1);
+            check(manager.Started == startedNow && dialogs.Shown.Count == popupsNow + 1 && profile.PurchaseSequence == receipts + 1,
+                "after the cooldown the page Buy is live again (here: 50 gold short of one pack, native alert)");
             // Restart: the saved counts stand, and replaying the same request grants nothing more.
             profile.Dispose();
             profile = new LocalProfile(path);
@@ -1129,6 +1139,9 @@ partial class NativeBundleHarness
                 && profile.PackInventory.Single(row => row.PackType == pack.PackType).Count >= 10, "restart keeps 10 packs and the 1000 gold debit");
             var replay = purchases.Commit(profile, tx.ID, pmt, "XSH", 10, 1000);
             check(replay.Sequence == receipt.Sequence && profile.Gold == gold - 1000 && profile.UnopenedPacks == packs + 10, "replayed request after restart grants nothing more");
+            bool conflict = false;
+            try { purchases.Commit(profile, tx.ID, pmt, "XSH", 9, 900); } catch (InvalidOperationException) { conflict = true; }
+            check(conflict && profile.UnopenedPacks == packs + 10 && profile.PurchaseSequence == receipts + 1, "same request with another quantity is refused, nothing granted");
         }
         finally { profile.Dispose(); ServiceManager.Manager = null; RecoverUI(); }
     }
