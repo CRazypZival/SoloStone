@@ -107,6 +107,10 @@ internal static class GameplayRankBindingTests
             && ReferenceEquals(Rank(new Player(Player.Side.OPPOSING), native), native),
             "Casual match keeps the native unranked result and translators");
         profile.Pending.Mode = null;
+        NativeArena.MatchActive = true;
+        Check(!Ranked(false) && ReferenceEquals(Rank(new Player(Player.Side.FRIENDLY), native), native),
+            "Arena match keeps native unranked presentation with VS_AI transport");
+        NativeArena.MatchActive = false;
         Check(ReferenceEquals(Rank(new Player(Player.Side.INVALID), native), native),
             "unknown player side keeps native translator");
         Check(log.Infos.Any(line => line.Contains("side=FRIENDLY") && line.Contains("legend=9") && line.Contains("showOpponent=True"))
@@ -138,6 +142,7 @@ internal sealed class ManualLogSource
     internal void LogInfo(string value) => Infos.Add(value);
     internal void LogWarning(string value) => Warnings.Add(value);
 }
+internal static class NativeArena { internal static bool MatchActive; }
 internal static class GameUtils { internal static bool IsGameTypeRanked() => false; }
 internal sealed class Player
 {

@@ -78,6 +78,7 @@ internal static class NativeUiTree
         HashSet<PegUIElement> pressDisabled = null;
         if (box != null)
         {
+            Name(box.m_ArenaButton, "home.arena");
             Name(box.m_PlayButton, "home.play"); Name(box.m_OpenPacksButton, "home.packs"); Name(box.m_CollectionButton, "home.collection");
             if (NativeShop.HomeStoreReady) Name(box.m_StoreButton, "home.store");
             Name(NativeHelpUI.HomeButton, NativeHelpText.HomeId);
@@ -156,6 +157,7 @@ internal static class NativeUiTree
         // Name and walk local roots before collecting hitboxes, so reviewed collider-less buttons get fallback bounds.
         var shopControls = new List<PegUIElement>();
         var shopProxies = new List<PegUIElementProxy>();
+        NativeArena.NameControls(Name, shopControls, shopProxies);
         var packDetails = NativePackTestUi.Name(snapshot, Name, shopControls, shopProxies);
         if (NativeShop.Active)
         {
@@ -304,7 +306,7 @@ internal static class NativeUiTree
                 }
                 if (item.Id == null && collectionMode != null) item.Id = CollectionTileId(element, collectionMode.Value);
                 if (item.Id == null && element is RewardPackage) item.Id = "rewards.package";
-                if (item.Id == "rewards.done" && !doneShown) item.Enabled = false;
+                if ((item.Id == "rewards.done" || item.Id == "arena.rewards.claim") && !doneShown) item.Enabled = false;
                 Rect pixels = default;
                 if (bounds.Count == 0) item.HitBy = "noHitbox";  // listed off screen so a missing hitbox is visible
                 else Project(item, bounds, camera, out pixels, element.GetComponentInParent<PopupRoot>()?.PrimaryRenderPass);
