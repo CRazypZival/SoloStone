@@ -108,7 +108,7 @@
       "class": "MAGE",
       "cost": 1,
       "rarity": "RARE",
-      "threshold": 2,
+      "threshold": 1,
       "copies": 2
     },
     {
@@ -180,7 +180,7 @@
       "class": "MAGE",
       "cost": 3,
       "rarity": "RARE",
-      "threshold": 2,
+      "threshold": 1,
       "copies": 2
     },
     {
@@ -192,7 +192,7 @@
       "class": "MAGE",
       "cost": 3,
       "rarity": "RARE",
-      "threshold": 3,
+      "threshold": 2,
       "copies": 2
     },
     {
@@ -204,7 +204,7 @@
       "class": "MAGE",
       "cost": 3,
       "rarity": "RARE",
-      "threshold": 4,
+      "threshold": 3,
       "copies": 2
     },
     {
@@ -228,7 +228,7 @@
       "class": "MAGE",
       "cost": 6,
       "rarity": "RARE",
-      "threshold": 5,
+      "threshold": 4,
       "copies": 2
     },
     {
@@ -240,7 +240,7 @@
       "class": "MAGE",
       "cost": 7,
       "rarity": "RARE",
-      "threshold": 6,
+      "threshold": 5,
       "copies": 2
     },
     {
@@ -252,7 +252,7 @@
       "class": "MAGE",
       "cost": 7,
       "rarity": "EPIC",
-      "threshold": 7,
+      "threshold": 6,
       "copies": 2
     },
     {
@@ -264,7 +264,7 @@
       "class": "MAGE",
       "cost": 7,
       "rarity": "EPIC",
-      "threshold": 8,
+      "threshold": 7,
       "copies": 2
     },
     {
@@ -276,7 +276,7 @@
       "class": "MAGE",
       "cost": 2,
       "rarity": "LEGENDARY",
-      "threshold": 9,
+      "threshold": 8,
       "copies": 1
     },
     {
@@ -1596,7 +1596,7 @@
       "class": "SHAMAN",
       "cost": 1,
       "rarity": "RARE",
-      "threshold": 2,
+      "threshold": 1,
       "copies": 2
     },
     {
@@ -1608,7 +1608,7 @@
       "class": "SHAMAN",
       "cost": 1,
       "rarity": "RARE",
-      "threshold": 3,
+      "threshold": 2,
       "copies": 2
     },
     {
@@ -1656,7 +1656,7 @@
       "class": "SHAMAN",
       "cost": 3,
       "rarity": "RARE",
-      "threshold": 4,
+      "threshold": 3,
       "copies": 2
     },
     {
@@ -1668,7 +1668,7 @@
       "class": "SHAMAN",
       "cost": 3,
       "rarity": "EPIC",
-      "threshold": 5,
+      "threshold": 4,
       "copies": 2
     },
     {
@@ -1680,7 +1680,7 @@
       "class": "SHAMAN",
       "cost": 5,
       "rarity": "EPIC",
-      "threshold": 6,
+      "threshold": 5,
       "copies": 2
     },
     {
@@ -1692,7 +1692,7 @@
       "class": "SHAMAN",
       "cost": 5,
       "rarity": "EPIC",
-      "threshold": 7,
+      "threshold": 6,
       "copies": 2
     },
     {
@@ -1716,7 +1716,7 @@
       "class": "SHAMAN",
       "cost": 6,
       "rarity": "RARE",
-      "threshold": 8,
+      "threshold": 7,
       "copies": 2
     },
     {
@@ -1728,7 +1728,7 @@
       "class": "SHAMAN",
       "cost": 5,
       "rarity": "LEGENDARY",
-      "threshold": 9,
+      "threshold": 8,
       "copies": 1
     },
     {
