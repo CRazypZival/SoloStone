@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "seq": 1,
+  "seq": 2,
   "latest": {
-    "version": "0.1.0",
+    "version": "0.2.0",
     "saveSchema": 15,
     "asset": {
-      "name": "SoloStone-0.1.0.zip",
-      "size": 12484625,
-      "sha256": "8eb86310fecad4234aff8902bd2d77b6408b5630a7cdbf45c7ab7f2768bd5c6b"
+      "name": "SoloStone-0.2.0.zip",
+      "size": 15472527,
+      "sha256": "cd22f8d6f146cb1026cffdfb68edc09495e6d91ff7fe3bf1885f6a6b54c45eb9"
     }
   },
   "testedClients": [
