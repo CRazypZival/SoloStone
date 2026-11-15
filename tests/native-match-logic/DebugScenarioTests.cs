@@ -12,6 +12,38 @@ using EngineZone = SabberStoneCore.Enums.Zone;
 // a hidden transport entity, mana, and the central "a scenario match never settles" gate.
 internal static partial class Program
 {
+    // humanHeroPower=CARDID: parse, canonical, rejection and the applied hero power (ReplaceHeroPower, the heroPowerUpgrade path).
+    private static void DebugScenarioHumanHeroPower()
+    {
+        var staged = DebugScenario.Parse("humanHeroPower=EDR_851p\nhumanMana=5");
+        Check(staged.HumanHeroPower == "EDR_851p", "humanHeroPower parses");
+        string text = staged.Canonical();
+        Check(text == "humanHeroPower=EDR_851p\nhumanMana=5" && DebugScenario.Parse(text).Canonical() == text, "humanHeroPower round-trips: " + text);
+        Check(!DebugScenario.Parse("humanMana=5").Canonical().Contains("humanHeroPower"), "an absent key stays absent");
+        RejectsScenario("humanHeroPower=CS2_182", "a minion is not a hero power");
+        RejectsScenario("humanHeroPower=HERO_08", "a base hero is not a hero power");
+        RejectsScenario("humanHeroPower=NO_SUCH_CARD", "unknown card id");
+        RejectsScenario("humanHeroPower=TB_BaconShop_HP_011", "a Battlegrounds hero power");
+        RejectsScenario("humanHeroPower=TBA01_5", "a Tavern Brawl hero power");
+        RejectsScenario("humanHeroPower=EDR_851p,CS2_034", "a list is not an id");
+        RejectsScenario("humanHeroPower=EDR_851p\nhumanHeroPower=EDR_851p", "duplicate key");
+        RejectsScenario("humanHeroPower=EDR_851p", "no native client definition", id => id != "EDR_851p");
+        try { DebugScenario.Parse("humanHeroPower=CS2_182"); throw new Exception("minion accepted"); }
+        catch (ArgumentException error) { Check(error.Message.Contains("humanHeroPower") && error.Message.Contains("hero power"), "error names the key: " + error.Message); }
+        var game = new SabberStoneCore.Model.Game(new SabberStoneCore.Config.GameConfig { RandomSeed = 17, StartPlayer = 1, Shuffle = false, SkipMulligan = true,
+            History = true, Logging = false,
+            Player1Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(),
+            Player2Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList() });
+        game.StartGame();
+        int before = game.Player1.Hero.HeroPower.Id, enemy = game.Player2.Hero.HeroPower.Id;
+        string applied = staged.Apply(game);
+        Check(game.Player1.Hero.HeroPower.Card.Id == "EDR_851p" && game.Player1.Hero.HeroPower.Id != before,
+            "the human hero power is the staged card: " + game.Player1.Hero.HeroPower.Card.Id);
+        Check(game.Player2.Hero.HeroPower.Id == enemy, "the NPC hero power is untouched");
+        Check(game.Player1.SetasideZone.Any(e => e.Id == before), "the old hero power left for SETASIDE");
+        Check(applied.Contains("humanHeroPower=EDR_851p"), "outcome detail names it: " + applied);
+    }
+
     private static void DebugScenarioLanePaths()
     {
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

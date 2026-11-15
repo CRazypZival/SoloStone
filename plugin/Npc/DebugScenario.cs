@@ -24,6 +24,9 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 //       unchanged. Excludes heroAttack=npc with attackLethal=1 (that wounds the same hero). Human side only; capture/live-check staging for heal cards.)
 //   humanBoardDamage=N   (1..999: every minion humanBoard summoned takes N damage but keeps at least 1 Health, so none dies; locations
 //       are unaffected. Needs humanBoard; applied after humanBoardStats, so the clamp uses the staged Health.)
+//   humanHeroPower=CARDID   (a constructed HERO_POWER card (not Battlegrounds, Mercenaries, Tavern Brawl, tutorial or mission ones): after the boards are placed the human hero's hero power is replaced by it, through the
+//       engine's ReplaceHeroPower task, the path heroPowerUpgrade and hero cards use, so the native client sees an ordinary hero power
+//       swap. Human side only; capture/live-check staging for hero-power effects. Give mana with humanMana/humanManaRaw.)
 //   npcSummonStats=CARDID,ATK,HEALTH   (for the rest of this match every minion with that card id the NPC side summons gets those
 //       base stats, Attack 0..9999 and Health 1..9999: a game-local AfterSummon handler, never a card definition. Capture-only.)
 //   humanHandMods=CARDID,COST,ATK,HEALTH,PREMIUM,...   (groups of five; '-' = unchanged, spells use -,- for attack and health.
@@ -63,7 +66,7 @@ public sealed class DebugScenario
     public static Outcome LastOutcome { get; private set; }
     internal static void RecordOutcome(string status, string detail, string runId) =>
         LastOutcome = new Outcome { Status = status, Detail = detail, RunId = runId };
-    private static readonly string[] Keys = { "npcDeckTop", "humanDeckTop", "humanOpeningHand", "npcOpeningHand", "npcHand", "humanHand", "npcBoard", "humanBoard", "npcBoardStats", "humanBoardStats", "humanHeroDamage", "humanBoardDamage", "npcSummonStats", "humanHandMods", "humanHandHealth", "humanHandHealthWing", "humanHandClear", "humanManaRaw", "npcManaRaw", "npcMana", "humanMana", "humanSkin", "npcSkin", "heroAttack", "heroPower", "heroPowerUpgrade", "attackSecret", "attackArmor", "attackWeapon", "attackLethal", "humanSeat", "overdraw", "runId" };
+    private static readonly string[] Keys = { "npcDeckTop", "humanDeckTop", "humanOpeningHand", "npcOpeningHand", "npcHand", "humanHand", "npcBoard", "humanBoard", "npcBoardStats", "humanBoardStats", "humanHeroDamage", "humanBoardDamage", "humanHeroPower", "npcSummonStats", "humanHandMods", "humanHandHealth", "humanHandHealthWing", "humanHandClear", "humanManaRaw", "npcManaRaw", "npcMana", "humanMana", "humanSkin", "npcSkin", "heroAttack", "heroPower", "heroPowerUpgrade", "attackSecret", "attackArmor", "attackWeapon", "attackLethal", "humanSeat", "overdraw", "runId" };
 
     public IReadOnlyList<string> NpcDeckTop { get; private set; } = new string[0];
     public IReadOnlyList<string> HumanDeckTop { get; private set; } = new string[0];
@@ -77,6 +80,7 @@ public sealed class DebugScenario
     public string HeroAttack { get; private set; }
     public string HeroPower { get; private set; }
     public string HeroPowerUpgrade { get; private set; }
+    public string HumanHeroPower { get; private set; }   // null = not staged
     public string AttackSecret { get; private set; }
     public string AttackWeapon { get; private set; }
     public int AttackArmor { get; private set; }
@@ -195,7 +199,7 @@ public sealed class DebugScenario
             boardDamage = WoundNumber(values, "humanBoardDamage", MaxBoardDamage);
         }
         return new DebugScenario {
-            HumanHeroDamage = heroDamage, HumanBoardDamage = boardDamage,
+            HumanHeroDamage = heroDamage, HumanBoardDamage = boardDamage, HumanHeroPower = HeroPowerCard(values, "humanHeroPower", known),
             BoundRunId = boundRun, FirstPlayer = Seat(values),
             Overdraw = Choice(values, "overdraw", "human", "npc", "human-godfrey", "npc-godfrey"),
             HumanSkin = Skin(values, "humanSkin", known), NpcSkin = Skin(values, "npcSkin", known),
@@ -216,6 +220,26 @@ public sealed class DebugScenario
             NpcBoardStats = Stats(values, "npcBoardStats", "npcBoard"), HumanBoardStats = Stats(values, "humanBoardStats", "humanBoard"),
             NpcSummonStats = SummonRule(values, "npcSummonStats", known),
             NpcMana = Mana(values, "npcMana"), HumanMana = Mana(values, "humanMana") };
+    }
+
+    // A HERO_POWER card id from the card db (hero cards and base heroes are not hero powers).
+    private static string HeroPowerCard(Dictionary<string, string> values, string key, Func<string, bool> known)
+    {
+        if (!values.TryGetValue(key, out string id)) return null;
+        if (id.Length == 0 || id.Length > 64 || id.Any(c => !(char.IsLetterOrDigit(c) || c == '_' || c == '-')))
+            throw new ArgumentException(key + " has an invalid card id: '" + id + "'");
+        SabberStoneCore.Model.Card card;
+        try { card = EngineCards.FromId(id); }
+        catch (KeyNotFoundException) { card = null; }
+        if (card == null) throw new ArgumentException(key + ": unknown card id " + id);
+        if (card.Type.ToString() != "HERO_POWER") throw new ArgumentException(key + ": " + id + " is a " + card.Type + ", not a hero power.");
+        // Numeric set ids from the card db export (the engine's CardSet enum lacks Tutorial and Mercenaries): MISSIONS 5, TB 18,
+        // MERCENARIES (LETTUCE) 1586, BATTLEGROUNDS 1453, TUTORIAL 1904. The export has no Mercenaries hero power; the id stays for builds that do.
+        int set = (int)card.Set;
+        if (set == 5 || set == 18 || set == 1453 || set == 1586 || set == 1904)
+            throw new ArgumentException(key + ": " + id + " is a hero power of set " + set + " (Battlegrounds, Mercenaries, Tavern Brawl, tutorial or mission), not a constructed one.");
+        if (known != null && !known(id)) throw new ArgumentException(key + ": " + id + " has no native client definition.");
+        return id;
     }
 
     // A whole number 1..max written without leading zeros (absent = 0).
@@ -403,6 +427,7 @@ public sealed class DebugScenario
         if (HumanBoardStats != null) lines.Add("humanBoardStats=" + HumanBoardStats);
         if (HumanBoardDamage > 0) lines.Add("humanBoardDamage=" + HumanBoardDamage.ToString(CultureInfo.InvariantCulture));
         if (HumanHeroDamage > 0) lines.Add("humanHeroDamage=" + HumanHeroDamage.ToString(CultureInfo.InvariantCulture));
+        if (HumanHeroPower != null) lines.Add("humanHeroPower=" + HumanHeroPower);
         if (NpcSummonStats != null) lines.Add("npcSummonStats=" + NpcSummonStats);
         if (HumanHandMods.Count > 0) lines.Add("humanHandMods=" + string.Join(",", HumanHandMods));
         Add("humanHandHealth", HumanHandHealth); Add("humanHandHealthWing", HumanHandHealthWing);
@@ -697,6 +722,14 @@ public sealed class DebugScenario
             applied.Add("npcSummonStats=" + rule);
         }
         Mana(game.Player2, NpcMana, "npcMana"); Mana(game.Player1, HumanMana, "humanMana");
+        if (HumanHeroPower != null)
+        {
+            // Same task and history path as heroPowerUpgrade below (ReplaceHeroPower: the old power goes to SETASIDE, the new one
+            // becomes the hero's), so an upgrade staged for the human acts on the replaced power.
+            new SabberStoneCore.Tasks.SimpleTasks.ReplaceHeroPower(EngineCards.FromId(HumanHeroPower))
+                .Process(game, game.Player1, game.Player1.Hero, null);
+            applied.Add("humanHeroPower=" + HumanHeroPower + " (hero power " + game.Player1.Hero.HeroPower.Card.Id + ")");
+        }
         foreach (var player in new[] { game.Player1, game.Player2 })
         {
             string seat = player == game.Player1 ? "human" : "npc";
