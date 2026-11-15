@@ -8,6 +8,10 @@ using static Core2026Proof;
 // Wild wave Y0a, lane l1a: Legacy and Classic neutral minions. The group runs both set files (the group name is unique).
 internal static class WildY0aL1ALegacyProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case.
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     private static readonly GameTag[] Words =
     {
         GameTag.TAUNT, GameTag.CHARGE, GameTag.WINDFURY, GameTag.STEALTH, GameTag.DIVINE_SHIELD, GameTag.RUSH,
@@ -18,26 +22,46 @@ internal static class WildY0aL1ALegacyProof
     internal static void Run()
     {
         WildY0aL1AExpertProof.Run();
-        WildSetsProof.Case("CS1_042", Taunt);
-        WildSetsProof.Case("CS2_118", (g, p, id) => Vanilla(g, p, id, Race.ELEMENTAL));
-        WildSetsProof.Case("CS2_119", (g, p, id) => Vanilla(g, p, id, Race.BEAST));
-        WildSetsProof.Case("CS2_120", (g, p, id) => Vanilla(g, p, id, Race.BEAST));
-        WildSetsProof.Case("CS2_121", Taunt);
-        WildSetsProof.Case("CS2_122", RaidLeader);
-        WildSetsProof.Case("CS2_124", Charge);
-        WildSetsProof.Case("CS2_125", Taunt);
-        WildSetsProof.Case("CS2_127", Taunt);
-        WildSetsProof.Case("CS2_131", Charge);
-        WildSetsProof.Case("CS2_141", (g, p, id) => BattlecryDamage(g, p, id, 1));
-        WildSetsProof.Case("CS2_142", SpellDamage);
-        WildSetsProof.Case("CS2_147", GnomishInventor);
-        WildSetsProof.Case("CS2_150", (g, p, id) => BattlecryDamage(g, p, id, 2));
-        WildSetsProof.Case("CS2_155", SpellDamage);
-        WildSetsProof.Case("CS2_162", Taunt);
-        WildSetsProof.Case("CS2_168", (g, p, id) => Vanilla(g, p, id, Race.MURLOC));
-        WildSetsProof.Case("CS2_171", Charge);
-        WildSetsProof.Case("CS2_172", (g, p, id) => Vanilla(g, p, id, Race.BEAST));
-        WildSetsProof.Case("CS2_173", Charge);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS1_042", Taunt);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_118", (g, p, id) => Vanilla(g, p, id, Race.ELEMENTAL));
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_119", (g, p, id) => Vanilla(g, p, id, Race.BEAST));
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_120", (g, p, id) => Vanilla(g, p, id, Race.BEAST));
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_121", Taunt);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_122", RaidLeader);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_124", Charge);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_125", Taunt);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_127", Taunt);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_131", Charge);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_141", (g, p, id) => BattlecryDamage(g, p, id, 1));
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_142", SpellDamage);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_147", GnomishInventor);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_150", (g, p, id) => BattlecryDamage(g, p, id, 2));
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_155", SpellDamage);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_162", Taunt);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_168", (g, p, id) => Vanilla(g, p, id, Race.MURLOC));
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_171", Charge);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_172", (g, p, id) => Vanilla(g, p, id, Race.BEAST));
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_173", Charge);
     }
 
     internal static HashSet<int> AttackTargets(Controller owner, Minion attacker) =>

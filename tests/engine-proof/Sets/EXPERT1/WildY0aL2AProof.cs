@@ -8,12 +8,17 @@ using static Core2026Proof;
 // Wave Y0a, lane l2a: 19 Legacy/Classic neutral minions held to the 37.0 text.
 internal static class WildY0aL2AProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case.
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     private const string Yeti = "CS2_182", Wisp = "CS2_231", Moonfire = "CS2_008", Murloc = "CS2_168", IceBarrier = "EX1_289";
 
     [GroupProof("wild-y0a-l2a-cards", ProofKind.WildCards)]
     internal static void Run()
     {
-        WildSetsProof.Case("EX1_067", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_067", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti);
             var commander = (Minion)Play(g, p, id);
             Check(commander.HasCharge && commander.HasDivineShield && commander.AttackDamage == 4 && commander.Health == 2,
@@ -31,7 +36,8 @@ internal static class WildY0aL2AProof
             Check(!CanAttack(p, fresh, enemy), "Silenced Charge minion cannot attack the turn it was played");
         });
 
-        WildSetsProof.Case("EX1_076", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_076", (g, p, id) => {
             var pint = Summon(p, id);
             var first = Held(g, p, Yeti); var spell = Held(g, p, "CS2_029"); var wisp = Held(g, p, Wisp);
             var enemyCard = Held(g, p.Opponent, Yeti);
@@ -69,7 +75,8 @@ internal static class WildY0aL2AProof
             Check(Held(g, p.Opponent, Yeti).Cost == 4, "the enemy's discount is spent by its first minion");
         });
 
-        WildSetsProof.Case("EX1_080", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_080", (g, p, id) => {
             var keeper = (Minion)Play(g, p, id);
             Check(keeper.AttackDamage == 1 && keeper.Health == 2, "Secretkeeper is 1/2");
             Play(g, p, Moonfire, p.Opponent.Hero);
@@ -93,7 +100,8 @@ internal static class WildY0aL2AProof
             Check(keeper.AttackDamage == 4, "playing a minion is not a Secret");
         });
 
-        WildSetsProof.Case("EX1_082", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_082", (g, p, id) => {
             var friend = Summon(p, Yeti); var near = Summon(p.Opponent, Yeti); var far = Summon(p.Opponent, Yeti);
             var spellPower = Summon(p, "EX1_284");
             var all = new ICharacter[] { p.Hero, p.Opponent.Hero, friend, near, far, spellPower };
@@ -122,7 +130,8 @@ internal static class WildY0aL2AProof
             });
         });
 
-        WildSetsProof.Case("EX1_083", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_083", (g, p, id) => {
             StandardSetsProof.ParkBoard(p); StandardSetsProof.ParkBoard(p.Opponent);
             var lonely = (Minion)Play(g, p, id);
             Check(p.BoardZone.Count == 1 && lonely.Card.Id == id && p.Opponent.BoardZone.Count == 0, "no other minion: nothing happens");
@@ -163,7 +172,8 @@ internal static class WildY0aL2AProof
             });
         });
 
-        WildSetsProof.Case("EX1_093", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_093", (g, p, id) => {
             var left = Summon(p, Yeti); var right = Summon(p, Yeti); var far = Summon(p, Yeti);
             var foe = Summon(p.Opponent, Yeti);
             left.Damage = 2;
@@ -190,7 +200,8 @@ internal static class WildY0aL2AProof
             Check(p.BoardZone.Count == 1 && alone.AttackDamage == 3 && !alone.HasTaunt, "empty board: nothing to buff, no self buff");
         });
 
-        WildSetsProof.Case("EX1_095", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_095", (g, p, id) => {
             var auctioneer = (Minion)Play(g, p, id);
             int deck = p.Opponent.DeckZone.Count, mine = p.DeckZone.Count, hand = p.HandZone.Count;
             Play(g, p, Moonfire, p.Opponent.Hero);
@@ -226,7 +237,8 @@ internal static class WildY0aL2AProof
             Check(p.DeckZone.Count == mine, "no Auctioneer, no draw");
         });
 
-        WildSetsProof.Case("EX1_096", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_096", (g, p, id) => {
             var hoarder = Summon(p, id);
             int deck = p.DeckZone.Count, hand = p.HandZone.Count, enemyHand = p.Opponent.HandZone.Count, enemyDeck = p.Opponent.DeckZone.Count;
             Check(hoarder.AttackDamage == 2 && hoarder.Health == 1, "Loot Hoarder is a 2/1");
@@ -253,7 +265,8 @@ internal static class WildY0aL2AProof
             Check(attacker.Zone.Type == Zone.GRAVEYARD && p.HandZone.Count == hand + 1 && p.DeckZone.Count == deck - 1, "dying in combat draws");
         });
 
-        WildSetsProof.Case("EX1_097", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_097", (g, p, id) => {
             var abomination = Summon(p, id);
             var friend = Summon(p, Yeti); var enemy = Summon(p.Opponent, Yeti); var frail = Summon(p.Opponent, "CS2_231");
             Summon(p, "EX1_284");
@@ -275,7 +288,8 @@ internal static class WildY0aL2AProof
             });
         });
 
-        WildSetsProof.Case("EX1_100", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_100", (g, p, id) => {
             var cho = (Minion)Play(g, p, id);
             Check(cho.AttackDamage == 0 && cho.Health == 4, "Lorewalker Cho is a 0/4");
             int enemyHand = p.Opponent.HandZone.Count, ownHand = p.HandZone.Count;
@@ -309,7 +323,8 @@ internal static class WildY0aL2AProof
             Check(p.Opponent.HandZone.Count == 10 && p.SecretZone.Count == 1, "Secrets: full hand again, still just one on my side");
         });
 
-        WildSetsProof.Case("EX1_102", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_102", (g, p, id) => {
             var friend = Summon(p, Yeti); var near = Summon(p.Opponent, Yeti); var far = Summon(p.Opponent, Yeti);
             var demolisher = Summon(p, id);
             var targets = new ICharacter[] { p.Opponent.Hero, near, far };
@@ -348,7 +363,8 @@ internal static class WildY0aL2AProof
             Check(p.Hero.Damage + p.BoardZone.Sum(m => m.Damage) == 2, "an enemy Demolisher hits my side at its owner's turn start");
         });
 
-        WildSetsProof.Case("EX1_103", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_103", (g, p, id) => {
             var raider = Summon(p, Murloc); var yeti = Summon(p, Yeti); var enemyMurloc = Summon(p.Opponent, Murloc);
             var handMurloc = Add(p, Murloc);
             var seer = (Minion)Play(g, p, id);
@@ -365,7 +381,8 @@ internal static class WildY0aL2AProof
             Check(alone.Health == 3 && p.BoardZone.Count == 1, "no other Murloc: nothing happens");
         });
 
-        WildSetsProof.Case("EX1_105", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_105", (g, p, id) => {
             bool Playable(IPlayable card) => p.Options().Any(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == card.Id);
             var giant = Add(p, id);
             g.DeathProcessingAndAuraUpdate();
@@ -398,7 +415,8 @@ internal static class WildY0aL2AProof
             Check(board.AttackDamage == 8 && board.Health == 8 && p.UsedMana == 10, "the Giant is an 8/8 played for its current cost");
         });
 
-        WildSetsProof.Case("EX1_116", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_116", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti);
             var leeroy = (Minion)Play(g, p, id);
             Check(leeroy.AttackDamage == 6 && leeroy.Health == 2 && leeroy.HasCharge, "Leeroy is a 6/2 Charge");
@@ -426,7 +444,8 @@ internal static class WildY0aL2AProof
             Check(p.BoardZone.Count(m => m.Card.Id == "EX1_116t") == 2, "summoning without playing triggers no Battlecry");
         });
 
-        WildSetsProof.Case("EX1_162", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_162", (g, p, id) => {
             var left = Summon(p, Yeti); var right = Summon(p, Yeti); var far = Summon(p, Yeti);
             var foe = Summon(p.Opponent, Yeti);
             var wolf = StandardSetsProof.PlayAt(g, p, id, 1);
@@ -454,7 +473,8 @@ internal static class WildY0aL2AProof
             Check(far.AttackDamage == 4 && wolf.AttackDamage == 2 && left.AttackDamage == 4, "a dead wolf's aura disappears");
         });
 
-        WildSetsProof.Case("EX1_170", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_170", (g, p, id) => {
             var victim = Summon(p.Opponent, Yeti); var shielded = Summon(p.Opponent, "EX1_067");
             var cobra = (Minion)Play(g, p, id);
             Check(cobra.Poisonous && cobra.AttackDamage == 2 && cobra.Health == 3, "Emperor Cobra is a 2/3 Poisonous");

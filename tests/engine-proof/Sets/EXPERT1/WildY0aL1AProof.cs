@@ -9,13 +9,22 @@ using static WildY0aL1ALegacyProof;
 // Wild wave Y0a, lane l1a: Expert1 neutral minions. Run from the group in Sets/LEGACY/WildY0aL1AProof.cs.
 internal static class WildY0aL1AExpertProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case.
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     internal static void Run()
     {
-        WildSetsProof.Case("CS1_069", Taunt);
-        WildSetsProof.Case("CS2_146", SouthseaDeckhand);
-        WildSetsProof.Case("CS2_151", SilverHandKnight);
-        WildSetsProof.Case("CS2_161", Stealth);
-        WildSetsProof.Case("CS2_169", Windfury);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS1_069", Taunt);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_146", SouthseaDeckhand);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_151", SilverHandKnight);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_161", Stealth);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_169", Windfury);
     }
 
     private static void Equip(Game g, Controller p) => Play(g, p, "CS2_082");

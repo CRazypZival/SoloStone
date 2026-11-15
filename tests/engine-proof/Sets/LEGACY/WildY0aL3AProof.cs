@@ -9,11 +9,16 @@ using static Core2026Proof;
 // Sets/EXPERT1/WildY0aL3AProof.cs (group names are unique) and calls Run here.
 internal static class WildY0aL3ALegacyProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case.
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     private const string Yeti = "CS2_182", Squire = "EX1_008", Thalnos = "EX1_012", Shieldmasta = "CS2_179", Axe = "CS2_106";
 
     internal static void Run()
     {
-        WildSetsProof.Case("CS2_022", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_022", (g, p, id) => {
             var taunt = Summon(p.Opponent, Shieldmasta); var shield = Summon(p.Opponent, Squire); var frozen = Summon(p.Opponent, Yeti);
             var mine = Summon(p, Yeti); taunt.Damage = 2; frozen.IsFrozen = true;
             Core2026Proof.Check(taunt.HasTaunt && shield.HasDivineShield, "Polymorph targets have Taunt and Divine Shield first");
@@ -38,8 +43,10 @@ internal static class WildY0aL3ALegacyProof
             var spell = Add(p, id);
             Core2026Proof.Check(!p.Options().Any(t => t.Source?.Id == spell.Id), "Polymorph unplayable with no minion on either board");
         });
-        WildSetsProof.Case("CS2_023", (g, p, id) => DrawSpell(g, p, id, 2));
-        WildSetsProof.Case("CS2_024", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_023", (g, p, id) => DrawSpell(g, p, id, 2));
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_024", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var mine = Summon(p, Yeti); var squire = Summon(p.Opponent, Squire);
             var held = Add(p, id);
             var targets = Targets(p, held);
@@ -63,7 +70,8 @@ internal static class WildY0aL3ALegacyProof
             Core2026Proof.Check(mate.IsFrozen && p.Opponent.Hero.IsFrozen, "Freeze lasts through the target's own turn start"); End(g);
             Core2026Proof.Check(!mate.IsFrozen && !p.Opponent.Hero.IsFrozen, "Freeze thaws at the end of the frozen side's turn");
         });
-        WildSetsProof.Case("CS2_026", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_026", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var other = Summon(p.Opponent, Squire); var mine = Summon(p, Yeti);
             Play(g, p, id);
             Core2026Proof.Check(enemy.IsFrozen && other.IsFrozen && enemy.Damage == 0 && other.HasDivineShield, "Frost Nova Freezes every enemy minion without damage");
@@ -80,7 +88,8 @@ internal static class WildY0aL3ALegacyProof
             Summon(p, Thalnos); Play(g, p, id);
             Core2026Proof.Check(late.IsFrozen && late.Damage == 0, "Frost Nova is unaffected by Spell Damage");
         });
-        WildSetsProof.Case("CS2_027", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_027", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti);
             Play(g, p, id);
             Core2026Proof.Check(p.BoardZone.Count == 2 && p.BoardZone.All(m => m.Card.Id == "CS2_mirror" && m.AttackDamage == 0 && m.Health == 2 && m.HasTaunt)
@@ -100,7 +109,8 @@ internal static class WildY0aL3ALegacyProof
             Play(g, p.Opponent, id);
             Core2026Proof.Check(p.Opponent.BoardZone.Count == 3 && p.BoardZone.Count == 7, "Opponent's Mirror Image fills their own side");
         });
-        WildSetsProof.Case("CS2_029", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_029", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var mine = Summon(p, Yeti);
             var held = Add(p, id);
             Core2026Proof.Check(Targets(p, held).Count == 4, "Fireball targets any character");
@@ -152,7 +162,8 @@ internal static class WildY0aL3ALegacyProof
             p.Hero.Damage = 1; p.Opponent.Hero.Damage = 4; Play(g, p, id, p.Opponent.Hero);
             Core2026Proof.Check(p.Hero.Damage == 0 && p.Opponent.Hero.Damage == 7, "Drain Life heal caps at full Health and never heals the enemy hero");
         });
-        WildSetsProof.Case("CS2_062", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_062", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var mine = Summon(p, Yeti);
             Play(g, p, id);
             Core2026Proof.Check(enemy.Damage == 3 && mine.Damage == 3 && p.Hero.Damage == 3 && p.Opponent.Hero.Damage == 3,
@@ -196,7 +207,8 @@ internal static class WildY0aL3ALegacyProof
             Play(g, p, id, shielded); End(g); End(g);
             Core2026Proof.Check(shielded.Zone.Type == Zone.GRAVEYARD, "Corruption destroys through Divine Shield");
         });
-        WildSetsProof.Case("CS2_064", (g, p, id) => {
+        // held: used by Standard (data/pools/pool-eligibility-v1.json) until #87
+        HeldForStandard("CS2_064", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var mine = Summon(p, Yeti); var shield = Summon(p.Opponent, Squire);
             var infernal = (Minion)Play(g, p, id);
             Core2026Proof.Check(enemy.Damage == 1 && mine.Damage == 1 && p.Hero.Damage == 1 && p.Opponent.Hero.Damage == 1 && infernal.Damage == 0
@@ -210,7 +222,8 @@ internal static class WildY0aL3ALegacyProof
             infernal.Silence();
             Core2026Proof.Check(infernal.AttackDamage == 6 && infernal.Zone.Type == Zone.PLAY, "Silenced Dread Infernal keeps its body");
         });
-        WildSetsProof.Case("CS2_065", (g, p, id) => {
+        // held: used by Standard (plugin/Npc/TriggerMeasure.cs) until #87
+        HeldForStandard("CS2_065", (g, p, id) => {
             var v = (Minion)Play(g, p, id);
             Core2026Proof.Check(v.AttackDamage == 1 && v.Health == 3 && v.HasTaunt && v.Card.IsRace(Race.DEMON), "Voidwalker is a 1/3 Demon with Taunt");
             var enemyAttacker = Summon(p.Opponent, Yeti); Summon(p, Yeti);
@@ -222,7 +235,8 @@ internal static class WildY0aL3ALegacyProof
             v.Silence(); g.DeathProcessingAndAuraUpdate();
             Core2026Proof.Check(!v.HasTaunt && v.Health == 3, "Silence removes Taunt");
         });
-        WildSetsProof.Case("CS2_072", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_072", (g, p, id) => {
             var fresh = Summon(p.Opponent, Yeti); var hurt = Summon(p.Opponent, Yeti); var mine = Summon(p, Yeti); hurt.Damage = 1;
             var held = Add(p, id);
             var targets = Targets(p, held);
@@ -250,7 +264,8 @@ internal static class WildY0aL3ALegacyProof
             Play(g, p.Opponent, id);
             Core2026Proof.Check(p.Hero.Damage == 3 && p.Opponent.Hero.Damage == 7, "Opponent's Sinister Strike hits my hero");
         });
-        WildSetsProof.Case("CS2_076", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_076", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var mine = Summon(p, Yeti); var squire = Summon(p.Opponent, Squire); var stealth = Summon(p.Opponent, "CS2_059");
             var held = Add(p, id);
             var targets = Targets(p, held);
@@ -270,7 +285,8 @@ internal static class WildY0aL3ALegacyProof
             var spell = Add(p, id);
             Core2026Proof.Check(!p.Options().Any(t => t.Source?.Id == spell.Id), "Assassinate unplayable with no enemy minion");
         });
-        WildSetsProof.Case("CS2_074", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_074", (g, p, id) => {
             var spell = Add(p, id);
             Core2026Proof.Check(!p.Options().Any(t => t.Source?.Id == spell.Id), "Deadly Poison unplayable without a weapon");
             Play(g, p, Axe);

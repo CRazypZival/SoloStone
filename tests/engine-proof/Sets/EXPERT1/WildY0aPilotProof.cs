@@ -7,10 +7,15 @@ using static Core2026Proof;
 
 internal static class WildY0aPilotProof
 {
+    // Held cases: proof code kept, never run and never registered with WildSetsProof.Case.
+    private static readonly List<(string Id, Action<Game, Controller, string> Scenario)> HeldForStandardCases = new();
+    private static void HeldForStandard(string id, Action<Game, Controller, string> scenario) => HeldForStandardCases.Add((id, scenario));
+
     [GroupProof("wild-y0a-pilot-cards", ProofKind.WildCards)]
     internal static void Run()
     {
-        WildSetsProof.Case("CS2_028", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_028", (g, p, id) => {
             var friend = Summon(p, "CS2_182");
             var enemy = Summon(p.Opponent, "CS2_182");
             var other = Summon(p.Opponent, "CS2_182");
@@ -25,7 +30,8 @@ internal static class WildY0aPilotProof
             Play(g, p, id);
             Core2026Proof.Check(p.Opponent.BoardZone.Count == 0 && friend.Damage == 0, "Blizzard accepts empty enemy board");
         });
-        WildSetsProof.Case("CS2_031", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_031", (g, p, id) => {
             var target = Summon(p.Opponent, "CS2_182");
             Play(g, p, id, target);
             Core2026Proof.Check(target.IsFrozen && target.Damage == 0, "Ice Lance Freezes unfrozen target without damage");
@@ -58,7 +64,8 @@ internal static class WildY0aPilotProof
             End(g); imp.Silence(); g.DeathProcessingAndAuraUpdate(); End(g);
             Core2026Proof.Check(friend.Health + second.Health == 12 && !imp.HasStealth, "Silence removes Blood Imp trigger and Stealth");
         });
-        WildSetsProof.Case("CS2_104", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_104", (g, p, id) => {
             var friend = Summon(p, "CS2_182"); var enemy = Summon(p.Opponent, "CS2_182");
             var spell = Add(p, id);
             Core2026Proof.Check(!p.Options().Any(t => t.Source?.Id == spell.Id), "Rampage unavailable without damaged minion");
@@ -73,7 +80,8 @@ internal static class WildY0aPilotProof
             friend.Silence(); g.DeathProcessingAndAuraUpdate();
             Core2026Proof.Check(friend.AttackDamage == 4 && friend.Health == 5 && friend.Damage == 0, "Silence removes Rampage buff and its absorbed damage");
         });
-        WildSetsProof.Case("CS2_117", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_117", (g, p, id) => {
             p.Hero.Damage = 5; Play(g, p, id, p.Hero);
             Core2026Proof.Check(p.Hero.Damage == 2, "Farseer restores exactly three Health to hero");
             var enemy = Summon(p.Opponent, "CS2_182"); enemy.Damage = 1;
@@ -84,8 +92,10 @@ internal static class WildY0aPilotProof
             p.Opponent.Hero.Damage = 4; Play(g, p, id, p.Opponent.Hero);
             Core2026Proof.Check(p.Opponent.Hero.Damage == 1, "Farseer may heal opponent hero");
         });
-        WildSetsProof.Case("CS2_188", TemporaryAttack);
-        WildSetsProof.Case("CS2_203", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_188", TemporaryAttack);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("CS2_203", (g, p, id) => {
             var enemy = Summon(p.Opponent, "CS2_179");
             Core2026Proof.Check(enemy.HasTaunt, "Owl target has Taunt before Silence");
             Play(g, p, id, enemy);
@@ -102,7 +112,8 @@ internal static class WildY0aPilotProof
             StandardSetsProof.ParkBoard(p); StandardSetsProof.ParkBoard(p.Opponent);
             Play(g, p, id); Core2026Proof.Check(p.BoardZone.Single().Card.Id == id, "Owl playable without another minion");
         });
-        WildSetsProof.Case("EX1_012", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_012", (g, p, id) => {
             var source = (Minion)Play(g, p, id); var target = Summon(p.Opponent, "CS2_182");
             Play(g, p, "CS2_008", target);
             Core2026Proof.Check(target.Damage == 2, "Thalnos adds one Spell Damage to one-damage spell");
@@ -119,7 +130,8 @@ internal static class WildY0aPilotProof
             hand = p.HandZone.Count; deck = p.DeckZone.Count; Kill(g, source);
             Core2026Proof.Check(p.HandZone.Count == hand && p.DeckZone.Count == deck, "Silence removes Thalnos draw Deathrattle");
         });
-        WildSetsProof.Case("EX1_016", (g, p, id) => {
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_016", (g, p, id) => {
             var source = (Minion)Play(g, p, id);
             var enemy = Summon(p.Opponent, "CS2_182"); enemy.Damage = 2;
             Core2026Proof.Check(enemy.Controller == p.Opponent, "Sylvanas does not steal before death");
@@ -137,7 +149,8 @@ internal static class WildY0aPilotProof
             StandardSetsProof.ParkBoard(p.Opponent); source = Summon(p, id); Kill(g, source);
             Core2026Proof.Check(p.BoardZone.Count == 1, "Sylvanas with no enemies cannot steal friendly minion");
         });
-        WildSetsProof.Case("EX1_046", TemporaryAttack);
+        // held: used by Standard (plugin/LocalCardCatalog.cs) until #87
+        HeldForStandard("EX1_046", TemporaryAttack);
     }
 
     private static void TemporaryAttack(Game g, Controller p, string id)
