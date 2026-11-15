@@ -103,6 +103,15 @@ internal static class WildSetsProof
         if (selectedProof == null) GroupProofs.Run(ProofKind.WildCards);
         else selectedProof();
         Core2026Proof.Check(Failures.Count == 0, string.Join("\n", Failures));
+        if (selectedProof != null && ProvenIds.Count == 0)
+        {
+            var group = (GroupProofAttribute)Attribute.GetCustomAttribute(selectedProof.Method, typeof(GroupProofAttribute));
+            string manifest = "tests/progression/batches/wild/" + group.Name.Replace("-cards", "") + ".txt";
+            Core2026Proof.Check(!File.Exists(manifest) || string.IsNullOrWhiteSpace(File.ReadAllText(manifest)),
+                "empty Wild group still has listed cards: " + group.Name);
+            Console.WriteLine($"group {group.Name}: 0 listed cards (all held)");
+            return;
+        }
         Core2026Proof.Check(ProvenIds.Count > 0, "nonempty Wild card proofs");
         // The manifest check is textual; at run time every listed card (each has an identity row) must have been proven.
         if (selectedProof == null) { CoverageRefuses(); CheckCoverage(ProvenIds, ManifestIds()); }

@@ -40,6 +40,8 @@ The file is generated from the client's card definitions by private tooling that
 
 `CardLoader.ApplyIdentity` replaces that base card with the identity row, in the base card's place, so the card list order does not move, and builds it with the overlay rules (as a client definition: no ` @spelldmg` suffix, zero-valued tags kept as present, weapon durability from health). It refuses a row whose `id` is not exactly one base card, whose `dbf` differs, a duplicate row, or one without type, set and collectible. The base row stays in `cards`, byte for byte, so every unlisted card loads as before. The generator's `--check` and the `progression` suite's Wild batch check fail when the rows and the Wild manifests disagree.
 
+**Known gap: Wild random pools.** In `FT_WILD`, random pools still use the frozen `LegacyGenerationV1` lists, which stop at 2019 sets; only Demon Hunter and Death Knight class lists are built live. Retail 37.0 Wild draws from all sets. This remains until #141 builds format-aware pools from implemented cards, and must be closed before Wild mode ships.
+
 ## What is left out
 
 The engine never reads these, so the generator drops them:

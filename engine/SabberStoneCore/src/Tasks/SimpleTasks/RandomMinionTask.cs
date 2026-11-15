@@ -56,8 +56,6 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 		public bool ClassAndMultiOnlyFlag { get; set; }
 		public bool MaxInDeckFlag { get; set; }
 		public RelaSign RelaSign { get; set; }
-		/// <summary>Draws only from cards the engine can play. Opt-in: the frozen legacy lists keep unplayable cards for old callers.</summary>
-		public bool ImplementedOnly { get; set; }
 
 		public override TaskState Process(in Game game, in Controller controller, in IEntity source,
 			in IPlayable target,
@@ -103,7 +101,6 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 				}
 			}
 
-			if (ImplementedOnly) cardsList = cardsList.Where(p => p.Implemented).ToList();
 			if (cardsList.Count == 0) return TaskState.STOP;
 
 			var randomMinions = new List<IPlayable>(Amount);

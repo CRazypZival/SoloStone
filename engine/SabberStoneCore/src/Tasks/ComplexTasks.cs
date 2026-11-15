@@ -396,8 +396,7 @@ namespace SabberStoneCore.Tasks
 				}),
 				new DiscardTask(EntityType.STACK));
 
-		/// <param name="rightOfSource">Place the minions in death order right of the source, as a Battlecry does; otherwise at the far right.</param>
-		public static ISimpleTask SummonAllFriendlyDiedThisTurn(SelfCondition condition = null, bool rightOfSource = false)
+		public static ISimpleTask SummonAllFriendlyDiedThisTurn(SelfCondition condition = null)
 		{
 			return new CustomTask((g, c, s, t, stack) =>
 			{
@@ -417,12 +416,10 @@ namespace SabberStoneCore.Tasks
 					buffer[k++] = i;
 				}
 
-				int position = rightOfSource && s is Minion source && source.Zone == board ? source.ZonePosition + 1 : -1;
 				for (--k; k >= 0; --k)
 				{
 					Entity.FromCard(in c, graveyard[buffer[k]].Card,
-						zone: board, zonePos: position, creator: in s);
-					if (position >= 0) position++;
+						zone: board, creator: in s);
 					if (board.IsFull) return;
 				}
 			});

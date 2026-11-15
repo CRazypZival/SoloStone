@@ -32,9 +32,6 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 		private readonly EntityType _type;
 		private readonly CardClass _cardClass;
 
-		/// <summary>Draws only from cards the engine can play. Opt-in: the frozen legacy lists keep unplayable cards for old callers.</summary>
-		public bool ImplementedOnly { get; set; }
-
 
 		/// <summary>
 		/// Choose a random card that fits the criterias.
@@ -113,13 +110,6 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 				GetCardList(source, _cardType, cardClass, _cardSet, _race, _rarity, _gameTagFilter);
 
 			if ((cardClass == CardClass.DEMONHUNTER || cardClass == CardClass.DEATHKNIGHT) && cardsList.Count == 0)
-			{
-				stack.Playables = Array.Empty<IPlayable>();
-				return TaskState.STOP;
-			}
-
-			if (ImplementedOnly) cardsList = cardsList.Where(p => p.Implemented).ToArray();
-			if (ImplementedOnly && cardsList.Count == 0)
 			{
 				stack.Playables = Array.Empty<IPlayable>();
 				return TaskState.STOP;

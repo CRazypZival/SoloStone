@@ -3,6 +3,7 @@ using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
 using SabberStoneCore.Tasks.PlayerTasks;
+using SabberStoneCore.Tasks.SimpleTasks;
 using static Core2026Proof;
 
 // Wild wave Y0a, lane l3b: Legacy Rogue, Mage and Warlock cards. The group proof is declared in
@@ -118,6 +119,8 @@ internal static class WildY0aL3BLegacyProof
             Core2026Proof.Check(theirs.All(c => c.Class == CardClass.MAGE && c.Type == CardType.SPELL), "Opponent's Tome adds Mage spells to their hand");
         });
         WildSetsProof.Case("EX1_181", (g, p, id) => {
+            var pool = RandomCardTask.GetCardList(p.Hero, CardType.MINION, CardClass.INVALID, race: Race.DEMON);
+            PinRandomPool(id, pool, 58, CardSet.THE_LOST_CITY);
             int oHand = p.Opponent.HandZone.Count, ownDeck = p.DeckZone.Count;
             var twin = g.CloneExact(history: true);
             var cards = Casts(g, p, id, 8);
@@ -132,6 +135,16 @@ internal static class WildY0aL3BLegacyProof
             Core2026Proof.Check(theirs.All(c => c.Type == CardType.MINION && c.IsRace(Race.DEMON)), "Opponent's Call of the Void adds Demons to their hand");
         });
         WildSetsProof.Case("EX1_182", (g, p, id) => {
+            foreach (var heroClass in new[] { CardClass.ROGUE, CardClass.MAGE })
+            {
+                var classes = new[] { CardClass.DRUID, CardClass.HUNTER, CardClass.MAGE, CardClass.PALADIN,
+                    CardClass.PRIEST, CardClass.ROGUE, CardClass.SHAMAN, CardClass.WARLOCK, CardClass.WARRIOR,
+                    CardClass.DEMONHUNTER, CardClass.DEATHKNIGHT };
+                var pool = classes.Where(cardClass => cardClass != heroClass)
+                    .SelectMany(cardClass => Cards.Wild[cardClass].Where(c => c.Class == cardClass && c.Collectible && c.Implemented
+                        && c.Type != CardType.HERO && c[GameTag.QUEST] == 0)).ToArray();
+                PinRandomPool(id + "/" + heroClass, pool, 1335, (CardSet)1994); // BE
+            }
             int oHand = p.Opponent.HandZone.Count;
             var twin = g.CloneExact(history: true);
             var cards = Casts(g, p, id, 40);
@@ -201,6 +214,15 @@ internal static class WildY0aL3BLegacyProof
             Play(g, p.Opponent, id, enemyMinion);
             Core2026Proof.Check(enemyMinion.Poisonous && !lone.Poisonous && other.Poisonous && enemyMinion.Controller == p.Opponent, "Opponent's Plaguebringer buffs only their minion");
         });
+    }
+
+    // PINNED GAP #141: frozen memberships can resolve to modern identities; Pilfer also includes live DH/DK lists.
+    private static void PinRandomPool(string name, IReadOnlyCollection<Card> pool, int expectedSize, CardSet expectedNewest)
+    {
+        var newest = (CardSet)pool.Max(c => (int)c.Set);
+        Console.WriteLine($"PINNED GAP #141 {name}: size={pool.Count}; newest-set={newest} ({(int)newest})");
+        Core2026Proof.Check(pool.Count == expectedSize && newest == expectedNewest,
+            "PINNED GAP #141 " + name + " pool changed; review format-aware generation and update this pin");
     }
 
     // Plays the held Plaguebringer on a target and returns the minion it became.
