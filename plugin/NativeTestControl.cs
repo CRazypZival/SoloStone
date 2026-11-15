@@ -720,7 +720,8 @@ internal sealed partial class NativeTestControl
         {
             var history = profile.CasualHistory;
             picks = QueueForecast.Casual(casual, new CasualRequest(profile.NpcProfileSeed, history.Count, profile.RankedMatchCount, profile.CasualRating,
-                history.Skip(Math.Max(0, history.Count - casual.Rules.HistoryDepth)).Select(match => LocalRematch.Past(match, decks))), count);
+                history.Skip(Math.Max(0, history.Count - casual.Rules.HistoryDepth)).Select(match => LocalRematch.Past(match, decks)),
+                NpcDifficulties.Find(profile.NpcDifficulty)), count);
         }
         else picks = QueueForecast.Ranked(ranked, LocalRematch.Request(profile, profile.RankedHistory, decks, ranked.Rules.HistoryDepth, NpcWorldRuntime.Legend), count);
         return new JsonNode {

@@ -464,7 +464,7 @@ public static class QueueForecast
         return Enumerable.Range(0, count).Select(i =>
         {
             var pick = matchmaker.Choose(new MatchRequest(first.ProfileSeed, first.MatchIndex + i, first.StarIndex, first.HiddenRating, first.LegendNumber,
-                history.Skip(Math.Max(0, history.Count - matchmaker.Rules.HistoryDepth))));
+                history.Skip(Math.Max(0, history.Count - matchmaker.Rules.HistoryDepth)), first.Difficulty));
             history.Add(new PastEncounter(pick.Encounter.Npc.Id, pick.Encounter.Deck.Id, pick.Encounter.Deck.Tags.Archetype, "Won"));
             return pick;
         }).ToArray();
@@ -476,7 +476,7 @@ public static class QueueForecast
         return Enumerable.Range(0, count).Select(i =>
         {
             var pick = matchmaker.Choose(new CasualRequest(first.ProfileSeed, first.CasualIndex + i, first.RankedIndex, first.CasualRating,
-                history.Skip(Math.Max(0, history.Count - matchmaker.Rules.HistoryDepth))));
+                history.Skip(Math.Max(0, history.Count - matchmaker.Rules.HistoryDepth)), first.Difficulty));
             history.Add(new PastEncounter(pick.Encounter.Npc.Id, pick.Encounter.Deck.Id, pick.Encounter.Deck.Tags.Archetype, "Won"));
             return pick;
         }).ToArray();

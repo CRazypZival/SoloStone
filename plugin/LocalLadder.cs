@@ -384,7 +384,8 @@ internal static class LocalLadder
             var casual = profile.CasualHistory;
             var decks = NpcWorldRuntime.World.Catalogs.Decks;
             var request = new CasualRequest(profile.NpcProfileSeed, casual.Count, profile.RankedMatchCount, profile.CasualRating,
-                casual.Skip(Math.Max(0, casual.Count - matchmaker.Rules.HistoryDepth)).Select(match => LocalRematch.Past(match, decks)));
+                casual.Skip(Math.Max(0, casual.Count - matchmaker.Rules.HistoryDepth)).Select(match => LocalRematch.Past(match, decks)),
+                NpcDifficulties.Find(profile.NpcDifficulty));
             NpcEncounter encounter = matchmaker.Next(request);
             string deckId = encounter.Deck.Id;
             if (string.IsNullOrWhiteSpace(deckId) || deckId.Length > 64 || deckId.Any(char.IsControl))

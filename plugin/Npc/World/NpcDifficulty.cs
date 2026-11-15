@@ -55,8 +55,20 @@ public sealed class NpcDifficultyLevel
     // Hard (and the locked Extreme, which never reaches a match) change nothing.
     public bool IsHard => ShiftStars == 0 && Bottom == null;
     public double ShiftRating => ShiftStars * LadderRules.RatingPerStar;
-    // The rating the NPC is shown at (medal, rank, Legend number): its real rating plus the shift, so it sits near the player.
     public double DisplayShift => IsHard ? 0 : ShiftRating;
+    public const double DisplaySpread = 60;   // half a league either side of the player's rank
+    // The rating an NPC is shown at (owner 2026-11-15: at the player's rank): the player's own rank (Legend: the player's
+    // rating, never below Legend) plus the NPC's shifted offset from it, clamped to DisplaySpread. Cosmetic only; Elo and every
+    // stored record use the real rating. Hard shows the real rating.
+    public double DisplayRating(double npcRating, int playerStarIndex, double playerRating)
+    {
+        if (IsHard) return npcRating;
+        double anchor = playerStarIndex >= LadderRules.LegendIndex
+            ? Math.Max(playerRating, LadderRules.RatingForIndex(LadderRules.LegendIndex)) : LadderRules.RatingForIndex(playerStarIndex);
+        double offset = Math.Max(-DisplaySpread, Math.Min(DisplaySpread, npcRating + ShiftRating - anchor));
+        double shown = anchor + offset;
+        return playerStarIndex >= LadderRules.LegendIndex ? Math.Max(shown, LadderRules.RatingForIndex(LadderRules.LegendIndex)) : shown;
+    }
 
     // Where on the shifted ladder a match sits, in stars: negative below Bronze 10 (the Core step).
     public int LadderPosition(int starIndex) => Math.Min(starIndex, LadderRules.LegendIndex) - ShiftStars;
@@ -114,33 +126,34 @@ public sealed class NpcDifficultyLevel
 // (private/docs/roadmap/2026-11-15-npc-difficulty.md) until the sim round replaces them.
 public static class NpcDifficulties
 {
-    public const string EasyId = "easy", MediumId = "medium", HardId = "hard", ExtremeId = "extreme";
+    public const string EasyId = NpcDifficultyIds.Easy, MediumId = NpcDifficultyIds.Medium, HardId = NpcDifficultyIds.Hard,
+        ExtremeId = NpcDifficultyIds.Extreme;
 
-    public static readonly NpcDifficultyLevel Easy = new NpcDifficultyLevel(EasyId, "Easy",
-        "NPCs from two leagues lower, beginner play", false, 60, 0.3,
+    public static readonly NpcDifficultyLevel Easy = new NpcDifficultyLevel(EasyId, NpcDifficultyIds.Name(EasyId),
+        NpcDifficultyIds.Summary(EasyId), false, 60, 0.3,
         bottom: new DifficultyBoost(2.0, 1.4, 0.6, 0.6, 2.0, 4, 9, 0.5),
         top: new DifficultyBoost(1.3, 1.1, 0.3, 0.3, 0.6, 2, 3, 0.75));
-    public static readonly NpcDifficultyLevel Medium = new NpcDifficultyLevel(MediumId, "Medium",
-        "NPCs from one league lower, a little rusty", false, 30, 0.3,
+    public static readonly NpcDifficultyLevel Medium = new NpcDifficultyLevel(MediumId, NpcDifficultyIds.Name(MediumId),
+        NpcDifficultyIds.Summary(MediumId), false, 30, 0.3,
         bottom: new DifficultyBoost(1.5, 1.2, 0.4, 0.45, 1.7, 4, 7, 0.75),
         top: DifficultyBoost.None);
-    public static readonly NpcDifficultyLevel Hard = new NpcDifficultyLevel(HardId, "Hard",
-        "Today's NPCs: the full ladder", false, 0, 0, null, null);
-    public static readonly NpcDifficultyLevel Extreme = new NpcDifficultyLevel(ExtremeId, "Extreme",
-        "Coming later", true, 0, 0, null, null);
+    public static readonly NpcDifficultyLevel Hard = new NpcDifficultyLevel(HardId, NpcDifficultyIds.Name(HardId),
+        NpcDifficultyIds.Summary(HardId), false, 0, 0, null, null);
+    public static readonly NpcDifficultyLevel Extreme = new NpcDifficultyLevel(ExtremeId, NpcDifficultyIds.Name(ExtremeId),
+        NpcDifficultyIds.Summary(ExtremeId), NpcDifficultyIds.IsLocked(ExtremeId), 0, 0, null, null);
 
     public static readonly IReadOnlyList<NpcDifficultyLevel> All = Array.AsReadOnly(new[] { Easy, Medium, Hard, Extreme });
     // Saves without the field (every save made before this setting) stay Hard; the Create save form starts at Medium.
-    public static NpcDifficultyLevel Default => Hard;
-    public static NpcDifficultyLevel NewSaveDefault => Medium;
+    public static NpcDifficultyLevel Default => Find(NpcDifficultyIds.Default);
+    public static NpcDifficultyLevel NewSaveDefault => Find(NpcDifficultyIds.NewSaveDefault);
 
     public static bool IsKnown(string id) => id != null && All.Any(level => level.Id == id);
     public static bool IsSelectable(string id) => IsKnown(id) && !Find(id).Locked;
     // null = Default (Hard). An unknown id throws: a save naming one is refused, never silently changed.
     public static NpcDifficultyLevel Find(string id)
     {
-        if (id == null) return Default;
-        return All.FirstOrDefault(level => level.Id == id) ?? throw new InvalidOperationException("Unknown NPC difficulty: " + id);
+        string known = NpcDifficultyIds.Resolve(id);
+        return All.First(level => level.Id == known);
     }
 }
 
