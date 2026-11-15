@@ -29,7 +29,8 @@ internal static class NativeOpponentPetsOption
         LastOwned = owned;
         if (owned == null) return null;
         bool show = Enabled;
-        log?.LogInfo("NPC_PET card=" + owned + " shown=" + show + (show ? "" : " reason=option"));
+        // The option's answer only: NativeMatch.Start still drops a pet the shop cannot map (state.opponentPets.shown is the result).
+        log?.LogInfo("NPC_PET card=" + owned + " option=" + (show ? "on" : "off"));
         return show ? owned : null;
     }
 
@@ -64,7 +65,7 @@ internal static class NativeOpponentPetsOption
         node["friendly"] = Side(state?.GetFriendlySidePlayer());
         node["opposing"] = Side(state?.GetOpposingSidePlayer());
         var controllers = UnityEngine.Object.FindObjectsByType<PetControllerGame>(FindObjectsSortMode.None);
-        node["controllers"] = TestControlProtocol.List(controllers.Where(controller => controller != null).Select(controller => (object)new JsonNode {
+        node["controllers"] = TestControlProtocol.List(controllers.Where(controller => controller != null).OrderBy(controller => controller.name, StringComparer.Ordinal).ThenBy(controller => controller.PetVariantId).Select(controller => (object)new JsonNode {
             { "name", controller.name }, { "variantId", controller.PetVariantId }, { "model", controller.PetObject != null ? controller.PetObject.name : null },
             { "active", controller.gameObject.activeInHierarchy } }));
         var seats = new JsonList();

@@ -742,6 +742,7 @@ internal static class ClientBridge
 #if !SOLOSTONE_RELEASE
 // Test control only (compiled out of a public build): reads, recovery and option validation for the endpoint.
     internal static NativeTestControl.View ReadTestControlView() => NativeTestControl.ReadView(match, matchId);
+    internal static MiniJSON.JsonNode OpponentPetsTestState() => NativeOpponentPetsOption.State(match);
     internal static Dictionary<string, object> TestControlEntities(string requestedMatch, int[] ids)
     {
         NativeTestControl.AssertMainThread();
