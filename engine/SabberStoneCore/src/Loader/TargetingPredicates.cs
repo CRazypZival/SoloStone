@@ -142,6 +142,14 @@ namespace SabberStoneCore.Loader
 		public static readonly AvailabilityPredicate ReqHeroHasAttack
 			= (c, card) => c.Hero.AttackDamage > 0;
 
+		/// <summary>Steady Shot style hero powers are targeted only while an effect lets them target minions (Steamwheedle Sniper).</summary>
+		public static readonly AvailabilityPredicate ReqSteadyShotCanTarget
+			= (c, card) => c.ControllerAuraEffects[GameTag.STEADY_SHOT_CAN_TARGET] > 0;
+
+		/// <summary>REQ_MINION_OR_ENEMY_HERO: any minion or the opposing hero (never the caster's own hero).</summary>
+		internal static readonly Func<IPlayable, ICharacter, bool> ReqMinionOrEnemyHero
+			= (source, target) => target is Minion || target.Controller != source.Controller;
+
 		public static AvailabilityPredicate MinimumFriendlyMinions(int value)
 		{
 			if (value == 1)
