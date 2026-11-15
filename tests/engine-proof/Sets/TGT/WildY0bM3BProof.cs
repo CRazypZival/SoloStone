@@ -294,7 +294,7 @@ internal static class WildY0bM3BProof
             var enemy = Summon(p.Opponent, Yeti); var friend = Summon(p, Yeti); var wisp = Summon(p.Opponent, Wisp);
             var stealthy = Summon(p.Opponent, Yeti); stealthy.HasStealth = true;
             var noCombo = Add(p, id);
-            Check(p.Options().Where(t => t.Source?.Id == noCombo.Id).All(t => t.Target == null), "no Combo: no target offered");
+            Check(p.Options().Any(t => t.Source?.Id == noCombo.Id) && p.Options().Where(t => t.Source?.Id == noCombo.Id).All(t => t.Target == null), "no Combo: no target offered");
             PlayEntity(g, p, noCombo);
             Check(enemy.Damage == 0 && friend.Damage == 0 && p.Opponent.Hero.Damage == 0, "no Combo: no damage");
             var valiant = Add(p, id);
@@ -314,7 +314,7 @@ internal static class WildY0bM3BProof
             foreach (var m in p.BoardZone.Where(m => m.Id != friend.Id).ToArray()) p.SetasideZone.Add(p.BoardZone.Remove(m));
             End(g); End(g);
             var first = Add(p, id);
-            Check(p.Options().Where(t => t.Source?.Id == first.Id).All(t => t.Target == null), "a new turn starts without Combo");
+            Check(p.Options().Any(t => t.Source?.Id == first.Id) && p.Options().Where(t => t.Source?.Id == first.Id).All(t => t.Target == null), "a new turn starts without Combo");
             Resume(g, next => {
                 var owner = next.Player1; Play(next, owner, Coin);
                 var v = Add(owner, id);
@@ -537,7 +537,7 @@ internal static class WildY0bM3BProof
             Check(opp.DeckZone.Count == 99 && opp.DeckZone.Count(c => c.Card.Id == "AT_035t") == 1, "a nearly full deck (99 max) takes only what fits: " + opp.DeckZone.Count + "/" + opp.DeckZone.Count(c => c.Card.Id == "AT_035t"));
         });
 
-        WildSetsProof.Case("AT_036", (g, p, id) => {
+        WildSetsProof.Held("AT_036", (g, p, id) => {
             var anub = Summon(p, id);
             Check(anub.AttackDamage == 8 && anub.Health == 4 && anub.Card.Cost == 8 && anub.IsRace(Race.UNDEAD), "Anub'arak is an 8/4 Undead for 8");
             int hand = p.HandZone.Count;

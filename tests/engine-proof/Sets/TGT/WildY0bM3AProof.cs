@@ -214,7 +214,7 @@ internal static class WildY0bM3AProof
             Core2026Proof.Check(p.HandZone.Count == own + 1 && p.HandZone.Last().Card.Type == CardType.SPELL, "the owner still gets a spell");
         });
 
-        WildSetsProof.Case("AT_008", (g, p, id) => {
+        WildSetsProof.Held("AT_008", (g, p, id) => {
             Play(g, p, id);
             Use(g, p); Core2026Proof.Check(CanUse(p), "hero power is usable again");
             Use(g, p); Use(g, p);

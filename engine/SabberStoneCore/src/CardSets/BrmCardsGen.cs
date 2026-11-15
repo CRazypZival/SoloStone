@@ -645,7 +645,7 @@ namespace SabberStoneCore.CardSets
 			cards.Add("BRM_030", new CardDef(new Power
 			{
 				PowerTask = new EnqueueTask(2, ComplexTask.Create(
-					new RandomCardTask(EntityType.OP_HERO, cardType: CardType.SPELL),
+					new RandomCardTask(EntityType.OP_HERO),
 					new AddStackTo(EntityType.HAND))),
 			}));
 

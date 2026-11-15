@@ -24,7 +24,7 @@ internal static class WildY0bM4BProof
         WildSetsProof.Case("LOE_050", MountedRaptor);
         WildSetsProof.Case("LOE_053", DjinniOfZephyrs);
         WildSetsProof.Case("LOE_061", AnubisathSentinel);
-        WildSetsProof.Case("LOE_073", FossilizedDevilsaur);
+        WildSetsProof.Held("LOE_073", FossilizedDevilsaur);
         WildSetsProof.Case("LOE_076", SirFinley);
         WildSetsProof.Case("LOE_077", BrannBronzebeard);
         WildSetsProof.Case("LOE_079", EliseStarseeker);
@@ -748,7 +748,7 @@ internal static class WildY0bM4BProof
         var friend = Summon(p, "CS2_182");
         Ok(!CanPlay(p, held), "a friendly minion does not make it playable");
         var enemy = Summon(p.Opponent, "CS2_200");
-        Ok(p.Options().Where(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == held.Id).All(t => t.Target?.Id == enemy.Id), "only enemy minions are targets");
+        Ok(p.Options().Any(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == held.Id) && p.Options().Where(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == held.Id).All(t => t.Target?.Id == enemy.Id), "only enemy minions are targets");
         int deck = p.DeckZone.Count;
         Effects.Attack_N(3).ApplyTo(enemy); g.DeathProcessingAndAuraUpdate();
         PlayEntity(g, p, held, enemy);
@@ -775,7 +775,7 @@ internal static class WildY0bM4BProof
         var stealth = Summon(p.Opponent, "EX1_522"); // Patient Assassin: Stealth
         var wounded = Summon(p.Opponent, "CS2_200"); wounded.Damage = 4;
         var again = Add(p, id);
-        Ok(p.Options().Where(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == again.Id).All(t => t.Target?.Id != stealth.Id), "a Stealthed enemy is not targetable");
+        Ok(p.Options().Any(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == again.Id) && p.Options().Where(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == again.Id).All(t => t.Target?.Id != stealth.Id), "a Stealthed enemy is not targetable");
         PlayEntity(g, p, again, wounded);
         var fresh = p.DeckZone.Last(c => c.Card.Id == "CS2_200");
         Ok(((Minion)fresh).Damage == 0, "the shuffled copy is undamaged");

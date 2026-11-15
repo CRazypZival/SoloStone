@@ -489,7 +489,6 @@ internal static class WildY0bM3DProof
             // With no minion the secret is not spent.
             Play(g, me, id);
             Ok(me.SecretZone.Count == 1, "secret is in play");
-            Ok(me.SecretZone.First().IsExhausted || true, "placed");
             var a = Summon(me, "CS2_182"); var b = Summon(me, "CS2_168"); var enemy = Summon(foe, "CS2_182");
             a.Silence(); // silence before: buff still lands afterwards
             End(g); // opponent's turn starts: no trigger
@@ -650,7 +649,7 @@ internal static class WildY0bM3DProof
             FillBoard(me2);
             Ok(me2.BoardZone.IsFull, "board full");
             me2.Hero.HeroPower.IsExhausted = false;
-            Ok(g2.Process(HeroPowerTask.Any(me2)) || true, "full-board power does not stall");
+            Ok(g2.Process(HeroPowerTask.Any(me2)), "full-board power is accepted and does not stall");
             Ok(me2.BoardZone.Count == 7 && me2.Choice == null, "no summon on a full board");
             // Clone: pending behaviour continues.
             Resume(g, next =>

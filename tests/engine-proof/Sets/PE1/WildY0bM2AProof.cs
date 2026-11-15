@@ -163,6 +163,12 @@ internal static class WildY0bM2AProof
         Attack(g, attacker, defender);
         Check(attacker.Damage == 2 && attacker.IsFrozen && defender.Zone.Type == Zone.GRAVEYARD,
             "Snowchugger Freezes an attacker it damaged while defending, even as it dies");
+        // The Standard Core Water Elemental shares the Minion.Freeze rule: silenced, it does not Freeze (also run in SilenceCantAttackProof).
+        Park(p); Park(p.Opponent);
+        var water = Summon(p, "CS2_033"); var silencedWater = Summon(p, "CS2_033"); silencedWater.Silence(); g.DeathProcessingAndAuraUpdate();
+        var w1 = Summon(p.Opponent, "CS2_182"); var w2 = Summon(p.Opponent, "CS2_182");
+        Attack(g, water, w1); Attack(g, silencedWater, w2);
+        Check(w1.IsFrozen && !w2.IsFrozen, "Water Elemental Freezes; a silenced one does not");
     }
 
     // ---- GVG_003 Unstable Portal ------------------------------------------------------------------------------------

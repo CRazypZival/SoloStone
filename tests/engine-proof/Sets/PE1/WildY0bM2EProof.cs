@@ -358,8 +358,8 @@ internal static class WildY0bM2EProof
         var seen = new HashSet<string>();
         var cost4 = SabberStoneCore.CardSets.Client.Sets.WildGvgTasks.MinionsCosting(FormatType.FT_WILD, 4);
         Check(cost4.Count >= 30 && cost4.All(c => c.Cost == 4 && c.Type == CardType.MINION && c.Collectible), "every candidate is a collectible 4-cost minion");
-        Check(cost4.All(c => c.Id != "GVG_109") && Cards.CostMinionCards(FormatType.FT_WILD)[4].Any(c => c.Id == "GVG_109"),
-            "the frozen list still holds Mini-Mage (now 3 Mana) and the Deathrattle leaves it out");
+        Check(cost4.All(c => c.Id != "GVG_109") && Cards.CostMinionCards(FormatType.FT_WILD)[3].Any(c => c.Id == "GVG_109"),
+            "Mini-Mage (now 3 Mana) moved from the Cost/4 bucket to Cost/3 (Cards.cs regroups the frozen buckets by current Cost)");
         for (int seed = 1; seed <= 400; seed++)
         {
             var f = Fresh(seed);

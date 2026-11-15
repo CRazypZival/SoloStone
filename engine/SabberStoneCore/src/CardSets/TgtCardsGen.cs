@@ -81,7 +81,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_132_HUNTER", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_STEADY_SHOT,0},{PlayReq.REQ_MINION_OR_ENEMY_HERO,0}}, new Power
 			{
-				PowerTask = SpecificTask.SteadyShot(3)
+				PowerTask = new DamageTask(3, EntityType.OP_HERO)
 			}));
 
 			// -------------------------------------- HERO_POWER - MAGE
@@ -762,8 +762,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_008", new CardDef(new Power
 			{
-				// Played from hand: free a Hero Power already used this turn; Inspire frees it again after every use.
-				PowerTask = new SetGameTagTask(GameTag.EXHAUSTED, 0, EntityType.HERO_POWER),
+				// TODO [AT_008] Coldarra Drake && Test: Coldarra Drake_AT_008
 				Trigger = TriggerBuilder
 					.Type(TriggerType.INSPIRE)
 					.SetTask(new SetGameTagTask(GameTag.EXHAUSTED, 0, EntityType.HERO_POWER))
@@ -1394,10 +1393,10 @@ namespace SabberStoneCore.CardSets
 			}));
 
 			// ----------------------------------------- MINION - ROGUE
-			// [AT_036] Anub'arak - COST:8 [ATK:8/HP:4]
+			// [AT_036] Anub'arak - COST:9 [ATK:8/HP:4]
 			// - Set: tgt, Rarity: legendary
 			// --------------------------------------------------------
-			// Text: <b>Deathrattle:</b> Summon a 4/4 Nerubian with "<b>Deathrattle:</b> Summon Anub'arak."
+			// Text: <b>Deathrattle:</b> Return this to your hand and summon a 4/4 Nerubian.
 			// --------------------------------------------------------
 			// GameTag:
 			// - ELITE = 1
@@ -1406,7 +1405,10 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_036", new CardDef(new Power
 			{
-				DeathrattleTask = new SummonTask("AT_036t")
+				// TODO Check powerlog
+				DeathrattleTask = ComplexTask.Create(
+					new ReturnHandTask(EntityType.SOURCE),
+					new SummonTask("AT_036t"))
 			}));
 
 			// ------------------------------------------ SPELL - ROGUE
@@ -1475,10 +1477,7 @@ namespace SabberStoneCore.CardSets
 			// [AT_036t] Nerubian (*) - COST:4 [ATK:4/HP:4]
 			// - Set: tgt,
 			// --------------------------------------------------------
-			cards.Add("AT_036t", new CardDef(new Power
-			{
-				DeathrattleTask = new SummonTask("AT_036")
-			}) { Configure = card => card.SetPrintedDeathrattle() });
+			cards.Add("AT_036t", new CardDef());
 
 			// ------------------------------------------ SPELL - ROGUE
 			// [AT_035t] Nerubian Ambush! (*) - COST:3

@@ -462,8 +462,6 @@ namespace SabberStoneCore.Model.Entities
 					if (heroPowerCard.IsPlayableByCardReq(this))
 					{
 						Character[] targets = GetTargets(heroPowerCard);
-						if (targets != null && heroPowerCard.SourceTargetingPredicate != null)
-							targets = targets.Where(t => heroPowerCard.SourceTargetingPredicate(power, t)).ToArray();
 						if (targets != null)
 							for (int i = 0; i < targets.Length; i++)
 								allOptions.Add(HeroPowerTask.Any(this, targets[i], skipPrePhase: true, heroPowerId: powerId));

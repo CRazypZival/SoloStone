@@ -392,7 +392,7 @@ internal static class WildY0bM3EProof
             Kill(g, mech);
             var third = Add(p, id);
             options = p.Options().Where(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == third.Id).ToArray();
-            Check(options.All(t => t.Target != null && (t.Target.Id == knight.Id || t.Target.Id == secondKnight.Id)), "a dead Mech is no target; Knights are Mechs");
+            Check(options.Length > 0 && options.All(t => t.Target != null && (t.Target.Id == knight.Id || t.Target.Id == secondKnight.Id)), "a dead Mech is no target; Knights are Mechs");
             // a Mech that cannot be targeted
             Park(p); var stealthMech = Summon(p, Annoy);
             var onlyEnemy = Summon(opp, Annoy);

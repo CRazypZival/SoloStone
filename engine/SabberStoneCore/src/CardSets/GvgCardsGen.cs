@@ -343,7 +343,9 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_087", new CardDef(new Power
 			{
-				Aura = new Aura(AuraType.CONTROLLER, new Effect(GameTag.STEADY_SHOT_CAN_TARGET, EffectOperator.SET, 1))
+				// TODO [GVG_087] Steamwheedle Sniper && Test: Steamwheedle Sniper_GVG_087
+				//PowerTask = null,
+				//Trigger = null,
 			}));
 
 			// ----------------------------------------- SPELL - HUNTER

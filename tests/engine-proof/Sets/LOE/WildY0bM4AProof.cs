@@ -36,7 +36,7 @@ internal static class WildY0bM4AProof
         WildSetsProof.Case("LOE_020", DesertCamel);
         WildSetsProof.Case("LOE_021", DartTrap);
         WildSetsProof.Case("LOE_022", FierceMonkey);
-        WildSetsProof.Case("LOE_023", DarkPeddler);
+        WildSetsProof.Held("LOE_023", DarkPeddler);
         WildSetsProof.Case("LOE_026", AnyfinCanHappen);
         WildSetsProof.Case("LOE_027", SacredTrial);
         WildSetsProof.Case("LOE_029", JeweledScarab);
@@ -180,7 +180,8 @@ internal static class WildY0bM4AProof
         var enemy = Summon(p.Opponent, "CS2_182");
         int deck = p.DeckZone.Count, opponentDeck = p.Opponent.DeckZone.Count;
         var held = Add(p, id);
-        Ok(p.Options().Where(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == held.Id).All(t => t.Target != null)
+        Ok(p.Options().Any(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == held.Id)
+            && p.Options().Where(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == held.Id).All(t => t.Target != null)
             && CanPlay(p, held), "Forgotten Torch always requires a target");
         PlayEntity(g, p, held, enemy);
         Ok(enemy.Damage == 3 && p.DeckZone.Count == deck + 1 && p.DeckZone.Count(c => c.Card.Id == "LOE_002t") == 1

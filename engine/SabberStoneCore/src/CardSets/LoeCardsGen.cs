@@ -563,7 +563,9 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("LOE_023", new CardDef(new Power
 			{
-				PowerTask = new DiscoverTask(DiscoverType.ONE_COST)
+				// TODO [LOE_023] Dark Peddler && Test: Dark Peddler_LOE_023
+				//PowerTask = null,
+				//Trigger = null,
 			}));
 
 			// --------------------------------------- MINION - WARLOCK
@@ -867,7 +869,7 @@ namespace SabberStoneCore.CardSets
 			// [LOE_073] Fossilized Devilsaur - COST:8 [ATK:8/HP:8]
 			// - Set: loe, Rarity: common
 			// --------------------------------------------------------
-			// Text: <b>Battlecry:</b> If you control another Beast, gain <b>Taunt</b>.
+			// Text: <b>Battlecry:</b> If you control a Beast, gain <b>Taunt</b>.
 			// --------------------------------------------------------
 			// GameTag:
 			// - BATTLECRY = 1
@@ -877,12 +879,10 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("LOE_073", new CardDef(new Power
 			{
+				// TODO [LOE_073] Fossilized Devilsaur && Test: Fossilized Devilsaur_LOE_073
 				InfoCardId = "LOE_073e",
-				// 37.0: "another Beast"; the Devilsaur is a Beast itself.
-				PowerTask = ComplexTask.Create(
-					new ConditionTask(EntityType.SOURCE, new SelfCondition(me => me.Controller.BoardZone.Any(
-						other => other != me && other is SabberStoneCore.Model.Entities.Minion && other.Card.IsRace(Race.BEAST)))),
-					new FlagTask(true, new AddEnchantmentTask("LOE_073e", EntityType.SOURCE)))
+				//PowerTask = null,
+				//Trigger = null,
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL

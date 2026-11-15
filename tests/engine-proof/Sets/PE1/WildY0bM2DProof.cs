@@ -27,7 +27,7 @@ internal static class WildY0bM2DProof
         WildSetsProof.Case("GVG_083", UpgradedRepairBot);
         WildSetsProof.Case("GVG_084", FlyingMachine);
         WildSetsProof.Case("GVG_086", SiegeEngine);
-        WildSetsProof.Case("GVG_087", SteamwheedleSniper);
+        WildSetsProof.Held("GVG_087", SteamwheedleSniper);
         WildSetsProof.Case("GVG_088", OgreNinja);
         WildSetsProof.Case("GVG_089", Illuminator);
         WildSetsProof.Case("GVG_090", MadderBomber);
@@ -511,7 +511,7 @@ internal static class WildY0bM2DProof
         var sniper = (Minion)card;
         // a hero power that is not Steady Shot is unaffected (Rogue: no target; the Mage's Fireblast already takes any target)
         p.Hero.HeroPower.IsExhausted = false;
-        Check(PowerOptions(p).All(t => t.Target == null), "the Rogue hero power is still untargeted");
+        Check(PowerOptions(p).Any() && PowerOptions(p).All(t => t.Target == null), "the Rogue hero power is still untargeted");
         // Hunter games
         for (int seed = 1; seed <= 2; seed++)
         {
@@ -566,7 +566,7 @@ internal static class WildY0bM2DProof
             var mine = Dummy(f.Player1);
             End(f);
             Play(f, f.Player2, id);
-            Check(PowerOptions(f.Player2).All(t => t.Target != null), "their Sniper makes their hero power targeted");
+            Check(PowerOptions(f.Player2).Any() && PowerOptions(f.Player2).All(t => t.Target != null), "their Sniper makes their hero power targeted");
             End(f);
             Check(PowerOptions(f.Player1).Count() == 1 && PowerOptions(f.Player1).Single().Target == null, "but not mine");
             var theirMinion = Dummy(f.Player2);

@@ -71,6 +71,33 @@ internal static class WildSetsProof
         catch (Exception error) { Failures.Add(id + ": " + error); }
     }
 
+    /// <summary>A proof of a card held back from the manifest because Standard uses it (hold rule, #87/#141): never registered, run only
+    /// with WILD_HELD=1, prints PASS or FAIL and never throws. The card's script is at base, so a scenario that states the 37.0
+    /// behaviour FAILS until the card is released with a Standard golden audit.</summary>
+    internal static void Held(string id, Action<Game, Controller, string> scenario)
+    {
+        if (Environment.GetEnvironmentVariable("WILD_HELD") != "1") return;
+        try
+        {
+            for (int seed = 1; seed <= 3; seed++)
+            {
+                var game = new Game(new GameConfig { RandomSeed = seed, StartPlayer = 1, Shuffle = false, SkipMulligan = true,
+                    Player1HeroClass = CardClass.ROGUE, Player2HeroClass = CardClass.MAGE, History = true, Logging = false,
+                    Player1Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(),
+                    Player2Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(), FormatType = FormatType.FT_WILD });
+                game.StartGame();
+                foreach (var owner in new[] { game.Player1, game.Player2 })
+                {
+                    foreach (var opening in owner.HandZone.ToArray()) { owner.HandZone.Remove(opening); owner.SetasideZone.Add(opening); }
+                    owner.BaseMana = 10;
+                }
+                scenario(game, game.Player1, id);
+            }
+            Console.WriteLine("HELD " + id + " PASS (not registered)");
+        }
+        catch (Exception error) { Console.WriteLine("HELD " + id + " FAIL (script at base, not registered): " + error.Message); }
+    }
+
     internal static string[] ManifestIds() => Directory.GetFiles("tests/progression/batches/wild", "*.txt")
         .OrderBy(path => path, StringComparer.Ordinal)
         .SelectMany(path => File.ReadAllText(path).TrimEnd('\r', '\n').Split('\n')).Select(line => line.TrimEnd('\r')).ToArray();

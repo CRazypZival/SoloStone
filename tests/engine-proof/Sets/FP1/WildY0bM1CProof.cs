@@ -629,7 +629,6 @@ internal static class WildY0bM1CProof
             });
             End(g);
             Core2026Proof.Check(oppSpell.Cost == 9, "the opponent's turn: 5 more");
-            Core2026Proof.Check(opp.BaseMana == 10 || true, "fixture");
             opp.BaseMana = 10; opp.UsedMana = 0;
             Core2026Proof.Check(opp.Options().Any(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source.Id == oppSpell.Id), "a 9-cost spell is playable with 10 Mana");
             End(g);

@@ -597,7 +597,7 @@ internal static class WildY0bM3CProof
             });
             End(g);
             Play(g, p.Opponent, Frostbolt, p.Opponent.Hero);
-            Check(p.HandZone.Count == 0 || p.HandZone.All(c => c.Card.Id != null), "the opponent's spell gives me nothing");
+            Check(p.HandZone.Count == 0, "the opponent's spell gives me nothing: " + string.Join(",", p.HandZone.Select(c => c.Card.Id)));
             ParkHand(p);
             End(g);
             int held2 = p.HandZone.Count;

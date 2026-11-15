@@ -329,6 +329,12 @@ if (args.Contains("--events-only"))
     return;
 }
 
+if (args.Contains("--cost-buckets-only"))
+{
+    CostBucketProof.Run();
+    return;
+}
+
 if (args.Contains("--silence-keywords-only"))
 {
     SilenceValueProof.Run();
@@ -616,6 +622,7 @@ Core2026Proof.Run();
 ForcedAttackBudgetProof.Run();
 BonusEffectsProof.Run();
 SilenceCantAttackProof.Run();
+CostBucketProof.Run();
 EnemyBoardCopyProof.Run();
 StandardSetsProof.Run();
 WildSetsProof.Run();

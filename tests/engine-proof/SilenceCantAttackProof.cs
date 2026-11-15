@@ -83,7 +83,29 @@ internal static class SilenceCantAttackProof
                     "Cursed Chains after Silence: control returns, the turn ban " + (CHAINS_AFTER_SILENCE ? "stays" : "ends"));
             }
         }
+        WaterElementalFreeze();
         Console.WriteLine("PASS Silence and printed Can't attack: Ragnaros and Ancient Watcher attack after Silence, clone and snapshot; effect ban, Sleep and Cursed Chains unchanged");
+    }
+
+    /// <summary>Minion.Freeze: Silence removes the Freeze keyword of any freezing minion (retail), not only the Wings. The Standard Core
+    /// Water Elemental (CS2_033) in a Standard-format game: it freezes what it damages; silenced, it does not (retail 37.0).</summary>
+    private static void WaterElementalFreeze()
+    {
+        var game = new Game(new GameConfig { RandomSeed = 5, StartPlayer = 1, SkipMulligan = true, History = true, Logging = false,
+            FormatType = FormatType.FT_STANDARD });
+        game.StartGame();
+        var p = game.Player1;
+        var plain = Summon(p, "CS2_033"); var silenced = Summon(p, "CS2_033");
+        Core2026Proof.Check(plain.Card.Freeze, "fixture: Water Elemental freezes");
+        silenced.Silence(); game.DeathProcessingAndAuraUpdate();
+        End(game); End(game);
+        var a = Summon(game.Player2, Yeti); var b = Summon(game.Player2, Yeti);
+        Attack(game, plain, a);
+        Core2026Proof.Check(a.Damage > 0 && a.IsFrozen, "Water Elemental Freezes a minion it damaged");
+        Attack(game, silenced, b);
+        Core2026Proof.Check(b.Damage > 0 && !b.IsFrozen, "a silenced Water Elemental does not Freeze (Minion.Freeze follows Silence)");
+        var copy = game.CloneExact(history: true);
+        Core2026Proof.Check(!((Minion)copy.IdEntityDic[silenced.Id]).Freeze && ((Minion)copy.IdEntityDic[plain.Id]).Freeze, "Freeze keyword survives CloneExact");
     }
 
     private const bool SLEEP_AFTER_SILENCE = false, CHAINS_AFTER_SILENCE = false;

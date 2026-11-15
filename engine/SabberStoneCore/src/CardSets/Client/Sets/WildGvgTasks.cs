@@ -31,11 +31,9 @@ namespace SabberStoneCore.CardSets.Client.Sets
 				}
 			});
 
-		/// <summary>The frozen Wild minion list for a Cost, restricted to minions that cost exactly that now (the lists predate Cost changes such as Mini-Mage 4 to 3).</summary>
+		/// <summary>The minion list for a Cost. Cards.cs already regroups the frozen cost buckets by current Cost (#141), so no re-check is needed.</summary>
 		internal static List<Card> MinionsCosting(FormatType format, int cost) =>
-			Cards.CostMinionCards(format).TryGetValue(cost, out List<Card> frozen)
-				? frozen.Where(card => card.Cost == cost && card.Type == CardType.MINION).ToList()
-				: new List<Card>();
+			Cards.CostMinionCards(format).TryGetValue(cost, out List<Card> pool) ? pool : new List<Card>();
 
 		/// <summary>Summon one random minion of this Cost where the Deathrattle owner stood; nothing when no minion costs that much.</summary>
 		public static ISimpleTask SummonRandomMinionCosting(int cost) =>

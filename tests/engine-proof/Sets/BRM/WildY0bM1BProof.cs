@@ -121,7 +121,7 @@ internal static class WildY0bM1BProof
             // Dragon on the board or in the opponent's hand does not count.
             EmptyHand(p); Summon(p, "BRM_004"); Add(opp, "BRM_004");
             var second = Add(p, id);
-            Core2026Proof.Check(Plays(second).All(t => t.Target == null), "a Dragon on the board or in the opponent's hand does not enable the Battlecry");
+            Core2026Proof.Check(Plays(second).Any() && Plays(second).All(t => t.Target == null), "a Dragon on the board or in the opponent's hand does not enable the Battlecry");
             PlayEntity(g, p, second);
             Core2026Proof.Check(legendFriend.Zone.Type == Zone.PLAY, "without the Dragon nothing is destroyed");
             // Dual-race Dragon counts; the Battlecry is optional when no Legendary is left in play.
@@ -148,7 +148,7 @@ internal static class WildY0bM1BProof
             PlayEntity(g, opp, theirRend, mine);
             Core2026Proof.Check(mine.Zone.Type == Zone.GRAVEYARD && theirDragon.Zone.Type == Zone.HAND, "the opponent's Rend destroys my Legendary minion");
         });
-        WildSetsProof.Case("BRM_030", (g, p, id) => {
+        WildSetsProof.Held("BRM_030", (g, p, id) => {
             var opp = p.Opponent;
             var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 9 && card.ATK == 8 && card.Health == 8 && card.IsRace(Race.DRAGON) && card.Tags.GetValueOrDefault(GameTag.ELITE) == 1,
@@ -352,7 +352,7 @@ internal static class WildY0bM1BProof
             Play(g, p, id, p.Hero); Core2026Proof.Check(p.Hero.Damage == 5, "it may hit my own hero");
             Play(g, p, id, knight); Core2026Proof.Check(knight.Damage == 5 && knight.Health == 1, "it hits an Elusive minion");
             EmptyHand(p); StandardSetsProof.ParkBoard(p); Summon(p, "BRM_004"); Add(opp, "BRM_004"); var third = Add(p, id);
-            Core2026Proof.Check(Plays(third).All(t => t.Target == null), "a Dragon on the board or in the opponent's hand does not count");
+            Core2026Proof.Check(Plays(third).Any() && Plays(third).All(t => t.Target == null), "a Dragon on the board or in the opponent's hand does not count");
             End(g);
             Add(opp, "BRM_004"); var mine = Summon(p, "CS2_182");
             Play(g, opp, id, mine);
