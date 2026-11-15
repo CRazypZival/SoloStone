@@ -36,6 +36,7 @@ try {
     FavoriteCardBackTests.Run(Check, Reject, Fresh);
     V13FixtureMigrationTests.Run(Check, root);
     V14BackupFailureTests.Run(Check, root);
+    V16ClassicMigrationTests.Run(Check, root);
     QuoteMemoTests.Run(Check, Reject, Fresh);
     ShopJsonTests.Run(Check, Reject);
     PendingCosmeticsTests.Run(root);
@@ -218,7 +219,7 @@ try {
     using (var p = new LocalProfile(corePath)) {
         var match = p.Begin("mage", "priest", 1);
         var result = p.Settle(match.Id, "Won", 10, false); p.AcknowledgeRewardPresentation(match.Id);
-        Check(result.UnlockedCardIds.Contains("CORE_BAR_541") && p.Collection["CORE_BAR_541"] == 2, "level unlock of a bought Core card does not double-grant");
+        Check(result.UnlockedCardIds.Contains("CORE_SW_108") && p.Collection["CORE_SW_108"] == 2, "level unlock of a bought Core card does not double-grant");
         Check(p.IsDeckComplete(coreDeckId), "deck stays complete after a class unlock");
     }
     var coreSaved = Read(corePath);

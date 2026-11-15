@@ -186,6 +186,9 @@ public sealed class LocalCustomDeck : LocalDeckCardContainer
     public string PetFamily;
     public string PetForm;
     public bool RandomPetUseFavorite = true;
+    // V16 (#87): the deck's format, "Standard" for every deck today (Commit writes it; the V16 migration stamps old decks).
+    // Wild mode adds its value later; a reader that finds null treats the deck as Standard.
+    public string Format;
     [XmlIgnore] public bool RandomPetUseFavoriteSpecified { get => !RandomPetUseFavorite; set { } }
     [XmlIgnore] public bool CoinSpecified { get => Coin.HasValue; set { } }
     [XmlIgnore] public bool RandomCoinUseFavoriteSpecified { get => !RandomCoinUseFavorite; set { } }
@@ -432,7 +435,10 @@ public sealed class LocalCardSeen
 
 public sealed partial class LocalProfile : IDisposable
 {
-    private const int CurrentVersion = 15;
+    // V16 (#87): Classic/Basic cards are Wild. The upgrade grants owned Classic cards' Core reprints, moves saved decks onto
+    // them and stamps each deck's Format; decks still holding Wild cards stay as they are and cannot be queued until edited.
+    private const int CurrentVersion = 16;
+    internal const string StandardFormat = "Standard";
     // Personal decks only; loaners (NativeUIProjection.PlayerLoanerCapacity) sit above this cap. Raising it never
     // invalidates a save: load accepts any library size up to MaximumRecords and only shows the first drafts.
     public const int MaximumCustomDecks = 100;
@@ -585,7 +591,7 @@ public sealed partial class LocalProfile : IDisposable
 #endif
 
     // Versions the constructor loads (older ones are upgraded in place). The startup preflight shares this so the two cannot drift.
-    internal static bool IsSupportedVersion(int version) => version == 13 || version == 14 || version == CurrentVersion;
+    internal static bool IsSupportedVersion(int version) => version == 13 || version == 14 || version == 15 || version == CurrentVersion;
 
     public LocalProfile(string path) : this(path, false) { }
 
@@ -610,7 +616,7 @@ public sealed partial class LocalProfile : IDisposable
         {
             if (!File.Exists(this.path))
             {
-                if (snapshot) throw new InvalidOperationException("Snapshot requires an existing V15 profile.");
+                if (snapshot) throw new InvalidOperationException("Snapshot requires an existing V16 profile.");
                 data = NewProfile();
                 bornMissing = true;
             }
@@ -618,9 +624,9 @@ public sealed partial class LocalProfile : IDisposable
             {
                 LocalProfileData loaded = ReadFile(this.path);
                 if (loaded == null || !IsSupportedVersion(loaded.Version))
-                    throw new InvalidOperationException("Unsupported local profile version; create a fresh V15 profile.");
+                    throw new InvalidOperationException("Unsupported local profile version; create a fresh V16 profile.");
                 if (snapshot && loaded.Version != CurrentVersion)
-                    throw new InvalidOperationException("Snapshot requires an existing V15 profile.");
+                    throw new InvalidOperationException("Snapshot requires an existing V16 profile.");
                 if (loaded.FavoriteCardBacks != null && loaded.FavoriteCardBacks.Count == 0)
                     loaded.FavoriteCardBacks.Add(loaded.SelectedCardBack ?? 0);
                 loaded.SelectedCardBack = null;
@@ -642,10 +648,12 @@ public sealed partial class LocalProfile : IDisposable
                         throw new InvalidOperationException("V13 cannot contain pet state.");
                 }
                 if (upgrade) loaded.Version = CurrentVersion;
+                var classicMigration = upgrade ? MigrateClassicToV16(loaded) : Array.Empty<string>();
                 ValidateV14(loaded, profileOptions.AllCosmetics, profileOptions.LegendRating, profileOptions.AllDecks);
                 if (upgrade && !snapshot) {
                     EnsureBackup(File.ReadAllBytes(this.path), fromVersion);
                     Commit(loaded);
+                    LogDeckRepairs(classicMigration);
                 }
                 if (this.backups) LocalProfileBackups.Automatic(this.path, "startup", loaded.Version);
                 var successor = GrindTiers.Successor(loaded.GrindTier);
@@ -1307,10 +1315,21 @@ public sealed partial class LocalProfile : IDisposable
         } catch (InvalidOperationException) { return false; }
     }
 
+    // #87: the Wild cards a saved Standard deck still holds (main deck and sideboards), each id once. Such a deck stays
+    // editable but cannot be played until they are removed.
+    public IReadOnlyList<string> WildCards(long id)
+    {
+        var deck = GetDraft(id);
+        if (deck == null) return Array.Empty<string>();
+        return LocalCardCatalog.NonStandardIds((deck.Cards ?? new LocalDeckCards()).Concat((deck.Sideboards ?? new List<LocalSideboard>())
+            .SelectMany(board => (IEnumerable<string>)board?.Cards ?? Array.Empty<string>())));
+    }
+
     public bool IsDeckComplete(long id)
     {
         var deck = GetDraft(id);
         if (deck == null) return false;
+        if (WildCards(id).Count != 0) return false;
         try {
             PlayableDeck(deck.Name, deck.Hero, deck.Cards, deck.Sideboards);
             // Retail CollectionDeck.CanCardBeAddedAsOwned (254477): a sideboard copy is owned only beyond the main deck's
@@ -1596,7 +1615,8 @@ public sealed partial class LocalProfile : IDisposable
             GrindTier = GrindTiers.Default.Id,
             ClassXp = EmptyXp(),
             PackSeed = Guid.NewGuid().GetHashCode() & int.MaxValue,
-            Collection = CollectionList(LocalEconomy.StarterCollection),
+            // #87: no Classic/Basic starter cards (they are Wild); a new save starts with every Core common (GrantCoreUnlocks).
+            Collection = new List<LocalCardCount>(),
             NextCustomDeckId = FirstAllocatedCustomDeckId,
             PackCounters = new[] { FairPackRules.Legacy }.Concat(FairPackRules.PackTypes)
                 .Select(type => new LocalPackProgress { PackType = type }).ToList(),
@@ -1883,7 +1903,8 @@ public sealed partial class LocalProfile : IDisposable
 
     private void Commit(LocalProfileData next)
     {
-        if (next.Version != CurrentVersion) throw new InvalidOperationException("Only V15 profiles can be committed.");
+        if (next.Version != CurrentVersion) throw new InvalidOperationException("Only V16 profiles can be committed.");
+        foreach (var deck in next.CustomDecks ?? new List<LocalCustomDeck>()) if (deck != null && deck.Format == null) deck.Format = StandardFormat;
         ValidateV14(next, profileOptions.AllCosmetics, profileOptions.LegendRating, profileOptions.AllDecks);
         GrantCoreUnlocks(next);
         GrantClassRewards(next, null);
@@ -2008,6 +2029,59 @@ public sealed partial class LocalProfile : IDisposable
         if (profile.HiddenLoaners == null || profile.HiddenLoaners.Any(key => !IsStarterLoanerShape(key))
             || profile.HiddenLoaners.Distinct(StringComparer.Ordinal).Count() != profile.HiddenLoaners.Count)
             throw new InvalidOperationException("Invalid hidden starter decks.");
+        if (profile.Version >= 16 && profile.CustomDecks.Any(deck => deck.Format != null && deck.Format != StandardFormat))
+            throw new InvalidOperationException("Invalid deck format.");
+    }
+
+    // #87 Classic -> Core. A Classic or Basic card whose Core reprint shares its copy group (LocalCoreProgression.Unlocks).
+    internal static IReadOnlyDictionary<string, string> ClassicReprints => classicReprints.Value;
+    private static readonly Lazy<IReadOnlyDictionary<string, string>> classicReprints = new Lazy<IReadOnlyDictionary<string, string>>(() =>
+        new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(LocalCoreProgression.Unlocks
+            .Where(unlock => unlock.CopyGroup != unlock.Id && LocalCardCatalog.IsStandardId(unlock.Id) && !LocalCardCatalog.IsStandardId(unlock.CopyGroup)
+                && !LocalCardCatalog.IsCore(unlock.CopyGroup))
+            .GroupBy(unlock => unlock.CopyGroup, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.OrderBy(unlock => unlock.Id, StringComparer.Ordinal).First().Id, StringComparer.Ordinal)));
+
+    // V13-V15 -> V16 (#87), on the loaded data before validation and the backed-up commit. Nothing is deleted:
+    // 1. every owned Classic card with a Core reprint grants that Core card (CoreGrants is monotonic), up to its copies;
+    // 2. every saved deck (main and sideboards) moves those cards to the reprint, keeping each slot's premium (the
+    //    premium repair that follows every load drops a version the player does not own);
+    // 3. every deck is stamped Standard. A deck that still holds Wild cards loads as it is and is refused at queue time.
+    // Collection rows stay, so pending pack reveals, craft receipts and mastery keep validating against them.
+    internal static IReadOnlyList<string> MigrateClassicToV16(LocalProfileData profile)
+    {
+        var lines = new List<string>();
+        var reprints = ClassicReprints;
+        var owned = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var row in (profile.Collection ?? new List<LocalCardCount>()).Concat(profile.PremiumCollection ?? new List<LocalCardCount>()))
+            if (row != null && row.Id != null && row.Count > 0 && reprints.ContainsKey(row.Id))
+                owned[row.Id] = (owned.TryGetValue(row.Id, out int count) ? count : 0) + row.Count;
+        profile.CoreGrants = profile.CoreGrants ?? new List<LocalCardCount>();
+        foreach (var classic in owned.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            string core = reprints[classic.Key];
+            int copies = Math.Min(classic.Value, LocalCoreProgression.ById[core].Copies);
+            var grant = profile.CoreGrants.SingleOrDefault(entry => entry != null && entry.Id == core);
+            if (grant == null) profile.CoreGrants.Add(new LocalCardCount { Id = core, Count = copies });
+            else if (grant.Count < copies) grant.Count = copies;
+            else continue;
+            lines.Add("CLASSIC_REPRINT_GRANT classic=" + classic.Key + " core=" + core + " copies=" + copies);
+        }
+        foreach (var deck in profile.CustomDecks ?? new List<LocalCustomDeck>())
+        {
+            if (deck == null) continue;
+            int moved = 0;
+            foreach (var entry in (deck.CardEntries ?? new List<LocalDeckCard>())
+                .Concat((deck.Sideboards ?? new List<LocalSideboard>()).SelectMany(board => board?.CardEntries ?? new List<LocalDeckCard>())))
+                if (entry != null && entry.Id != null && reprints.TryGetValue(entry.Id, out string core)) { entry.Id = core; moved++; }
+            deck.Format = StandardFormat;
+            var wild = LocalCardCatalog.NonStandardIds((deck.CardEntries ?? new List<LocalDeckCard>()).Select(entry => entry?.Id)
+                .Concat((deck.Sideboards ?? new List<LocalSideboard>()).SelectMany(board => (board?.CardEntries ?? new List<LocalDeckCard>()).Select(entry => entry?.Id)))
+                .Where(id => id != null));
+            if (moved > 0 || wild.Count > 0)
+                lines.Add("CLASSIC_DECK_MIGRATION id=" + deck.Id + " moved=" + moved + " wild=" + string.Join(",", wild));
+        }
+        return lines;
     }
 
     private static void ValidateProgression(LocalProfileData profile, int version, string[] heroes)
@@ -2497,7 +2571,7 @@ public sealed partial class LocalProfile : IDisposable
         Id = deck.Id, SortOrder = deck.SortOrder, Name = deck.Name, Hero = deck.Hero, SourceRecipeId = deck.SourceRecipeId,
         Coin = deck.Coin, RandomCoinUseFavorite = deck.RandomCoinUseFavorite,
         CardBack = deck.CardBack, RandomCardBack = deck.RandomCardBack, HeroSkin = deck.HeroSkin, RandomHeroUseFavorite = deck.RandomHeroUseFavorite,
-        PetFamily = deck.PetFamily, PetForm = deck.PetForm, RandomPetUseFavorite = deck.RandomPetUseFavorite,
+        PetFamily = deck.PetFamily, PetForm = deck.PetForm, RandomPetUseFavorite = deck.RandomPetUseFavorite, Format = deck.Format,
         CardEntries = deck.CardEntries?.Select(Copy).ToList(),
         Sideboards = deck.Sideboards?.Select(row => new LocalSideboard { Source = row.Source, CardEntries = row.CardEntries?.Select(Copy).ToList() }).ToList()
     };
