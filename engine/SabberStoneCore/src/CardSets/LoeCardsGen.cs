@@ -352,7 +352,12 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("LOE_006", new CardDef(new Power
 			{
-				PowerTask = new DiscoverTask(DiscoverType.DEATHRATTLE)
+				// 37.0: the discovered card costs (1) less (never below 0).
+				PowerTask = new DiscoverTask(DiscoverType.DEATHRATTLE, new CustomTask((g, c, s, t, stack) =>
+				{
+					if (t is SabberStoneCore.Model.Entities.Playable chosen)
+						SabberStoneCore.Actions.CostRules.AddModifier(chosen, EffectOperator.SUB, 1);
+				}))
 			}));
 
 			// ----------------------------------------- SPELL - PRIEST
@@ -498,6 +503,7 @@ namespace SabberStoneCore.CardSets
 			{
 				Trigger = new Trigger(TriggerType.PLAY_CARD)
 				{
+					TriggerSource = TriggerSource.FRIENDLY,
 					Condition = SelfCondition.IsOverloadCard,
 					SingleTask = ComplexTask.Create(
 						new GetGameTagTask(GameTag.OVERLOAD, EntityType.TARGET),
@@ -552,9 +558,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("LOE_023", new CardDef(new Power
 			{
-				// TODO [LOE_023] Dark Peddler && Test: Dark Peddler_LOE_023
-				//PowerTask = null,
-				//Trigger = null,
+				PowerTask = new DiscoverTask(DiscoverType.ONE_COST)
 			}));
 
 			// --------------------------------------- MINION - WARLOCK
@@ -634,10 +638,11 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("LOE_009", new CardDef(new Power
 			{
-				// TODO [LOE_009] Obsidian Destroyer && Test: Obsidian Destroyer_LOE_009
 				InfoCardId = "LOE_009e",
-				//PowerTask = null,
-				//Trigger = null,
+				Trigger = new Trigger(TriggerType.TURN_END)
+				{
+					SingleTask = new SummonTask("LOE_009t", SummonSide.RIGHT)
+				}
 			}));
 
 			// --------------------------------------- MINION - WARRIOR
@@ -649,12 +654,7 @@ namespace SabberStoneCore.CardSets
 			// GameTag:
 			// - TAUNT = 1
 			// --------------------------------------------------------
-			cards.Add("LOE_022", new CardDef(new Power
-			{
-				// TODO [LOE_022] Fierce Monkey && Test: Fierce Monkey_LOE_022
-				//PowerTask = null,
-				//Trigger = null,
-			}));
+			cards.Add("LOE_022", new CardDef());
 
 			// --------------------------------------- WEAPON - WARRIOR
 			// [LOE_118] Cursed Blade - COST:1 [ATK:2/HP:0]
@@ -699,12 +699,7 @@ namespace SabberStoneCore.CardSets
 			// GameTag:
 			// - TAUNT = 1
 			// --------------------------------------------------------
-			cards.Add("LOE_009t", new CardDef(new Power
-			{
-				// TODO [LOE_009t] Scarab && Test: Scarab_LOE_009t
-				//PowerTask = null,
-				//Trigger = null,
-			}));
+			cards.Add("LOE_009t", new CardDef());
 
 		}
 
@@ -742,9 +737,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("LOE_029", new CardDef(new Power
 			{
-				// TODO [LOE_029] Jeweled Scarab && Test: Jeweled Scarab_LOE_029
-				//PowerTask = null,
-				//Trigger = null,
+				PowerTask = new DiscoverTask(DiscoverType.THREE_COST)
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -760,6 +753,12 @@ namespace SabberStoneCore.CardSets
 			{
 				Aura = new Aura(AuraType.HAND, Effects.SetCost(5))
 			}));
+
+			// --------------------------------------- MINION - NEUTRAL
+			// [LOEA10_3] Murloc Tinyfin - COST:0 [ATK:1/HP:1]
+			// - Race: murloc, Set: loe, Rarity: common
+			// --------------------------------------------------------
+			cards.Add("LOEA10_3", new CardDef());
 
 			// --------------------------------------- MINION - NEUTRAL
 			// [LOE_039] Gorillabot A-3 - COST:4 [ATK:3/HP:4]
@@ -790,9 +789,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("LOE_046", new CardDef(new Power
 			{
-				// TODO [LOE_046] Huge Toad && Test: Huge Toad_LOE_046
-				//PowerTask = null,
-				//Trigger = null,
+				DeathrattleTask = ComplexTask.DamageRandomTargets(1, EntityType.ENEMIES, 1)
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
