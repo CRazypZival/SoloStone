@@ -293,6 +293,12 @@ engine rather than picking a side. `goldens check` refuses a file in the single-
 `engineSha` and `historySha` fields); `rerecord` converts it, filling in each game's decisions hash, even when no game
 changed, so an older branch is brought up to date by the same command.
 
+A schema 3 record written before the random pool policy (`randomPoolPolicyVersion`) replays on the frozen legacy pools, and a
+plain `rerecord` keeps it there: it repairs hashes without changing which cards a random effect can roll. To move a file
+onto the match random pool policy (random effects draw only from the match's Standard pool, #141) pass
+`--renew-random-pools`: every unversioned game in scope is run again under the policy and stamped with it, and the
+games whose result changes are classified as above. Schema 2 files stay on the frozen pools and refuse the flag.
+
 `--dry-run` prints the same and writes nothing. Exit code 0 is success, 1 is a refusal or failure (a game could not be
 re-recorded, a behaviour or state change without its flag, a re-recorded game that still does not match, or a file not in the
 form `goldens record` writes); nothing is written then. 2 is a usage error.

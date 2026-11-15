@@ -195,7 +195,10 @@ public static class Simulation
 #if SOURCE_ENGINE
         , OfflinePoolManifest pools = null
 #endif
-        , DeckSpec playerDeck = null, DeckSpec opponentDeck = null
+        , DeckSpec playerDeck = null, DeckSpec opponentDeck = null,
+        // Records a fresh game on the frozen pools without stamping the policy version: repairing the hashes of a record
+        // that predates the random pool policy must not move it onto the new pools.
+        bool frozenRandomPools = false
         )
     {
         if (replay && record.ReplaySchema is not (2 or 3))
@@ -244,7 +247,7 @@ public static class Simulation
             LegacyPoolReplay = replay && record.ReplaySchema == 2,
             // An unversioned record replays on the frozen legacy lists, like unversioned Dark Gifts below. Live matches
             // run as FT_WILD yet play the Standard pool, so the pool policy is set explicitly (the default).
-            UnversionedRandomPoolReplay = replay && record.ReplaySchema == 3 && record.RandomPoolPolicyVersion == null,
+            UnversionedRandomPoolReplay = frozenRandomPools || replay && record.ReplaySchema == 3 && record.RandomPoolPolicyVersion == null,
             PoolFormat = SabberStoneCore.Config.GenerationFormat.Standard,
             ReplayPools = pools,
             Player1Sideboards = Sideboards(first), Player2Sideboards = Sideboards(second),
@@ -262,7 +265,7 @@ public static class Simulation
             record.PoolPolicyVersion = game.OfflinePools.PolicyVersion;
             record.PoolManifestHash = game.OfflinePools.Hash;
             record.DarkGiftPolicyVersion = DarkGifts.PolicyVersion;
-            record.RandomPoolPolicyVersion = SabberStoneCore.Model.RandomPools.MatchRandomPool.PolicyVersion;
+            record.RandomPoolPolicyVersion = frozenRandomPools ? null : SabberStoneCore.Model.RandomPools.MatchRandomPool.PolicyVersion;
         }
 #else
         if (!replay)
@@ -320,6 +323,7 @@ public static class Simulation
 #if SOURCE_ENGINE
         , OfflinePoolManifest pools = null
 #endif
+        , bool frozenRandomPools = false
         )
     {
         if (record.Policy is not ("random" or "first")) throw new ArgumentException("policy must be random or first");
@@ -328,7 +332,7 @@ public static class Simulation
 #if SOURCE_ENGINE
             , pools
 #endif
-            );
+            , frozenRandomPools: frozenRandomPools);
         started?.Invoke(game);
         // The XOR salts (0x485353494D = "HSSIM" here, 0x434C4F4E45 = "CLONE" for fuzz clone points) derive separate PRNG streams from
         // the game seed, so the policy and the clone-point choice never consume the game's own randomness.
