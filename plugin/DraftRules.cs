@@ -23,7 +23,8 @@ public sealed class DraftRules
     private readonly KeyValuePair<Rarity, int>[] rarities;
     private readonly HashSet<string> denyIds;
     private readonly int[][] rewards;
-    private readonly EngineCard[] pool;
+    // Built on the first offer only: reading the rules (View with no run, validation) never touches the card pool.
+    private readonly Lazy<EngineCard[]> pool;
 
     private DraftRules()
     {
@@ -51,8 +52,8 @@ public sealed class DraftRules
             || rarities.Length == 0 || rarities.Any(row => row.Value <= 0 || row.Key == Rarity.LEGENDARY)
             || rewards.Length != MaxWins + 1 || rewards.Any(row => row.Any(value => value < 0)))
             throw new InvalidOperationException("Invalid Arena rules.");
-        pool = LocalCardCatalog.ActivePoolIds().Select(Cards.FromId).Where(Eligible)
-            .OrderBy(card => card.Id, StringComparer.Ordinal).ToArray();
+        pool = new Lazy<EngineCard[]>(() => LocalCardCatalog.ActivePoolIds().Select(Cards.FromId).Where(Eligible)
+            .OrderBy(card => card.Id, StringComparer.Ordinal).ToArray());
     }
 
     private static int Required(JsonNode row, string key) =>
@@ -76,6 +77,7 @@ public sealed class DraftRules
         return card.Cost <= 10 || !string.IsNullOrWhiteSpace(text);
     }
 
+    public IReadOnlyList<string> Heroes => heroes;
     public IReadOnlyList<string> HeroOffers(long seed) => Draw(heroes.ToList(), seed, 0);
 
     public IReadOnlyList<string> Offers(long seed, int slot, string hero, IEnumerable<string> deck)
@@ -86,7 +88,7 @@ public sealed class DraftRules
         int decision = StableSeed.Derive(seed, Version, slot, Hash(hero), Hash(string.Join("|", ids)));
         var heroClass = LocalDecks.HeroClass(hero);
         var runes = LocalDecks.RuneCounts(ids.Select(Cards.FromId));
-        var allowed = pool.Where(card => LocalDecks.IsAllowedInDeck(card, heroClass)
+        var allowed = pool.Value.Where(card => LocalDecks.IsAllowedInDeck(card, heroClass)
             && (hero != "HERO_11" || Enumerable.Range(0, 3).Sum(i => Math.Max(runes[i], card[(GameTag)(2196 + i)])) <= 3)).ToArray();
         Rarity rarity = Rarity.LEGENDARY;
         if (slot != 1)

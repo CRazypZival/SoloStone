@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using SabberStoneCore.Enums;
+using SabberStoneCore.Model;
 
 public sealed class ArenaPick
 {
@@ -21,6 +23,9 @@ public sealed class ArenaRun
     public int HeroIndex = -1;
     public List<ArenaPick> Picks = new List<ArenaPick>();
     public List<string> Deck = new List<string>();
+    // The offer of the pick in progress, stored when it is generated: a later card-pool or rules change never rerolls it.
+    public List<string> PendingOffers = new List<string>();
+    public bool ShouldSerializePendingOffers() => PendingOffers != null && PendingOffers.Count != 0;
     public int Wins, Losses;
     public int EntryGold;
     public string EntryRequestId;
@@ -30,7 +35,7 @@ public sealed class ArenaRun
     public ArenaRun Copy() => new ArenaRun {
         RunId = RunId, Seed = Seed, RulesVersion = RulesVersion, GrindTier = GrindTier, Phase = Phase,
         HeroOffers = HeroOffers.ToList(), Hero = Hero, HeroIndex = HeroIndex,
-        Picks = Picks.Select(pick => pick.Copy()).ToList(), Deck = Deck.ToList(), Wins = Wins, Losses = Losses,
+        Picks = Picks.Select(pick => pick.Copy()).ToList(), Deck = Deck.ToList(), PendingOffers = PendingOffers?.ToList() ?? new List<string>(), Wins = Wins, Losses = Losses,
         EntryGold = EntryGold, EntryRequestId = EntryRequestId, Reward = CopyReward(Reward), Retired = Retired
     };
 
@@ -55,16 +60,18 @@ public sealed class ArenaRun
 
     internal void End(bool retired, string packType)
     {
-        Retired = retired; Phase = ArenaPhase.RewardPending;
+        Retired = retired; Phase = ArenaPhase.RewardPending; PendingOffers = new List<string>();
         Reward = DraftRules.Arena(RulesVersion).Reward(RunId, Wins, GrindTier, packType);
     }
 
+    // Structure only. Stored offers and rewards are history: they are never recomputed from today's card pool, rules or paces, so an
+    // update that changes any of them can never make a saved run or receipt unloadable. Rules are read for constants only.
     internal void Validate()
     {
         var rules = DraftRules.Arena(RulesVersion);
         if (!Guid.TryParseExact(RunId, "D", out _) || !ValidRequest(EntryRequestId) || !GrindTiers.IsKnown(GrindTier)
-            || EntryGold != rules.EntryGold || HeroOffers == null || Picks == null || Deck == null
-            || !HeroOffers.SequenceEqual(rules.HeroOffers(Seed)) || Picks.Count > rules.DeckSize
+            || EntryGold <= 0 || HeroOffers == null || Picks == null || Deck == null || PendingOffers == null
+            || !ValidOffer(HeroOffers, rules.OfferSize) || Picks.Count > rules.DeckSize
             || Wins < 0 || Wins > rules.MaxWins || Losses < 0 || Losses > rules.MaxLosses
             || Wins == rules.MaxWins && Losses == rules.MaxLosses
             || Retired && (Wins == rules.MaxWins || Losses == rules.MaxLosses)
@@ -75,16 +82,16 @@ public sealed class ArenaRun
         } else if (HeroIndex < 0 || HeroIndex >= rules.OfferSize || Hero != HeroOffers[HeroIndex]
             || Phase == ArenaPhase.ChoosingHero) Invalid();
         if (Deck.Count != Picks.Count) Invalid();
-        var preceding = new List<string>();
         for (int i = 0; i < Picks.Count; i++) {
             var pick = Picks[i];
-            if (pick == null || pick.Offers == null || pick.Index < 0 || pick.Index >= rules.OfferSize
-                || !pick.Offers.SequenceEqual(rules.Offers(Seed, i + 1, Hero, preceding))
-                || Deck[i] != pick.Offers[pick.Index]) Invalid();
-            preceding.Add(Deck[i]);
+            if (pick == null || pick.Index < 0 || pick.Index >= rules.OfferSize || !ValidOffer(pick.Offers, rules.OfferSize)
+                || !LegendaryShape(pick.Offers, i == 0) || Deck[i] != pick.Offers[pick.Index]) Invalid();
         }
-        if (Phase == ArenaPhase.Drafting && (Hero == null || Picks.Count >= rules.DeckSize)
-            || Phase == ArenaPhase.Ready && Picks.Count != rules.DeckSize
+        if (Phase == ArenaPhase.Drafting) {
+            if (Hero == null || Picks.Count >= rules.DeckSize || !ValidOffer(PendingOffers, rules.OfferSize)
+                || !LegendaryShape(PendingOffers, Picks.Count == 0)) Invalid();
+        } else if (PendingOffers.Count != 0) Invalid();
+        if (Phase == ArenaPhase.Ready && Picks.Count != rules.DeckSize
             || Phase != ArenaPhase.RewardPending && (Reward != null || Retired || Wins == rules.MaxWins || Losses == rules.MaxLosses)
             || Picks.Count < rules.DeckSize && (Wins != 0 || Losses != 0)) Invalid();
         if (Phase == ArenaPhase.RewardPending) {
@@ -93,14 +100,31 @@ public sealed class ArenaRun
         }
     }
 
+    // Offers are three distinct card-id-shaped strings (no card lookup: a card retired later must not break a saved run).
+    internal static bool ValidOffer(List<string> offers, int size) => offers != null && offers.Count == size
+        && offers.All(id => id != null && id.Length > 0 && id.Length <= 64 && id.All(c => char.IsLetterOrDigit(c) || c == '_'))
+        && offers.Distinct(StringComparer.Ordinal).Count() == offers.Count;
+
+    // The first pick offers legendaries only and no later pick does; a card id the engine no longer knows is not judged.
+    private static bool LegendaryShape(List<string> offers, bool first)
+    {
+        foreach (string id in offers) {
+            Rarity rarity;
+            try { var card = Cards.FromId(id); if (card == null) continue; rarity = card.Rarity; } catch (Exception) { continue; }
+            if ((rarity == Rarity.LEGENDARY) != first) return false;
+        }
+        return true;
+    }
+
     internal static bool ValidRequest(string id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 128 && !id.Any(char.IsControl);
     internal static void Invalid() => throw new InvalidOperationException("Invalid Arena run record.");
+    // A paid reward is a receipt: amounts are history (paid under the table and pace of their day), so only shape and bounds are checked.
     internal static void ValidateReward(ArenaReward reward, string runId, int wins, string tier, int version)
     {
-        if (reward == null || reward.PackTypes == null || reward.PackTypes.Count == 0) Invalid();
-        var expected = DraftRules.Arena(version).Reward(runId, wins, tier, reward.PackTypes[0]);
-        if (reward.RunId != runId || reward.Wins != wins || reward.Gold != expected.Gold || reward.Dust != expected.Dust
-            || !reward.PackTypes.SequenceEqual(expected.PackTypes)) Invalid();
+        var rules = DraftRules.Arena(version);
+        if (reward == null || reward.PackTypes == null || reward.PackTypes.Count == 0 || reward.PackTypes.Count > 16
+            || reward.PackTypes.Any(pack => string.IsNullOrEmpty(pack) || pack.Length > 64) || reward.RunId != runId || reward.Wins != wins
+            || wins < 0 || wins > rules.MaxWins || reward.Gold < 0 || reward.Dust < 0 || reward.Gold > 10000000 || reward.Dust > 10000000) Invalid();
     }
 }
 

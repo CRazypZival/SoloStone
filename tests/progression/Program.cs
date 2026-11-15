@@ -8,6 +8,12 @@ if (args.Length == 2 && args[0] == "--deck-premium-owner-save")
     return;
 }
 
+if (args.Length == 2 && args[0] == "--gen-arena-decks")
+{
+    ArenaDeckGenerator.Write(args[1]);
+    return;
+}
+
 if (args.SequenceEqual(new[] { "--deck-premiums-only" }))
 {
     var deckPremiumRoot = Path.Combine(Path.GetTempPath(), "hs-deck-premiums-" + Guid.NewGuid());
