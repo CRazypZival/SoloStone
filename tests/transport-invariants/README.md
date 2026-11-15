@@ -37,7 +37,7 @@ suite, which needs no client: legal-move hashes and chosen moves at every step, 
 fingerprint for the 8 that store one (the history is checked by the packet half here, so a presentation fix renews
 no replay). A replay that drifts after an intended rules change cannot be renewed from CI. A
 maintainer with a client renews it, after the same per-game review as a golden (see "Goldens" in
-[TESTING.md](../../docs/TESTING.md)). The tool that re-records these replays is not in this repository yet.
+[TESTING.md](../../docs/TESTING.md)). The engine half renews them with `EngineProof.dll --renew-replay PATH [--dump DIR] [--baseline DIR --accept "LABEL;LABEL" [--accept-behaviour "SHA: reason"] --write]` (`tests/engine-proof/PinnedReplayRenew.cs`): run `--dump` on the last passing commit, then `--baseline` on the new engine to see which steps and entities drift, then `--write` with `--accept` naming exactly the printed labels. It rewrites only `legalShas` and `engineFingerprint`, and refuses when a recorded action is no longer legal, the chosen move or an RNG state changed, or the turns or winner changed (that needs `--accept-behaviour`).
 
 ## Running
 
