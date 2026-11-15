@@ -17,12 +17,20 @@ internal interface ICraftingLedger
 
 internal static class CraftingLedgerRegistry
 {
-    internal static ICraftingLedger Current = null;
+    private static ICraftingLedger current;
+    internal static ICraftingLedger Current {
+        get => current;
+        set {
+            current = value;
+            ArenaServiceRegistry.Current = value is LocalCraftingLedger ledger ? new ArenaService(ledger.Profile) : null;
+        }
+    }
 }
 
 internal sealed class LocalCraftingLedger : ICraftingLedger
 {
     private readonly LocalProfile profile;
+    internal LocalProfile Profile => profile;
 
     internal LocalCraftingLedger(LocalProfile profile) => this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
 

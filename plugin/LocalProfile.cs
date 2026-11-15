@@ -222,6 +222,13 @@ public sealed class LocalClassXp
 
 public sealed class LocalProfileData
 {
+    public ArenaRun ArenaRun;
+    public bool ShouldSerializeArenaRun() => ArenaRun != null;
+    public List<ArenaReceipt> ArenaReceipts = new List<ArenaReceipt>();
+    public bool ShouldSerializeArenaReceipts() => ArenaReceipts != null && ArenaReceipts.Count != 0;
+    // Keep entry keys after the bounded audit receipts roll off, so an old request can never charge twice.
+    public List<string> ArenaEntryRequestIds = new List<string>();
+    public bool ShouldSerializeArenaEntryRequestIds() => ArenaEntryRequestIds != null && ArenaEntryRequestIds.Count != 0;
     public string GrindTier;
     public bool ShouldSerializeGrindTier() => GrindTier != null;
     public int Version;
@@ -1823,6 +1830,9 @@ public sealed partial class LocalProfile : IDisposable
 
     private LocalProfileData Snapshot() => new LocalProfileData {
         Version = CurrentVersion, GrindTier = data.GrindTier,
+        ArenaRun = data.ArenaRun?.Copy(),
+        ArenaReceipts = data.ArenaReceipts.Select(row => row.Copy()).ToList(),
+        ArenaEntryRequestIds = data.ArenaEntryRequestIds.ToList(),
         MasteryGrants = data.MasteryGrants.Select(LocalCardMastery.Clone).ToList(),
         ClassRewardGrants = data.ClassRewardGrants.Select(Copy).ToList(),
         PortraitGrants = data.PortraitGrants.Select(Copy).ToList(),
@@ -2005,6 +2015,7 @@ public sealed partial class LocalProfile : IDisposable
         GrindTiers.Find(profile?.GrindTier);
         ValidateV8(profile, allCosmetics, legendRating, allDecks);
         ValidateAchievements(profile);
+        ValidateArena(profile);
         if (profile.HiddenLoaners == null || profile.HiddenLoaners.Any(key => !IsStarterLoanerShape(key))
             || profile.HiddenLoaners.Distinct(StringComparer.Ordinal).Count() != profile.HiddenLoaners.Count)
             throw new InvalidOperationException("Invalid hidden starter decks.");
