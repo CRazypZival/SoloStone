@@ -94,6 +94,15 @@ internal static class TargetingRulesProof
                 });
             if (!failures.Any(f => f.StartsWith(id))) Verify(wispFirst, id + ": the Wisp-first ordering was exercised");
         }
+        // Nothing left to hit (the only enemy character is already dying): the Deathrattle does nothing instead of failing.
+        foreach (string id in new[] { "EDR_110", "CATA_580t" })
+            Parts(failures, id + " no candidate", () => {
+                var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+                p.Opponent.Hero.ToBeDestroyed = true;
+                var a = Summon(p, id); a[GameTag.TAG_SCRIPT_DATA_NUM_1] = 5; a.ToBeDestroyed = true;
+                g.DeathProcessingAndAuraUpdate();
+                Verify(a.Zone.Type == Zone.GRAVEYARD, id + " died with no candidate and no error");
+            });
         // Spells: Aeon Rend (two random enemies), Cease to Exist (random enemy minion destroyed).
         for (int seed = 1; seed <= 25; seed++)
         {
