@@ -866,6 +866,7 @@ M	Assembly-CSharp	Card	OnActorChanged	(Actor)
 M	Assembly-CSharp	Card	OnActorChanged	*
 M	Assembly-CSharp	Card	SetDoNotSort	System.Void(System.Boolean)
 M	Assembly-CSharp	Card	ShowCard	System.Void()
+M	Assembly-CSharp	Card	ShowSecretTrigger	()
 M	Assembly-CSharp	Card	get_HasCardDef	System.Boolean()
 M	Assembly-CSharp	CardBackDbfRecord	get_Description	DbfLocValue()
 M	Assembly-CSharp	CardBackInfoManager	EnterPreview	(System.Int32,CollectionCardVisual)

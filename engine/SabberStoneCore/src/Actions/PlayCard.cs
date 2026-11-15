@@ -566,7 +566,9 @@ namespace SabberStoneCore.Actions
 
 				if (game.History)
 				{
-					if (spell.IsSecret || spell.IsQuest)
+					// A Sigil enters SECRET like a Secret: a PLAY row would make the identity freeze emit a SHOW of the
+					// owner's own card with ZONE=HAND, which undoes the client's local drop prediction (#137).
+					if (spell.IsSecret || spell.IsQuest || SigilRules.IsSigil(spell))
 						spell[GameTag.ZONE] = (int)Zone.SECRET;
 					else
 						spell[GameTag.ZONE] = (int)Zone.PLAY;
@@ -575,7 +577,7 @@ namespace SabberStoneCore.Actions
 				}
 
 				// Native spell plays predict position 0; retaining the hand slot leaves prediction history unmatched.
-				if (!spell.IsSecret && !spell.IsQuest) spell.ZonePosition = -1;
+				if (!spell.IsSecret && !spell.IsQuest && !SigilRules.IsSigil(spell)) spell.ZonePosition = -1;
 
 				// - OnPlay Phase --> OnPlay Trigger (Illidan)
 				//   (death processing, aura updates)

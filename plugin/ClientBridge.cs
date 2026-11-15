@@ -83,6 +83,7 @@ internal static class ClientBridge
             postfix: new HarmonyMethod(typeof(ClientBridge), nameof(RefreshHandChoiceTargeting)));
         NativeBigCardWatchdog.Initialize(harmony);
         NativeSpellWatchdog.Initialize(harmony);
+        NativeSigilGuard.Initialize(harmony, logger);
         ProfileStartupStatus.ClearBound(reports);
         NativeMatchmaking.Initialize(harmony, logger);
         StartupTiming.Mark("bridge-matchmaking");

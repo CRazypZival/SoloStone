@@ -10,7 +10,7 @@ using static StandardSetsProof;
 internal static class SigilofHatchingProof
 {
     internal static void Run() => StandardSetsProof.Case("BE_873", (g, p, id) => {
-        var spell = Play(g, p, id); Core2026Proof.Check(p.BoardZone.Count == 0, "summon delayed");
+        var spell = SigilOfTheSeasProof.PlayChecked(g, p, id); Core2026Proof.Check(p.BoardZone.Count == 0, "summon delayed");
         var restored = Game.LoadSnapshot(g.SaveSnapshot()); End(restored); End(restored);
         Core2026Proof.Check(restored.Player1.BoardZone.Count == 3 && SigilRules.IsActive(spell) && p.BoardZone.Count == 0
             && restored.IdEntityDic[spell.Id].Zone.Type == Zone.GRAVEYARD, "pending Sigil waits in SECRET, survives snapshot without affecting original, retires once fired");
