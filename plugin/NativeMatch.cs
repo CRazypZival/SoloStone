@@ -965,7 +965,12 @@ public sealed class NativeMatch
             RecordedAction("main-begin");
         }
 
+#if ENGINE_SOURCE
+        resumingHumanChoice = true;
+        try { SendHistory(Game.PowerHistory.Last); } finally { resumingHumanChoice = false; }
+#else
         SendHistory(Game.PowerHistory.Last);
+#endif
 #if ENGINE_SOURCE
         RetireChosenChoiceActors(choices, picks, proxyPicks, retainedPicks);
         privateDeckOffers.Clear();
@@ -5793,6 +5798,7 @@ public sealed class NativeMatch
     {
         if (packet.List.Count == 0) return;
 #if ENGINE_SOURCE
+        FlattenEmptyResumedBattlecry(packet);
         SuppressEmptyTriggers(packet);
         NormalizeBoardTransit(packet);
         NormalizePublicIdentity(packet);
@@ -6199,6 +6205,31 @@ public sealed class NativeMatch
                     && appendages.Contains(entity.Name)) return;
             }
         start.TriggerKeyword = (int)GameTag.TRIGGER_VISUAL;
+    }
+
+    // The history that resumes a Battlecry after the human's pick opens a second POWER block for the same source. When the
+    // answer changes nothing the client can show (Futuristic Forefather's wrong guess), that block holds only game or player
+    // tag changes. Lane 1 (2026-11-15, #115): the client then never finished the choice (clientChoiceId stayed, the power queue
+    // waited on it for good). A Discover that resumes with no block ends with the same loose tags, so those tags are sent loose.
+    private bool resumingHumanChoice;
+    private void FlattenEmptyResumedBattlecry(NativePowerHistory packet)
+    {
+        if (!resumingHumanChoice || impactFrames.Count > 0 || Game == null) return;
+        var list = packet.List;
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (!list[i].HasPowerStart || list[i].PowerStart.Type != HistoryBlock.Type.POWER) continue;
+            int end = -1;
+            for (int j = i + 1; j < list.Count; j++)
+            {
+                if (list[j].HasPowerEnd) { end = j; break; }
+                bool bookkeeping = list[j].HasTagChange && (list[j].TagChange.Entity == Game.Id
+                    || list[j].TagChange.Entity == Game.Player1.Id || list[j].TagChange.Entity == Game.Player2.Id);
+                if (!bookkeeping) break;
+            }
+            if (end < 0) continue;
+            list.RemoveAt(end); list.RemoveAt(i); i--;
+        }
     }
 
     private void SuppressEmptyTriggers(NativePowerHistory packet)

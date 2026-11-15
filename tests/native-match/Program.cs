@@ -81,7 +81,11 @@ internal static partial class Program
         foreach (string moved in new[] { "--rematch-only", "--canonical-privacy-assertions-only" })
             if (args.Contains(moved)) throw new ArgumentException(moved + " moved to the native-match-logic suite");
         ControllerAdmissionInvariant.Install();
-        if (args.Contains("--softlock-only")) { NativeMatch.ClockFreeBot = true; ForefatherGuessNative(); AnnouncerRewindDeathKnightNative(); ForefatherFromDiscoverNative(); return; }
+        if (args.Contains("--dump-flows")) { NativeMatch.ClockFreeBot = true;
+            DumpFlow("Forefather", "TIME_041", "TIME_041", 0); DumpFlow("Stonehill", "Core_UNG_072", "Core_UNG_072", 0); DumpFlow("Announcer", "TIME_034", "TIME_034", 0);
+            foreach (string c in new[] { "JAIL_734", "CAP_403", "JAIL_303", "JAIL_851", "TIME_701" }) try { DumpFlow(c, c, c, 0); } catch (Exception e) { Console.WriteLine("ERR " + c + " " + e.Message); }
+            return; }
+        if (args.Contains("--softlock-only")) { NativeMatch.ClockFreeBot = true; ForefatherGuessNative(); AnnouncerRewindDeathKnightNative(); ForefatherFromDiscoverNative(); ResumedChoiceSweep(); return; }
         if (args.Contains("--ledgerline-only")) { NativeMatch.ClockFreeBot = true; NpcWorldIntegrationTests.LedgerlineForefatherGuess(); return; }
         if (args.Contains("--match-event-log-review-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogReview(); return; }
         if (args.Contains("--match-event-log-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogNative(); return; }
@@ -253,6 +257,7 @@ internal static partial class Program
         ForefatherGuessNative();
         AnnouncerRewindDeathKnightNative();
         ForefatherFromDiscoverNative();
+        ResumedChoiceSweep();
         GroupProofs.Run(ProofKind.Native);
         if (args.Contains("--hand-buff-only")) return;
         OverloadManaParity();
