@@ -822,7 +822,7 @@ namespace SabberStoneCore.CardSets
 			{
 				Trigger = new Trigger(TriggerType.HEAL)
 				{
-					TriggerSource = TriggerSource.MINIONS,
+					TriggerSource = TriggerSource.ALL_MINIONS,
 					SingleTask = ComplexTask.Create(
 						new RandomTask(1, EntityType.ENEMIES),
 						new DamageTask(1, EntityType.STACK))
@@ -1208,9 +1208,11 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_066", new CardDef(new Power
 			{
-				// TODO [GVG_066] Dunemaul Shaman && Test: Dunemaul Shaman_GVG_066
-				//PowerTask = null,
-				//Trigger = null,
+				Trigger = new Trigger(TriggerType.TARGET)
+				{
+					TriggerSource = TriggerSource.SELF,
+					SingleTask = SpecificTask.Forgetful
+				}
 			}));
 
 			// ----------------------------------------- SPELL - SHAMAN
@@ -1536,8 +1538,8 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_056", new CardDef(new Power
 			{
-				// TODO Test: Iron Juggernaut_GVG_056
-				PowerTask = new AddCardTo("GVG_056t", EntityType.OP_DECK)
+				PowerTask = new AddCardTo("GVG_056t", EntityType.OP_DECK),
+				DeathrattleTask = new AddCardTo("GVG_056t", EntityType.OP_DECK)
 			}));
 
 			// --------------------------------------- MINION - WARRIOR
@@ -1612,9 +1614,11 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_054", new CardDef(new Power
 			{
-				// TODO [GVG_054] Ogre Warmaul && Test: Ogre Warmaul_GVG_054
-				//PowerTask = null,
-				//Trigger = null,
+				Trigger = new Trigger(TriggerType.TARGET)
+				{
+					TriggerSource = TriggerSource.HERO,
+					SingleTask = SpecificTask.Forgetful
+				}
 			}));
 
 		}
@@ -1757,9 +1761,11 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_065", new CardDef(new Power
 			{
-				// TODO [GVG_065] Ogre Brute && Test: Ogre Brute_GVG_065
-				//PowerTask = null,
-				//Trigger = null,
+				Trigger = new Trigger(TriggerType.TARGET)
+				{
+					TriggerSource = TriggerSource.SELF,
+					SingleTask = SpecificTask.Forgetful
+				}
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -1832,9 +1838,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_074", new CardDef(new Power
 			{
-				// TODO [GVG_074] Kezan Mystic && Test: Kezan Mystic_GVG_074
-				//PowerTask = null,
-				//Trigger = null,
+				PowerTask = SpecificTask.KezanMystic
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
