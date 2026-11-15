@@ -38,6 +38,7 @@ internal static partial class Program
         ConditionalBattlecryVisuals();
         EventTriggerDamageVisuals();
         DelayedDamageVisuals();
+        SigilPlayHistory();
         SkeletonKeyRefreshVisual();
         PublicTriggerRevealBoundaries();
         DamageGroupScopeBoundaries();
@@ -1411,5 +1412,61 @@ internal static partial class Program
             capture.SerializeAll();
         }
         Console.WriteLine("PASS distinct Deathrattle create recipe, both players");
+    }
+    // #137: a Sigil enters SECRET straight from the hand, like a Secret. A SHOW of the owner's own card (ZONE=HAND) or a
+    // ZONE=PLAY row inside its play block undoes the client's local drop prediction and leaves the card on the wrong actor.
+    private static void SigilPlayHistory()
+    {
+        foreach (bool bot in new[] { false, true })
+        foreach (bool drawn in new[] { true, false })
+        foreach (string id in new[] { "CATA_528", "FIR_902", "BE_873" })
+        {
+            var (match, capture) = AnimationMatch(botTurn: bot); var owner = match.Game.CurrentPlayer;
+            string label = $"{id} bot={bot} drawn={drawn}";
+            var enemy = (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId("CS2_200"), zone: owner.Opponent.BoardZone); enemy.BaseHealth = 30;
+            var sigil = drawn ? SabberStoneCore.Actions.Generic.DrawCard(owner, Cards.FromId(id))
+                : EngineEntity.FromCard(owner, Cards.FromId(id), zone: owner.HandZone);
+            sigil.Cost = 0;
+            FlushFieldHistory(match); int cursor = capture.Packets.Count;
+            InvokeProcess(match, owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == sigil.Id));
+            FlushFieldHistory(match);
+            var play = History(capture, cursor);
+            int begin = play.FindIndex(e => e.HasPowerStart && e.PowerStart.Source == sigil.Id && (int)e.PowerStart.Type == (int)BlockType.PLAY);
+            Check(begin >= 0, label + " has a PLAY block");
+            int depth = 1, end = begin + 1;
+            for (; end < play.Count && depth > 0; end++) { if (play[end].HasPowerStart) depth++; if (play[end].HasPowerEnd) depth--; }
+            var block = play.Skip(begin + 1).Take(end - begin - 2).ToArray();
+            Check(!block.Any(e => e.HasShowEntity && e.ShowEntity.Entity == sigil.Id), label + " play block does not re-show the Sigil");
+            Check(!block.Any(e => e.HasFullEntity && e.FullEntity.Entity == sigil.Id), label + " play block does not re-create the Sigil");
+            Check(!block.Any(e => e.HasTagChange && e.TagChange.Entity == sigil.Id && e.TagChange.Tag == (int)GameTag.ZONE && e.TagChange.Value == (int)SabberStoneCore.Enums.Zone.PLAY),
+                label + " Sigil never takes ZONE=PLAY");
+            Check(play.Any(e => e.HasTagChange && e.TagChange.Entity == sigil.Id && e.TagChange.Tag == (int)GameTag.ZONE && e.TagChange.Value == (int)SabberStoneCore.Enums.Zone.SECRET)
+                || play.Any(e => e.HasShowEntity && e.ShowEntity.Entity == sigil.Id
+                    && e.ShowEntity.Tags.Any(t => t.Name == (int)GameTag.ZONE && t.Value == (int)SabberStoneCore.Enums.Zone.SECRET)),
+                label + " reaches ZONE=SECRET");
+            // The human owner already knows the card, so nothing re-shows it. The opponent's hidden hand card is revealed
+            // once, before the block, as for any played opponent card; that SHOW cannot undo a prediction (the human did not drop it).
+            if (!bot) Check(!play.Any(e => e.HasShowEntity && e.ShowEntity.Entity == sigil.Id), label + " no SHOW of the owner's own card");
+            // Own turn ends, the opponent's ends, and the Sigil fires at the start of the owner's next turn.
+            InvokeProcess(match, owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.END_TURN));
+            FlushFieldHistory(match); cursor = capture.Packets.Count;
+            InvokeProcess(match, match.Game.CurrentPlayer.Options().First(t => t.PlayerTaskType == PlayerTaskType.END_TURN));
+            FlushFieldHistory(match);
+            var turn = History(capture, cursor);
+            int trigger = turn.FindIndex(e => e.HasPowerStart && e.PowerStart.Source == sigil.Id && (int)e.PowerStart.Type == (int)BlockType.TRIGGER);
+            Check(trigger >= 0, label + " has a TRIGGER block at the owner's next turn");
+            var header = turn[trigger].PowerStart;
+            Check(header.HasTriggerKeyword && header.TriggerKeyword == 1749 && header.EffectIndex == 0, label + " trigger keyword is SIGIL");
+            depth = 1; end = trigger + 1;
+            for (; end < turn.Count && depth > 0; end++) { if (turn[end].HasPowerStart) depth++; if (turn[end].HasPowerEnd) depth--; }
+            Check(depth == 0, label + " trigger block closes");
+            var inner = turn.Skip(trigger + 1).Take(end - trigger - 2).ToArray();
+            Check(inner.Length > 2, label + " trigger block carries the effect");
+            Check(inner.Any(e => e.HasTagChange && e.TagChange.Entity == sigil.Id && e.TagChange.Tag == (int)GameTag.ZONE && e.TagChange.Value == (int)SabberStoneCore.Enums.Zone.GRAVEYARD),
+                label + " Sigil moves to GRAVEYARD inside its trigger block");
+            Check(sigil.Zone.Type == SabberStoneCore.Enums.Zone.GRAVEYARD, label + " engine Sigil is in the graveyard");
+            capture.SerializeAll();
+        }
+        Console.WriteLine("PASS Sigil play shape (no re-show, no PLAY zone) and next-turn trigger, both seats, drawn and created");
     }
 }
