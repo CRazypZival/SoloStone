@@ -595,9 +595,14 @@ internal static class WildY0bM3CProof
                 Play(next, owner, Frostbolt, next.Player2.Hero);
                 Check(owner.HandZone.Count == 2, "the effect continues on a clone");
             });
+            // The opponent casts a spell DURING my turn, while my Lock and Loads are active: they only count my own spells.
+            var theirSpell = (Spell)Add(p.Opponent, Frostbolt);
+            Generic.CastSpell(p.Opponent, g, theirSpell, p.Opponent.Hero, 0);
+            g.DeathProcessingAndAuraUpdate();
+            Check(p.HandZone.Count == 0, "the opponent's spell during my turn gives me nothing: " + string.Join(",", p.HandZone.Select(c => c.Card.Id)));
             End(g);
             Play(g, p.Opponent, Frostbolt, p.Opponent.Hero);
-            Check(p.HandZone.Count == 0, "the opponent's spell gives me nothing: " + string.Join(",", p.HandZone.Select(c => c.Card.Id)));
+            Check(p.HandZone.Count == 0, "the opponent's spell on their own turn gives me nothing: " + string.Join(",", p.HandZone.Select(c => c.Card.Id)));
             ParkHand(p);
             End(g);
             int held2 = p.HandZone.Count;

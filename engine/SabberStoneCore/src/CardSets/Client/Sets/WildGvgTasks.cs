@@ -99,12 +99,5 @@ namespace SabberStoneCore.CardSets.Client.Sets
 					stack.Playables = new[] { Entity.FromCard(c, pick) };
 				}),
 				new AddStackTo(EntityType.HAND));
-
-		/// <summary>Mogor the Ogre: every minion's attack has the Forgetful 50% chance to go to another enemy; hero attacks are untouched.</summary>
-		public static ISimpleTask Mogor =>
-			new CustomTask((g, c, s, t, stack) =>
-			{
-				if (g.CurrentEventData?.EventSource is Minion) SpecificTask.Forgetful.Process(in g, in c, in s, in t, stack);
-			});
 	}
 }

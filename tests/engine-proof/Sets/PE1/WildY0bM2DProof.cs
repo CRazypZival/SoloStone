@@ -12,8 +12,9 @@ using static Core2026Proof;
 //  - BLOCKED-STANDARD GVG_079 (data/pools/pool-eligibility-v1.json: dependency of the Standard module TIME_017),
 //    GVG_082 and GVG_100 (data/pools/pool-eligibility-v1.json legacy rows), GVG_085 (plugin/LocalCardCatalog.cs CoreUnlock row and
 //    data/progression/core-2026-unlocks.json copyGroup): Standard data uses them today. Their scripts are not changed here.
-// Hero power note (GVG_087): REQ_STEADY_SHOT hero powers (Steady Shot DS1h_292, Ballista Shot AT_132_HUNTER) become targeted (any minion or the
-// enemy hero) while the controller has a STEADY_SHOT_CAN_TARGET effect; other hero powers are unaffected.
+// HELD GVG_087 Steamwheedle Sniper (Your Hero Power can target minions): it needs the REQ_STEADY_SHOT targeting rule, which would change the
+// Standard Steady Shot (DS1h_292, AT_132_HUNTER; a Wisprider played by a non-Hunter holding it). The script and the rule stay at base; the
+// scenario below is kept for WILD_HELD=1 and FAILS until the card is released with a Standard golden audit.
 internal static class WildY0bM2DProof
 {
     [GroupProof("wild-y0b-m2d-cards", ProofKind.WildCards)]
