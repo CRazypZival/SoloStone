@@ -2356,6 +2356,11 @@ internal static class NativeShop
                         foreach (Component text in button.GetComponentsInChildren(textGetter.DeclaringType, false))
                             if (!string.IsNullOrWhiteSpace(Text(text))) labels.Add(Text(text));
             node["buyLabels"] = labels;
+            var events = new List<object>();
+            foreach (var button in page.GetComponentsInChildren<UIBButton>(false))
+                events.Add(new MiniJSON.JsonNode { { "name", button.transform.parent == null ? button.name : button.transform.parent.name + "/" + button.name },
+                    { "event", button.BubbleUpEvent }, { "buyPath", IsSingleBuyPath(path => MatchesHierarchy(button, path)) } });
+            node["buttons"] = events;
             return node;
         }
         catch (Exception error) { return new MiniJSON.JsonNode { { "error", (error.InnerException ?? error).Message } }; }
@@ -3231,8 +3236,10 @@ internal static class NativeShop
         var amount = control.GetComponentInParent<AdjustBuyingAmount>();
         if (amount != null && localPage && amount.GetComponentInParent<ProductPage>() == currentPage)
         {
-            if (control == (Read(amount, "m_incrementClickable") as Component)?.GetComponent<PegUIElement>()) { id = NativeShopAmountText.MoreId; return true; }
-            if (control == (Read(amount, "m_decrementClickable") as Component)?.GetComponent<PegUIElement>()) { id = NativeShopAmountText.LessId; return true; }
+            // Live 2026-11-15: the - arrow's PegUIElement is a child of its Clickable (Shop_Detail_Slider_Arrow_Decrease/PageArrowImage).
+            bool Under(string field) => Read(amount, field) is Component clickable && clickable != null && control.transform.IsChildOf(clickable.transform);
+            if (Under("m_incrementClickable")) { id = NativeShopAmountText.MoreId; return true; }
+            if (Under("m_decrementClickable")) { id = NativeShopAmountText.LessId; return true; }
         }
         var page = control.GetComponentInParent<ProductPage>();
         bool inShop = control.GetComponentInParent<Shop>() == shop;
