@@ -488,7 +488,8 @@ namespace SabberStoneCore.Model.Entities
 			set { this[GameTag.ENRAGED] = value ? 1 : 0; }
 		}
 
-		public bool Freeze => Card.Freeze && !Actions.PastColossalCombat.SilencedWing(this);
+		// Silence removes the Freeze keyword from any freezing minion (retail), not only the Wings.
+		public bool Freeze => Card.Freeze && !IsSilenced;
 
 		public bool Poisonous
 		{

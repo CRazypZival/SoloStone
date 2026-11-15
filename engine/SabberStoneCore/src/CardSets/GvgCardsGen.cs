@@ -356,9 +356,10 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_017", new CardDef(new Power
 			{
-				// TODO [GVG_017] Call Pet && Test: Call Pet_GVG_017
-				//PowerTask = null,
-				//Trigger = null,
+				PowerTask = ComplexTask.Create(
+					new DrawTask(true),
+					new FilterStackTask(SelfCondition.IsRace(Race.BEAST)),
+					new AddAuraEffect(Effects.ReduceCost(4), EntityType.STACK))
 			}));
 
 			// ----------------------------------------- SPELL - HUNTER
@@ -800,10 +801,16 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_014", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_TARGET_IF_AVAILABLE,0},{PlayReq.REQ_MINION_TARGET,0}}, new Power
 			{
-				// TODO [GVG_014] Vol'jin && Test: Vol'jin_GVG_014
 				InfoCardId = "GVG_014a",
-				//PowerTask = null,
-				//Trigger = null,
+				// Both minions take the other's current Health as their new, undamaged Health.
+				PowerTask = new CustomTask((g, c, s, t, stack) =>
+				{
+					if (!(s is Minion self) || !(t is Minion other)) return;
+					int selfHealth = self.Health, otherHealth = other.Health;
+					var enchantment = SabberStoneCore.Model.Cards.FromId("GVG_014a");
+					Generic.AddEnchantmentBlock(g, enchantment, self, self, otherHealth);
+					Generic.AddEnchantmentBlock(g, enchantment, self, other, selfHealth);
+				})
 			}));
 
 			// ---------------------------------------- MINION - PRIEST
@@ -917,9 +924,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_014a", new CardDef(new Power
 			{
-				// TODO [GVG_014a] Shadowed && Test: Shadowed_GVG_014a
-				//PowerTask = null,
-				//Trigger = null,
+				Enchant = Enchants.Enchants.SetHealthScriptTag
 			}));
 
 			// ----------------------------------- ENCHANTMENT - PRIEST
@@ -962,9 +967,12 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_025", new CardDef(new Power
 			{
-				// TODO [GVG_025] One-eyed Cheat && Test: One-eyed Cheat_GVG_025
-				//PowerTask = null,
-				//Trigger = null,
+				Trigger = new Trigger(TriggerType.SUMMON)
+				{
+					TriggerSource = TriggerSource.FRIENDLY,
+					Condition = SelfCondition.IsRace(Race.PIRATE),
+					SingleTask = new SetGameTagTask(GameTag.STEALTH, 1, EntityType.SOURCE)
+				}
 			}));
 
 			// ----------------------------------------- MINION - ROGUE
@@ -1374,7 +1382,7 @@ namespace SabberStoneCore.CardSets
 						RelaCondition.IsFriendly,
 						RelaCondition.IsOther(SelfCondition.IsRace(Race.DEMON))),
 					new FlagTask(true, new AddEnchantmentTask("GVG_019e", EntityType.TARGET)),
-					new FlagTask(false, new DamageTask(2, EntityType.TARGET)))
+					new FlagTask(false, new DamageTask(5, EntityType.TARGET, true)))
 			}));
 
 			// ---------------------------------------- SPELL - WARLOCK
@@ -1676,9 +1684,14 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_016", new CardDef(new Power
 			{
-				// TODO [GVG_016] Fel Reaver && Test: Fel Reaver_GVG_016
-				//PowerTask = null,
-				//Trigger = null,
+				Trigger = new Trigger(TriggerType.PLAY_CARD)
+				{
+					TriggerSource = TriggerSource.ENEMY,
+					SingleTask = ComplexTask.Create(
+						new MoveToGraveYard(EntityType.TOPCARDFROMDECK),
+						new MoveToGraveYard(EntityType.TOPCARDFROMDECK),
+						new MoveToGraveYard(EntityType.TOPCARDFROMDECK))
+				}
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
