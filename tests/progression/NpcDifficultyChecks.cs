@@ -41,6 +41,18 @@ internal static class NpcDifficultyChecks
         string fresh = Path.Combine(dir, "fresh.xml");
         using (var profile = new LocalProfile(fresh)) { profile.PersistNewProfile(new ProfileOptions()); }
         Check(Read(fresh).NpcDifficulty == "medium", "new save defaults to Medium");
+        // The picker reads the field and stops at the first other root element (NativeProfileSelector.ReadDifficulty): this order is its contract.
+        string freshText = File.ReadAllText(fresh);
+        int grind = freshText.IndexOf("<GrindTier>", StringComparison.Ordinal), level = freshText.IndexOf("<NpcDifficulty>", StringComparison.Ordinal),
+            version = freshText.IndexOf("<Version>", StringComparison.Ordinal);
+        Check(grind >= 0 && grind < level && level < version, "root order: GrindTier, NpcDifficulty, Version");
+        // First launch (no Create form): the welcome path makes the save, and it starts at Medium; an existing save never gains the field.
+        string launch = Path.Combine(dir, "launch", "profile.xml");
+        using (var profile = new LocalProfile(launch)) Check(profile.GrantWelcomeIfNew() && profile.NpcDifficulty == "medium", "a first-launch save starts at Medium");
+        Check(Read(launch).NpcDifficulty == "medium", "first-launch Medium is written");
+        string oldBytes = File.ReadAllText(old);
+        using (var profile = new LocalProfile(old)) Check(!profile.GrantWelcomeIfNew() && profile.NpcDifficulty == "hard", "an existing save is not granted again");
+        Check(File.ReadAllText(old) == oldBytes && !oldBytes.Contains("NpcDifficulty"), "an existing save never gains the field");
         string chosen = Path.Combine(dir, "chosen.xml");
         using (var profile = new LocalProfile(chosen)) { profile.PersistNewProfile(new ProfileOptions { NpcDifficulty = "easy" }); }
         using (var profile = new LocalProfile(chosen))

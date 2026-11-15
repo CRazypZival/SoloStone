@@ -67,7 +67,9 @@ public sealed class NpcDifficultyLevel
             ? Math.Max(playerRating, LadderRules.RatingForIndex(LadderRules.LegendIndex)) : LadderRules.RatingForIndex(playerStarIndex);
         double offset = Math.Max(-DisplaySpread, Math.Min(DisplaySpread, npcRating + ShiftRating - anchor));
         double shown = anchor + offset;
-        return playerStarIndex >= LadderRules.LegendIndex ? Math.Max(shown, LadderRules.RatingForIndex(LadderRules.LegendIndex)) : shown;
+        double legend = LadderRules.RatingForIndex(LadderRules.LegendIndex);
+        // Only a Legend player is ever shown a Legend rating: below Legend the shown rating stays strictly under the Legend line.
+        return playerStarIndex >= LadderRules.LegendIndex ? Math.Max(shown, legend) : Math.Min(shown, legend - 1);
     }
 
     // Where on the shifted ladder a match sits, in stars: negative below Bronze 10 (the Core step).
@@ -206,13 +208,14 @@ public static class NpcDifficultyShaper
     public const int StreamCore = 11, StreamSoftKeep = 12;
 
     // forcedDeck: a rematch keeps the deck it is a rematch of. Hard returns encounter itself.
+    // coreStep false (Casual): the deck is never swapped for a Core deck; only the boosted skill applies.
     public static NpcEncounter Shape(NpcEncounter encounter, NpcDifficultyLevel level, int position, int seed, NpcWorld world,
-        NpcProfileBuilder build, NpcDeckEntry forcedDeck = null)
+        NpcProfileBuilder build, NpcDeckEntry forcedDeck = null, bool coreStep = true)
     {
         if (encounter == null) throw new ArgumentNullException(nameof(encounter));
         if (level == null || level.IsHard) return encounter;
         if (level.Locked) throw new InvalidOperationException("NPC difficulty " + level.Id + " is locked.");
-        var deck = forcedDeck ?? CoreStep(encounter.Deck, level, position, seed, world.Catalogs.Decks);
+        var deck = forcedDeck ?? (coreStep ? CoreStep(encounter.Deck, level, position, seed, world.Catalogs.Decks) : encounter.Deck);
         var tiers = world.Catalogs.Skills.Tiers;
         var skill = level.Apply(encounter.Skill, tiers.Count > 0 ? tiers[0] : null, position);
         var profile = (build ?? NpcEncounterProfiles.Build)(encounter.Npc, deck, encounter.Personality, skill);
@@ -222,11 +225,31 @@ public static class NpcDifficultyShaper
 
     public static NpcDeckEntry CoreStep(NpcDeckEntry picked, NpcDifficultyLevel level, int position, int seed, NpcDeckLibrary library)
     {
-        double chance = level.CoreChance(position);
-        if (chance <= 0 || picked == null || library == null) return picked;
-        if (new MatchRng(seed, StreamCore).NextDouble() >= chance) return picked;
+        if (picked == null || library == null) return picked;
+        return Served(picked, Decide(level, position, seed), library);
+    }
+
+    // The Core decision of one match, rolled once (streams 11 and 12): whether this match is at the Core step and whether a soft
+    // deck keeps its place. The matchmaker rolls it before it builds candidates, so the queue rules judge the decks actually served.
+    public readonly struct CoreDecision
+    {
+        public readonly bool Core, SoftKeep;
+        public CoreDecision(bool core, bool softKeep) { Core = core; SoftKeep = softKeep; }
+    }
+
+    public static CoreDecision Decide(NpcDifficultyLevel level, int position, int seed)
+    {
+        double chance = level == null ? 0 : level.CoreChance(position);
+        if (chance <= 0 || new MatchRng(seed, StreamCore).NextDouble() >= chance) return default(CoreDecision);
+        return new CoreDecision(true, new MatchRng(seed, StreamSoftKeep).NextDouble() < level.SoftKeep);
+    }
+
+    // The deck a picked deck becomes under the decision: itself, or the Core deck of its class.
+    public static NpcDeckEntry Served(NpcDeckEntry picked, CoreDecision decision, NpcDeckLibrary library)
+    {
+        if (!decision.Core || picked == null || library == null) return picked;
         bool soft = picked.Tags.PowerTier >= 4 && picked.Tags.Archetype != DeckArchetype.Aggro;
-        if (soft && new MatchRng(seed, StreamSoftKeep).NextDouble() < level.SoftKeep) return picked;
+        if (soft && decision.SoftKeep) return picked;
         return library.Find(NpcCoreDecks.IdFor(picked.Class)) ?? picked;
     }
 

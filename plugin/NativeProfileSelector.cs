@@ -223,9 +223,14 @@ internal static class NativeProfileSelector
         using (var reader = System.Xml.XmlReader.Create(path, new System.Xml.XmlReaderSettings {
             DtdProcessing = System.Xml.DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 64 * 1024 * 1024
         }))
+            // LocalProfileData serializes GrindTier (optional), NpcDifficulty (optional), then Version and the rest: the first
+            // other depth-1 element means the field is absent, so an old save is never read to its end.
             while (reader.Read())
-                if (reader.NodeType == System.Xml.XmlNodeType.Element && reader.Depth == 1 && reader.LocalName == "NpcDifficulty")
-                    return NpcDifficultyIds.Resolve(reader.ReadElementContentAsString());
+            {
+                if (reader.NodeType != System.Xml.XmlNodeType.Element || reader.Depth != 1) continue;
+                if (reader.LocalName == "NpcDifficulty") return NpcDifficultyIds.Resolve(reader.ReadElementContentAsString());
+                if (reader.LocalName != "GrindTier") break;
+            }
         return NpcDifficultyIds.Default;
     }
 
@@ -795,8 +800,10 @@ internal sealed class NativeProfileMenu : ButtonListMenu
             }, false);
             plank.transform.SetParent(content.transform, true);
             control = plank;
-            glyph = Caption(content.transform, read() ? "☑" : "☐", LabelColor, .8f);
+            glyph = Caption(content.transform, read() ? "☑" : "☐", locked ? new Color(.5f, .5f, .5f) : LabelColor, .8f);
         }
+        // A locked level is natively disabled: a real click does nothing (the fallback plank, or the checkbox, ignores input).
+        if (locked) control.SetEnabled(false);
         control.name = wrapper.name + "Control";
         controls[control] = semanticId;
         if (read()) selectedControls.Add(control);
@@ -1623,7 +1630,7 @@ internal sealed class NativeProfileMenu : ButtonListMenu
             }
             nameMin = lo; nameMax = hi;
         }
-        var plan = ProfileMenuGeometry.PlanCheck(x0, x1, nameMin, nameMax, width, label.Length);
+        var plan = ProfileMenuGeometry.PlanCheck(x0, x1, nameMin, nameMax, width, (label + " · " + difficulty).Length);   // the whole row text, not the name alone
         if (!plan.HasValue)
         {
             Discard(glyph);

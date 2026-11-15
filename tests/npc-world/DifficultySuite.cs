@@ -28,6 +28,9 @@ internal static class DifficultySuite
         CoreStepAtBronze(mm);
         BoostFadesAndKeepsFloors(world);
         Rematch(mm);
+        CoreQueueRules(mm);
+        DisplayCap();
+        RealResolver();
         Casual();
         Console.WriteLine("difficulty suite passed");
     }
@@ -194,6 +197,69 @@ internal static class DifficultySuite
         Program.Require(hard == null && refusal == "deck not allowed in this band", "Hard never rematches a Core deck: " + refusal);
     }
 
+    // Core decisions are made before candidates are built, so the queue rules judge the decks actually served.
+    private static void CoreQueueRules(LadderMatchmaker mm)
+    {
+        foreach (var level in new[] { NpcDifficulties.Easy, NpcDifficulties.Medium })
+            foreach (int seed in new[] { 7, 8, 9 })
+            {
+                var first = new MatchRequest(Profile + seed, 0, 0, 1400, null, null, level);
+                var picks = QueueForecast.Ranked(mm, first, 200);
+                int depth = mm.Rules.NoSameDeckWithin, relaxed = 0, core = 0;
+                for (int i = 0; i < picks.Count; i++)
+                {
+                    if (NpcDifficultyShaper.IsCoreDeck(picks[i].Encounter.Deck)) core++;
+                    if (picks[i].RelaxLevel >= 4) { relaxed++; continue; }   // the deck rule is dropped only when no other deck fits
+                    for (int j = Math.Max(0, i - depth); j < i; j++)
+                        Program.Require(picks[j].Encounter.Deck.Id != picks[i].Encounter.Deck.Id,
+                            level.Id + " star 0 repeats " + picks[i].Encounter.Deck.Id + " within " + depth + " at match " + i);
+                }
+                Program.Require(core > 100, level.Id + " forecast still reaches the Core step: " + core);
+                Program.Require(relaxed < 10, level.Id + " forecast rarely relaxes the deck rule: " + relaxed);
+            }
+    }
+
+    private static void DisplayCap()
+    {
+        double legend = LadderRules.RatingForIndex(LadderRules.LegendIndex);
+        foreach (var level in new[] { NpcDifficulties.Easy, NpcDifficulties.Medium })
+            foreach (double npc in new[] { 1500.0, legend - 30, legend, legend + 200 })
+                Program.Require(level.DisplayRating(npc, LadderRules.LegendIndex - 1, LadderRules.RatingForIndex(LadderRules.LegendIndex - 1)) < legend,
+                    level.Id + " never shows a Diamond player a Legend rating (npc " + npc + ")");
+        Program.Require(NpcDifficulties.Medium.DisplayRating(legend + 50, LadderRules.LegendIndex, legend + 10) >= legend, "Legend players still see Legend");
+    }
+
+    // The REAL client resolver (IsReferencedDeck, not "everything referenced"): a Core-step deck is served only once Begin names it.
+    private static void RealResolver()
+    {
+        var world = Real();
+        var mm = new LadderMatchmaker(world);
+        try
+        {
+            NpcWorldRuntime.Install(world, mm);
+            NpcWorldRuntime.InstallClientSeams(null);
+            NpcEncounter core = null;
+            for (int i = 0; i < 100 && core == null; i++)
+            {
+                var e = mm.Choose(new MatchRequest(Profile + 3, i, 0, 1400, null, null, NpcDifficulties.Easy)).Encounter;
+                if (NpcDifficultyShaper.IsCoreDeck(e.Deck)) core = e;
+            }
+            Program.Require(core != null && core.Deck.Id.StartsWith(NpcCoreDecks.IdPrefix, StringComparison.Ordinal), "an Easy Core encounter exists");
+            bool refused = false;
+            try { LocalDecks.Get(core.Deck.Id); } catch (InvalidOperationException) { refused = true; }
+            Program.Require(refused, "a Core deck does not resolve before Begin");
+            NpcWorldRuntime.Begin(core);
+            var local = LocalDecks.Get(core.Deck.Id);
+            local.Build();
+            Program.Require(local.Id == core.Deck.Id, "a Core deck resolves and builds once Begun");
+            NpcWorldRuntime.End();
+            refused = false;
+            try { LocalDecks.Get(core.Deck.Id); } catch (InvalidOperationException) { refused = true; }
+            Program.Require(refused, "a Core deck stops resolving when the encounter ends");
+        }
+        finally { NpcWorldRuntime.Uninstall(); }
+    }
+
     private static void Casual()
     {
         var world = Real(casual: true);
@@ -208,6 +274,15 @@ internal static class DifficultySuite
             var easy = mm.Choose(new CasualRequest(Profile, i, 10, 1300, null, NpcDifficulties.Easy));
             Program.Require(Math.Abs(easy.Target - (plain.Target - NpcDifficulties.Easy.ShiftRating)) < 1e-9, "Casual Easy target shifted");
             Program.Require(easy.Encounter.Difficulty == "easy" && easy.Encounter.Skill.Id.EndsWith("+easy", StringComparison.Ordinal), "Casual Easy boosted");
+            // Casual fun decks stay: no Core deck, ever, even at a rank deep in the Core step.
+            var deep = mm.Choose(new CasualRequest(Profile, i, 10, 1300, null, NpcDifficulties.Easy, 0));
+            Program.Require(!NpcDifficultyShaper.IsCoreDeck(deep.Encounter.Deck) && deep.Encounter.Deck.Id == easy.Encounter.Deck.Id,
+                "Casual never serves a Core deck");
+            Program.Require(deep.Encounter.DifficultyPosition == NpcDifficulties.Easy.LadderPosition(0), "Casual position anchors on the ranked star index");
+            Program.Require(easy.Encounter.DifficultyPosition == NpcDifficulties.Easy.RatingPosition(1300), "no star index: the Casual rating anchors");
         }
+        var hi = mm.Choose(new CasualRequest(Profile, 3, 10, 1300, null, NpcDifficulties.Medium, 120)).Encounter;
+        var lo = mm.Choose(new CasualRequest(Profile, 3, 10, 1300, null, NpcDifficulties.Medium, 20)).Encounter;
+        Program.Require(hi.DifficultyPosition == 90 && lo.DifficultyPosition == -10, "Casual Medium position: " + hi.DifficultyPosition + "/" + lo.DifficultyPosition);
     }
 }

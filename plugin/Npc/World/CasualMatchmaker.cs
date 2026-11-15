@@ -15,13 +15,17 @@ public sealed class CasualRequest
     public IReadOnlyList<PastEncounter> History { get; }   // Casual encounters, oldest first
     // The save's NPC difficulty (NpcDifficulties); null or Hard = today's queue, unchanged.
     public NpcDifficultyLevel Difficulty { get; }
+    // The player's ranked star index: Easy/Medium anchor the boost on it (the player's rank, not the Casual rating). null = the Casual rating.
+    public int? StarIndex { get; }
     public CasualRequest(long profileSeed, int casualIndex, int rankedIndex, double casualRating, IEnumerable<PastEncounter> history,
-        NpcDifficultyLevel difficulty = null)
+        NpcDifficultyLevel difficulty = null, int? starIndex = null)
     { ProfileSeed = profileSeed; CasualIndex = casualIndex; RankedIndex = rankedIndex; CasualRating = casualRating;
-      History = GoldenData.Copy(history); Difficulty = difficulty; }
+      History = GoldenData.Copy(history); Difficulty = difficulty; StarIndex = starIndex; }
     internal bool Shifted => Difficulty != null && !Difficulty.IsHard;
-    // Easy/Medium: the hidden Casual rating as a shifted ladder position in stars (negative at the Core step).
-    internal int Position => Shifted ? Difficulty.RatingPosition(CasualRating) : 0;
+    // Easy/Medium: the shifted ladder position in stars (negative at the Core step): the ranked star index when given, else the
+    // hidden Casual rating.
+    internal int Position => !Shifted ? 0 : StarIndex.HasValue ? Difficulty.LadderPosition(Math.Max(0, Math.Min(LadderRules.LegendIndex, StarIndex.Value)))
+        : Difficulty.RatingPosition(CasualRating);
 }
 
 // Casual deck catalog: data/npc/casual-decks-v1.json. Same deck schema as decks-v1.json, every deck admission "casual"
@@ -232,7 +236,7 @@ public sealed class CasualMatchmaker
         var profile = buildProfile(chosen.Npc, deck, personality, skill);
         int matchSeed = StableSeed.Derive(seed, StreamMatch) & int.MaxValue;
         var encounter = NpcDifficultyShaper.Shape(new NpcEncounter(chosen.Npc, deck, skill, personality, profile, chosen.Rating, matchSeed,
-            fun ? "casual-fun" : "casual-own"), request.Difficulty, request.Position, seed, World, buildProfile);
+            fun ? "casual-fun" : "casual-own"), request.Difficulty, request.Position, seed, World, buildProfile, coreStep: false);   // Casual fun decks stay
         return new MatchPick(encounter, target, level, false, false, regularDraw);
     }
 

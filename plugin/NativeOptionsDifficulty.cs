@@ -9,6 +9,8 @@ internal static class NativeOptionsDifficulty
     private static ManualLogSource log;
     private static UIBButton button;
 
+    // The plank while it is on screen, so test control lists it by its semantic id (as Pace's).
+    internal static UIBButton OptionsButton => NativeOptionsPanels.OnScreen(button) ? button : null;
     internal static bool Available => log != null;
     internal static void Initialize(ManualLogSource logger) { log = logger; }
     internal static bool Wanted() => NativeOptionsPace.Wanted();

@@ -218,6 +218,9 @@ public sealed partial class LocalProfile
         WelcomeSkipped = EarlierSaveTrace(path);
         if (WelcomeSkipped != null) return false;
         var next = Snapshot();
+        // A brand-new player save made without the Create form (first launch) starts at the new-save difficulty, like the form's
+        // default; an existing save never reaches this branch, so it never gains the field (absent = Hard).
+        next.NpcDifficulty = profileOptions?.NpcDifficulty ?? NpcDifficultyIds.NewSaveDefault;
         ApplyWelcome(next);
         Commit(next);
         return true;

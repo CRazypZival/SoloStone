@@ -722,7 +722,7 @@ internal sealed partial class NativeTestControl
             var history = profile.CasualHistory;
             picks = QueueForecast.Casual(casual, new CasualRequest(profile.NpcProfileSeed, history.Count, profile.RankedMatchCount, profile.CasualRating,
                 history.Skip(Math.Max(0, history.Count - casual.Rules.HistoryDepth)).Select(match => LocalRematch.Past(match, decks)),
-                NpcDifficulties.Find(profile.NpcDifficulty)), count);
+                NpcDifficulties.Find(profile.NpcDifficulty), profile.Ladder.StarIndex), count);
         }
         else picks = QueueForecast.Ranked(ranked, LocalRematch.Request(profile, profile.RankedHistory, decks, ranked.Rules.HistoryDepth, NpcWorldRuntime.Legend), count);
         return new JsonNode {
@@ -1258,9 +1258,6 @@ internal sealed partial class NativeTestControl
         try
         {
             snapshot = NativeUiTree.Read(); NativeResultsUI.FilterTestUi(snapshot);
-            foreach (var row in snapshot.Elements.Where(row => DifficultyRow(row.Id)))
-                if (NpcDifficultyIds.IsLocked(row.Id.Substring(row.Id.LastIndexOf(':') + 1)))
-                { row.Enabled = false; row.Hit = false; row.HitBy = "locked"; row.Denied = "locked"; }
         }
         catch (Exception error)
         {
@@ -1461,7 +1458,6 @@ internal sealed partial class NativeTestControl
         string blocker = UiRules.PermanentBlocker(snapshot, id, request.Has("snapshot") ? request.Text("snapshot") : null);
         if (blocker != null)
         {
-            if (DifficultyRow(id) && snapshot.Find(id)?.Denied == "locked") NativeProfileSelector.Log("NPC_DIFFICULTY locked id=extreme");
             RejectPress(blocker); return;
         }
         blocker = UiRules.TransientBlocker(snapshot, id);

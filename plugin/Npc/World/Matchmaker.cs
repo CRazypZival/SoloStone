@@ -185,6 +185,10 @@ public sealed class LadderMatchmaker : IMatchmaker
             var ranked = Legend.Ranked(request.MatchIndex);
             var history = new HistoryView(request.History, World.Catalogs.Decks, Rules);
 
+            // Easy/Medium Core step: decided once per match before candidates are built, so every history rule judges the deck that
+            // will be served (a Core deck of the picked deck's class), not the deck it replaces. Hard rolls nothing.
+            var core = request.Shifted ? NpcDifficultyShaper.Decide(request.Difficulty, request.Position, seed) : default(NpcDifficultyShaper.CoreDecision);
+
             bool bandRelaxed = false, widened = false;
             List<Option> options = null;
             int level = 0;
@@ -195,7 +199,7 @@ public sealed class LadderMatchmaker : IMatchmaker
                 var near = Regulars(ranked, centre, band);
                 for (level = 0; level <= 1 && options == null; level++)
                 {
-                    var regulars = Build(near, centre, history, level, band, false, Rules.RegularSigma);
+                    var regulars = Build(near, centre, history, level, band, false, core, Rules.RegularSigma);
                     if (regulars.Count > 0) { options = regulars; break; }
                 }
                 if (options == null) level = 0;
@@ -212,7 +216,7 @@ public sealed class LadderMatchmaker : IMatchmaker
                 }
                 for (level = 0; level <= FinalLevel; level++)
                 {
-                    var built = Build(candidates, target, history, level, band, bandRelaxed);
+                    var built = Build(candidates, target, history, level, band, bandRelaxed, core);
                     if (built.Count == 0) continue;
                     options = built; widened = pool > 0; break;
                 }
@@ -227,7 +231,7 @@ public sealed class LadderMatchmaker : IMatchmaker
             string reason = request.StarIndex < LadderRules.DiamondFiveIndex ? "hidden-rating"
                 : request.StarIndex < LadderRules.LegendIndex || request.Shifted ? "fixed-field" : "legend-field";
             var encounter = NpcDifficultyShaper.Shape(Encounter(chosen.Npc, deck.Deck, chosen.Rating, seed, reason),
-                request.Difficulty, request.Position, seed, World, buildProfile);
+                request.Difficulty, request.Position, seed, World, buildProfile, request.Shifted ? deck.Deck : null);
             return new MatchPick(encounter, target, level, widened, bandRelaxed, regularDraw);
         }
     }
@@ -368,10 +372,11 @@ public sealed class LadderMatchmaker : IMatchmaker
         return result;
     }
 
-    private sealed class DeckOption { public NpcDeckEntry Deck; public double Weight; }
+    private sealed class DeckOption { public NpcDeckEntry Deck; public NpcDeckEntry Own; public double Weight; }   // Deck: served; Own: the NPC's deck
     private sealed class Option { public NpcIdentity Npc; public double Rating; public double Weight; public List<DeckOption> Decks; }
 
-    private List<Option> Build(List<RankedNpc> candidates, double target, HistoryView history, int level, LadderBand band, bool anyBand, double sigma = 0)
+    private List<Option> Build(List<RankedNpc> candidates, double target, HistoryView history, int level, LadderBand band, bool anyBand,
+        NpcDifficultyShaper.CoreDecision core, double sigma = 0)
     {
         var options = new List<Option>();
         bool ignoreAll = level >= FinalLevel;
@@ -386,7 +391,9 @@ public sealed class LadderMatchmaker : IMatchmaker
             var allowed = Allowed(npc, band, anyBand);
             for (int i = 0; i < allowed.Length; i++)
             {
-                var deck = allowed[i];
+                var own = allowed[i];
+                var deck = core.Core ? NpcDifficultyShaper.Served(own, core, World.Catalogs.Decks) : own;
+                if (!ReferenceEquals(deck, own) && decks.Any(d => d.Deck.Id == deck.Id)) continue;   // two own decks of a class share one Core deck
                 double factor = 1;
                 if (!ignoreAll)
                 {
@@ -400,11 +407,11 @@ public sealed class LadderMatchmaker : IMatchmaker
                         if (share >= Rules.ArchetypeCap - 1e-9) factor = Rules.ArchetypeSoftWeight;
                     }
                 }
-                decks.Add(new DeckOption { Deck = deck, Weight = factor });
+                decks.Add(new DeckOption { Deck = deck, Own = own, Weight = factor });
             }
             if (decks.Count == 0) continue;
             // Signature deck (first in the NPC's pool) takes SignatureDeckShare when it survives; the rest split the remainder.
-            bool signature = decks[0].Deck.Id == npc.DeckIds[0] && decks.Count > 1;
+            bool signature = decks[0].Own.Id == npc.DeckIds[0] && decks.Count > 1;
             for (int i = 0; i < decks.Count; i++)
             {
                 double raw = decks.Count == 1 ? 1 : signature ? (i == 0 ? Rules.SignatureDeckShare : (1 - Rules.SignatureDeckShare) / (decks.Count - 1)) : 1.0 / decks.Count;
@@ -476,7 +483,7 @@ public static class QueueForecast
         return Enumerable.Range(0, count).Select(i =>
         {
             var pick = matchmaker.Choose(new CasualRequest(first.ProfileSeed, first.CasualIndex + i, first.RankedIndex, first.CasualRating,
-                history.Skip(Math.Max(0, history.Count - matchmaker.Rules.HistoryDepth)), first.Difficulty));
+                history.Skip(Math.Max(0, history.Count - matchmaker.Rules.HistoryDepth)), first.Difficulty, first.StarIndex));
             history.Add(new PastEncounter(pick.Encounter.Npc.Id, pick.Encounter.Deck.Id, pick.Encounter.Deck.Tags.Archetype, "Won"));
             return pick;
         }).ToArray();
