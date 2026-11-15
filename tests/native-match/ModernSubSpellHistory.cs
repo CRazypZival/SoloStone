@@ -11,10 +11,11 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 
 internal static partial class Program
 {
-    // FIR_909 live cleanup clears direct spell missiles; non-spell/reveal/death routes still need live acceptance.
+    // FIR_909 live cleanup clears direct spell missiles; non-spell/death routes still need live acceptance.
+    // FIR_902/END_024 delayed (Sigil, Secret) routes were re-admitted after a live cleanup check, human and NPC.
     // CATA_582/JAIL_307 keep area pulses; their single-target fallback uses the admitted missile.
     private static readonly HashSet<string> QuarantinedFireRoutes = new HashSet<string>(("CATA_586 CORE_WC_701 "
-        + "FIR_778 JAIL_007 TLC_249 JAIL_458t2 FIR_955 TLC_220 FIR_904 FIR_902 END_024").Split(' '));
+        + "FIR_778 JAIL_007 TLC_249 JAIL_458t2 FIR_955 TLC_220 FIR_904").Split(' '));
     private static bool FireQuarantined(string id) => QuarantinedFireRoutes.Contains(id);
 
     private static void ModernSubSpellHistory()
@@ -225,6 +226,24 @@ internal static partial class Program
             bool hidden = drawn && bot;
             Check(damage.Length > 0 && shots.Length == (hidden || FireQuarantined(id) ? 0 : damage.Length), $"{id} bot={bot} damage={damage.Length} shots={shots.Length}: only public cues");
             if (!hidden && !FireQuarantined(id)) Check(shots.All(s => s.SourceEntityId == owner.Hero.Id) && shots.Select(s => s.TargetEntityIds.Single()).SequenceEqual(damage), id + " preserves delayed targets");
+            if (id is "FIR_902" or "END_024")
+            {
+                // The delayed missile (Fel for the Sigil, Fire for the Secret), one per hit, from the owner's public hero, in the actual Sigil/Secret trigger block.
+                string label = $"{id} bot={bot}";
+                string prefab = id == "FIR_902" ? "ReuseFX_Fel_Fire_Missile_Small_Super_Quick:c09acf66646f50c4f9396a863c1e8b90"
+                    : "ReuseFX_Fire_Missile_Fireball_Medium_Super_Simultaneous:161d5760bd9de1e41baf4c5611e61eed";
+                Check(shots.Length == damage.Length && shots.All(s => s.SpellPrefabGuid == prefab), label + " school missile per hit");
+                var header = entries[begin].PowerStart;
+                Check(id == "FIR_902" ? header.HasTriggerKeyword && header.TriggerKeyword == 1749 : !header.HasTriggerKeyword || header.TriggerKeyword == 0,
+                    label + " trigger keyword keys the recipe");
+                int open = 0;
+                foreach (var entry in body)
+                {
+                    if (entry.HasSubSpellStart) Check(open++ == 0, label + " missile scopes do not nest");
+                    if (entry.HasSubSpellEnd) Check(--open == 0, label + " missile scope closes");
+                }
+                Check(open == 0, label + " missile scopes balanced");
+            }
             if (id == "END_024")
             {
                 var all = History(capture, 0);
