@@ -10,12 +10,12 @@ using static Core2026Proof;
 // Wave Y0b, lane m2a: Goblins vs Gnomes GVG_001 .. GVG_025 (Mage, Priest, Warlock, Rogue and neutral opening cards).
 // Unregistered (not in the batch manifest), their scenarios kept below and run only with WILD_Y0B_M2A_UNREGISTERED=1:
 //  - BLOCKED-STANDARD GVG_005, GVG_021: a Standard pool uses them today (data/pools/pool-eligibility-v1.json).
-//  - BLOCKED-HSDATA GVG_004, GVG_007, GVG_011, GVG_015: their English text changed in 37.0, and the locale files cannot be
+//  - GVG_007 is registered (script: 2 damage to all non-Mech characters; it stays in hand via Actions/Draw.cs).
+//  - BLOCKED-HSDATA GVG_004, GVG_011, GVG_015: their English text changed in 37.0, and the locale files cannot be
 //    regenerated without the hsdata CardDefs (tools/gen_card_facts.py --hsdata); an identity row would leave them stale.
 //    Their script fixes are NOT on this branch (card text and behaviour must not disagree); the scenarios below state the
 //    expected 37.0 behaviour and fail against the HEAD scripts. Land the fixes with the identity rows:
 //      GVG_004: SplitHits.Inline(6, ComplexTask.DamageRandomTargets(1, EntityType.ENEMIES, 1), deathProcessing: false) replaces DamageRandomTargets(4, ENEMIES, 1).
-//      GVG_007: Trigger(TriggerType.DRAW){TriggerActivation.HAND, TriggerSource.SELF, IncludeTask(ALL) + FilterStackTask(IsNotRace(MECHANICAL)) + DamageTask(2, STACK)} replaces TopdeckTask.
 //      GVG_011: GVG_011a enchantment SUB 3 (was 2).
 //      GVG_015: PowerTask = DamageTask(3, TARGET, true) + ConditionTask(TARGET, IsDead) + ComplexTask.True(DrawFromDeck(1, IsSpell, SPELL_SCHOOL==6)).
 internal static class WildY0bM2AProof
@@ -27,6 +27,7 @@ internal static class WildY0bM2AProof
         WildSetsProof.Case("GVG_002", Snowchugger);
         WildSetsProof.Case("GVG_003", UnstablePortal);
         WildSetsProof.Case("GVG_006", Mechwarper);
+        WildSetsProof.Case("GVG_007", FlameLeviathan);
         WildSetsProof.Case("GVG_008", Lightbomb);
         WildSetsProof.Case("GVG_009", Shadowbomber);
         WildSetsProof.Case("GVG_010", VelensChosen);
@@ -821,7 +822,7 @@ internal static class WildY0bM2AProof
     {
         Cards.FromId("GVG_015").Tags[GameTag.SPELL_SCHOOL] = 6;
         foreach (var (id, scenario) in new (string, Action<Game, Controller, string>)[] { ("GVG_004", GoblinBlastmage), ("GVG_005", EchoOfMedivh),
-            ("GVG_007", FlameLeviathan), ("GVG_011", Shrinkmeister), ("GVG_015", Darkbomb), ("GVG_021", MalGanis) })
+            ("GVG_011", Shrinkmeister), ("GVG_015", Darkbomb), ("GVG_021", MalGanis) })
             for (int seed = 1; seed <= 3; seed++)
             {
                 var game = new Game(new GameConfig { RandomSeed = seed, StartPlayer = 1, Shuffle = false, SkipMulligan = true,
@@ -838,7 +839,7 @@ internal static class WildY0bM2AProof
                 Check(Canonical.State(game) == Canonical.State(game.CloneExact(history: true)), "exact clone after unregistered scenario " + id);
                 Check(Canonical.State(game) == Canonical.State(Game.LoadSnapshotWithPools(game.SaveSnapshot(), game.OfflinePools)), "snapshot after unregistered scenario " + id);
             }
-        Console.WriteLine("UNREGISTERED scenarios GVG_004, GVG_005, GVG_007, GVG_011, GVG_015, GVG_021 PASS; seeds=3; clone/snapshot");
+        Console.WriteLine("UNREGISTERED scenarios GVG_004, GVG_005, GVG_011, GVG_015, GVG_021 PASS; seeds=3; clone/snapshot");
     }
 
     private static void EchoOfMedivh(Game g, Controller p, string id)

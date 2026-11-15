@@ -51,10 +51,11 @@ internal static class ClassHeroesProof
         foreach (var format in new[] { FormatType.FT_STANDARD, FormatType.FT_WILD })
             Check(!Cards.IsFormatLegal(illidan, format) && !Cards.FormatTypeCards(format).Contains(illidan)
                 && Cards.FormatTypeClassCards(format).Values.All(pool => !pool.Contains(illidan)), "hero excluded from deck/random pools");
-        // Sir Finley's pool must retain its pre-DH contents and order.
+        // Sir Finley's pool (Wild only; no Standard card uses it): one basic Hero Power per pre-DH class in base-hero order, never a skin's
+        // variant, without the class of the Hero Power the player holds (Wild wave Y0b lane m4b).
         var discover = NewGame(CardClass.MAGE);
-        var expectedPowers = Cards.HeroCards().Where(c => !c.ExcludeFromLegacyRandomPools && c != discover.Player1.Hero.Card)
-            .Select(c => c[GameTag.HERO_POWER]).ToArray();
+        var expectedPowers = new[] { "CS2_102", "CS2_049", "CS2_083b", "CS2_101", "DS1h_292", "CS2_017", "CS2_056", "CS1h_001" }
+            .Select(id => Cards.FromId(id).AssetId).ToArray();
         new DiscoverTask(DiscoverType.BASIC_HEROPOWERS, 100).Process(discover, discover.Player1, discover.Player1.Hero, null);
         var offeredPowers = discover.Player1.Choice.Choices.Select(id => discover.IdEntityDic[id].Card.AssetId);
         Check(offeredPowers.SequenceEqual(expectedPowers.Distinct()), "legacy basic-power Discover pool unchanged");

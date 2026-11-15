@@ -9,9 +9,9 @@ using SabberStoneCore.Tasks.PlayerTasks;
 using static Core2026Proof;
 
 /// <summary>Wave Y0b lane m3a: Grand Tournament AT_001..AT_022 (Mage, Hunter, Priest, Warlock, Neutral).
-/// Registered (literal WildSetsProof.Case, listed in wild-y0b-m3a.txt): AT_002, AT_008, AT_010, AT_014, AT_016, AT_022.
+/// Registered (literal WildSetsProof.Case, listed in wild-y0b-m3a.txt): AT_002, AT_008, AT_009, AT_010, AT_014, AT_016, AT_019, AT_022.
 /// BLOCKED-STANDARD, written but never registered: AT_004, AT_005, AT_017, AT_020 (data/pools/pool-eligibility-v1.json),
-/// AT_009 and AT_019 (plugin/Npc/DeathValueData.cs); see Blocked.
+/// (AT_009 and AT_019 were held for plugin/Npc/DeathValueData.cs; ValueData does not hold an id, so they are registered.)
 /// BLOCKED-HSDATA, written but never registered: AT_001, AT_003, AT_006, AT_007, AT_011, AT_012, AT_013, AT_015, AT_018 and
 /// AT_021 changed their English text in 37.0, so their identity rows need the pinned hsdata locale source
 /// (tools/gen_card_facts.py --hsdata). Once that runs: list the ids in the manifest, rerun the generator and change
@@ -42,6 +42,31 @@ internal static class WildY0bM3AProof
         InspireMechanic();
         if (BlockedRun) Blocked();
 
+        WildSetsProof.Case("AT_009", (g, p, id) => {
+            var rhonin = Summon(p, id);
+            int hand = p.HandZone.Count;
+            Kill(g, rhonin);
+            Core2026Proof.Check(p.HandZone.Count == hand + 3 && p.HandZone.TakeLast(3).All(c => c.Card.Id == "EX1_277"), "three Arcane Missiles");
+            for (int i = p.HandZone.Count; i < 8; i++) Entity.FromCard(p, Cards.FromId(Yeti), zone: p.HandZone);
+            Kill(g, Summon(p, id));
+            Core2026Proof.Check(p.HandZone.Count == 10, "hand cap 10");
+            var silenced = Summon(p, id); silenced.Silence(); int h = p.HandZone.Count; Kill(g, silenced);
+            Core2026Proof.Check(p.HandZone.Count == h, "Silence removes Deathrattle");
+            End(g);
+            int oh = p.Opponent.HandZone.Count; Kill(g, Summon(p.Opponent, id));
+            Core2026Proof.Check(p.Opponent.HandZone.Count == oh + 3 && p.HandZone.Count == h, "enemy Rhonin feeds the enemy");
+        });
+        WildSetsProof.Case("AT_019", (g, p, id) => {
+            var steed = Summon(p, id); Kill(g, steed);
+            Core2026Proof.Check(p.BoardZone.Count == 0, "no instant replacement");
+            End(g);
+            Core2026Proof.Check(p.BoardZone.Count == 1 && p.BoardZone.Single().Card.Id == id, "a new Dreadsteed at the end of the turn (owner's turn)");
+            Core2026Proof.Check(g.CurrentPlayer == p.Opponent, "now the opponent's turn");
+            Kill(g, p.BoardZone.Single());
+            Core2026Proof.Check(p.BoardZone.Count == 0, "died on the opponent's turn");
+            End(g);
+            Core2026Proof.Check(p.BoardZone.Count == 1, "'At the end of the turn' also covers the opponent's turn end");
+        });
         Pending("AT_001", (g, p, id) => {
             var big = Summon(p.Opponent, Yeti); big.BaseHealth = 60;
             var hand = Add(p, id);
@@ -618,20 +643,6 @@ internal static class WildY0bM3AProof
             var friend = Summon(p, Yeti); Play(g, p, id, friend);
             Core2026Proof.Check(p.BoardZone.Single().Card.Id == "AT_005t" && p.BoardZone.Single().Controller == p, "friendly transform stays friendly");
         });
-        Unregistered("AT_009", (g, p, id) => {
-            var rhonin = Summon(p, id);
-            int hand = p.HandZone.Count;
-            Kill(g, rhonin);
-            Core2026Proof.Check(p.HandZone.Count == hand + 3 && p.HandZone.TakeLast(3).All(c => c.Card.Id == "EX1_277"), "three Arcane Missiles");
-            for (int i = p.HandZone.Count; i < 8; i++) Entity.FromCard(p, Cards.FromId(Yeti), zone: p.HandZone);
-            Kill(g, Summon(p, id));
-            Core2026Proof.Check(p.HandZone.Count == 10, "hand cap 10");
-            var silenced = Summon(p, id); silenced.Silence(); int h = p.HandZone.Count; Kill(g, silenced);
-            Core2026Proof.Check(p.HandZone.Count == h, "Silence removes Deathrattle");
-            End(g);
-            int oh = p.Opponent.HandZone.Count; Kill(g, Summon(p.Opponent, id));
-            Core2026Proof.Check(p.Opponent.HandZone.Count == oh + 3 && p.HandZone.Count == h, "enemy Rhonin feeds the enemy");
-        });
         Unregistered("AT_017", (g, p, id) => {
             var plain = (Minion)Play(g, p, id);
             Core2026Proof.Check(plain.AttackDamage == 2 && !plain.HasTaunt, "no Dragon in hand");
@@ -647,17 +658,6 @@ internal static class WildY0bM3AProof
             Core2026Proof.Check(enemyDragon.AttackDamage == 2, "the opponent's hand does not count");
             boosted.Silence(); g.DeathProcessingAndAuraUpdate();
             Core2026Proof.Check(boosted.AttackDamage == 2 && !boosted.HasTaunt, "Silence removes the bonus");
-        });
-        Unregistered("AT_019", (g, p, id) => {
-            var steed = Summon(p, id); Kill(g, steed);
-            Core2026Proof.Check(p.BoardZone.Count == 0, "no instant replacement");
-            End(g);
-            Core2026Proof.Check(p.BoardZone.Count == 1 && p.BoardZone.Single().Card.Id == id, "a new Dreadsteed at the end of the turn (owner's turn)");
-            Core2026Proof.Check(g.CurrentPlayer == p.Opponent, "now the opponent's turn");
-            Kill(g, p.BoardZone.Single());
-            Core2026Proof.Check(p.BoardZone.Count == 0, "died on the opponent's turn");
-            End(g);
-            Core2026Proof.Check(p.BoardZone.Count == 1, "'At the end of the turn' also covers the opponent's turn end");
         });
         Unregistered("AT_020", (g, p, id) => {
             var doom = (Minion)Play(g, p, id);

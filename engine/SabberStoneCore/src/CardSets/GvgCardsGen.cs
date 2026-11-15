@@ -504,8 +504,12 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_007", new CardDef(new Power
 			{
-				// TODO Test: Flame Leviathan_GVG_007
-				TopdeckTask = new DamageTask(2, EntityType.ALLMINIONS)
+				// 37.0: 2 damage to all characters except Mechs. The card stays in hand when drawn (Actions/Draw.cs: a TOPDECK
+				// minion without Summoned When Drawn is not summoned).
+				TopdeckTask = ComplexTask.Create(
+					new IncludeTask(EntityType.ALL),
+					new FilterStackTask(SelfCondition.IsNotRace(Race.MECHANICAL)),
+					new DamageTask(2, EntityType.STACK))
 			}));
 
 			// ------------------------------------------ MINION - MAGE
@@ -1193,7 +1197,7 @@ namespace SabberStoneCore.CardSets
 				PowerTask = new EnqueueTask(4, ComplexTask.Create(
 					new RandomMinionTask(GameTag.CARDRACE, (int)Race.MURLOC),
 					new AddStackTo(EntityType.HAND)))
-			}) { Configure = card => { card.Overload = 3; } });  // the client row stores OVERLOAD as 1 for every amount
+			}));
 
 			// ---------------------------------------- MINION - SHAMAN
 			// [GVG_066] Dunemaul Shaman - COST:4 [ATK:5/HP:4]
@@ -2327,10 +2331,6 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_112", new CardDef(new Power
 			{
-				Trigger = new Trigger(TriggerType.TARGET)
-				{
-					SingleTask = Client.Sets.WildGvgTasks.Mogor
-				}
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL

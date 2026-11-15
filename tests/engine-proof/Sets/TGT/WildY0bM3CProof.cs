@@ -9,8 +9,10 @@ using SabberStoneCore.Tasks.PlayerTasks;
 using static Core2026Proof;
 
 /// <summary>Wave Y0b lane m3c: Grand Tournament AT_045..AT_065 (Shaman, Priest, Hunter, Warrior, Druid Aviana).
-/// Registered (literal WildSetsProof.Case, listed in wild-y0b-m3c.txt): AT_045 .. AT_050, AT_053, AT_054, AT_056 .. AT_061,
+/// Registered (literal WildSetsProof.Case, listed in wild-y0b-m3c.txt): AT_045 .. AT_050, AT_054, AT_056 .. AT_061,
 /// AT_063, AT_063t, AT_065.
+/// HELD (amount rule, written but never registered): AT_053 Ancestral Knowledge: the base row stores Overload 2, the 37.0 text says (1);
+/// the generator refuses an identity row whose amount differs from the text, so the card needs an engine change first.
 /// BLOCKED-STANDARD, written but never registered: AT_051 (data/pools/pool-eligibility-v1.json), AT_052, AT_055, AT_062, AT_064
 /// (CORE_ copy groups in plugin/LocalCardCatalog.cs and data/progression/core-2026-unlocks.json). Their scripts are untouched;
 /// the proofs assert what the 37.0 text says and print any identity drift the base card still has. Run them with
@@ -275,40 +277,6 @@ internal static class WildY0bM3CProof
             Play(g, theirs, id);
             theirs.Hero.Weapon.ToBeDestroyed = true; g.DeathProcessingAndAuraUpdate();
             Check(theirs.Hero.HeroPower.Card.Id == "AT_050t" && p.Hero.HeroPower.Card.Id == "AT_050t", "an enemy Hammer replaces the enemy Hero Power");
-        });
-
-        WildSetsProof.Case("AT_053", (g, p, id) => {
-            Check(Add(p, id).Cost == 2, "Ancestral Knowledge costs 2");
-            SetDeck(p, Yeti, Raptor, Wisp);
-            ParkHand(p);
-            var spell = Add(p, id);
-            PlayEntity(g, p, spell);
-            Check(p.HandZone.Count == 2 && p.DeckZone.Count == 1, "draws 2 cards: hand " + p.HandZone.Count + " deck " + p.DeckZone.Count);
-            Check(p.OverloadOwed == 1 && p.Opponent.OverloadOwed == 0, "Overload (1) for the caster only");
-            End(g);
-            Check(p.OverloadOwed == 1 && p.OverloadLocked == 0, "the Overload waits for my next turn");
-            End(g);
-            Check(p.OverloadLocked == 1 && p.RemainingMana == p.BaseMana - 1, "one Mana Crystal is locked next turn: " + p.RemainingMana + "/" + p.BaseMana);
-            End(g); End(g);
-            Check(p.OverloadLocked == 0, "the lock lasts one turn only");
-            // A deck of one card: the second draw is fatigue (1 damage).
-            SetDeck(p, Yeti); ParkHand(p);
-            int hp = p.Hero.Damage;
-            Play(g, p, id);
-            Check(p.HandZone.Count == 1 && p.Hero.Damage > hp, "an empty deck on the second draw is fatigue: " + (p.Hero.Damage - hp));
-            // Full hand: drawn cards burn.
-            SetDeck(p, Yeti, Yeti, Yeti); ParkHand(p);
-            for (int i = 0; i < 9; i++) Add(p, Wisp);
-            Play(g, p, id);
-            Check(p.HandZone.Count == 10 && p.DeckZone.Count == 1, "a full hand burns the second card: hand " + p.HandZone.Count + " deck " + p.DeckZone.Count);
-            Check(p.OverloadOwed == 2, "Overload stacks per cast: " + p.OverloadOwed);
-            SetDeck(p); SetDeck(p.Opponent, Yeti, Yeti); ParkHand(p);
-            int owed = p.OverloadOwed;
-            Resume(g, next => {
-                var c = next.Player1;
-                Play(next, c, id);
-                Check(c.OverloadOwed == owed + 1, "Overload on a clone");
-            });
         });
 
         WildSetsProof.Case("AT_054", (g, p, id) => {
@@ -798,6 +766,39 @@ internal static class WildY0bM3CProof
 
     private static void Blocked()
     {
+        Unregistered("AT_053", (g, p, id) => {
+            Check(Add(p, id).Cost == 2, "Ancestral Knowledge costs 2");
+            SetDeck(p, Yeti, Raptor, Wisp);
+            ParkHand(p);
+            var spell = Add(p, id);
+            PlayEntity(g, p, spell);
+            Check(p.HandZone.Count == 2 && p.DeckZone.Count == 1, "draws 2 cards: hand " + p.HandZone.Count + " deck " + p.DeckZone.Count);
+            Check(p.OverloadOwed == 1 && p.Opponent.OverloadOwed == 0, "Overload (1) for the caster only");
+            End(g);
+            Check(p.OverloadOwed == 1 && p.OverloadLocked == 0, "the Overload waits for my next turn");
+            End(g);
+            Check(p.OverloadLocked == 1 && p.RemainingMana == p.BaseMana - 1, "one Mana Crystal is locked next turn: " + p.RemainingMana + "/" + p.BaseMana);
+            End(g); End(g);
+            Check(p.OverloadLocked == 0, "the lock lasts one turn only");
+            // A deck of one card: the second draw is fatigue (1 damage).
+            SetDeck(p, Yeti); ParkHand(p);
+            int hp = p.Hero.Damage;
+            Play(g, p, id);
+            Check(p.HandZone.Count == 1 && p.Hero.Damage > hp, "an empty deck on the second draw is fatigue: " + (p.Hero.Damage - hp));
+            // Full hand: drawn cards burn.
+            SetDeck(p, Yeti, Yeti, Yeti); ParkHand(p);
+            for (int i = 0; i < 9; i++) Add(p, Wisp);
+            Play(g, p, id);
+            Check(p.HandZone.Count == 10 && p.DeckZone.Count == 1, "a full hand burns the second card: hand " + p.HandZone.Count + " deck " + p.DeckZone.Count);
+            Check(p.OverloadOwed == 2, "Overload stacks per cast: " + p.OverloadOwed);
+            SetDeck(p); SetDeck(p.Opponent, Yeti, Yeti); ParkHand(p);
+            int owed = p.OverloadOwed;
+            Resume(g, next => {
+                var c = next.Player1;
+                Play(next, c, id);
+                Check(c.OverloadOwed == owed + 1, "Overload on a clone");
+            });
+        });
         Unregistered("AT_051", (g, p, id) => {
             var spell = Add(p, id);
             var seen = new HashSet<int>();

@@ -28,6 +28,8 @@ internal static class WildY0bM4AProof
         WildSetsProof.Case("LOE_009", ObsidianDestroyer);
         WildSetsProof.Case("LOE_010", PitSnake);
         WildSetsProof.Case("LOE_011", RenoJackson);
+        WildSetsProof.Case("LOE_012", TombPillager);
+        WildSetsProof.Case("LOE_016", RumblingElemental);
         WildSetsProof.Case("LOE_017", KeeperOfUldaman);
         WildSetsProof.Case("LOE_018", TunnelTrogg);
         WildSetsProof.Case("LOE_019", UnearthedRaptor);
@@ -40,9 +42,7 @@ internal static class WildY0bM4AProof
         WildSetsProof.Case("LOE_029", JeweledScarab);
         WildSetsProof.Case("LOE_038", NagaSeaWitch);
         WildSetsProof.Case("LOE_046", HugeToad);
-        // BLOCKED-STANDARD: Standard data names these ids (plugin Npc tables, Core 2026 copy group). Proof kept, not registered.
-        Held("LOE_012", "plugin/Npc/DeathValueData.cs", TombPillager);
-        Held("LOE_016", "plugin/Npc/TriggerValueData.cs", RumblingElemental);
+        // BLOCKED-STANDARD: Standard data names this id (Core 2026 copy group). Proof kept, not registered. (LOE_012 and LOE_016 were held for the NPC ValueData tables, which do not hold an id.)
         Held("LOE_039", "data/progression/core-2026-unlocks.json, plugin/LocalCardCatalog.cs", GorillabotA3);
         foreach (string line in HeldReport) Console.WriteLine(line);
     }

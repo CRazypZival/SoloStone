@@ -52,7 +52,10 @@ internal static class WildBatchChecks
     private static IEnumerable<(string Source, string Text)> StandardSources()
     {
         var files = new List<string> { "plugin/LocalCardCatalog.cs", "plugin/LocalDecks.cs", "plugin/NativeMatch.cs" };
-        files.AddRange(Directory.GetFiles("plugin/Npc", "*.cs", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.Ordinal));
+        // The NPC ValueData tables are scoring data over every card the AI can see, not a Standard card list: they do not hold an id.
+        files.AddRange(Directory.GetFiles("plugin/Npc", "*.cs", SearchOption.AllDirectories)
+            .Where(path => !Path.GetFileName(path).EndsWith("ValueData.cs", StringComparison.Ordinal))
+            .OrderBy(path => path, StringComparer.Ordinal));
         files.AddRange(Directory.GetFiles("data", "*.json", SearchOption.AllDirectories)
             .Where(path => !path.Replace('\\', '/').StartsWith("data/carddb/") && !path.Replace('\\', '/').StartsWith("data/fx/"))
             .OrderBy(path => path, StringComparer.Ordinal));

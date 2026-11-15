@@ -13,7 +13,7 @@ using static Core2026Proof;
 //    in the card file (the generator emits identity rows only for collectible manifest ids, and the overlay only for the active meta),
 //    and a counted external wake-up (revive after N deaths) needs a small Dormant counter hook. The scenario below (Malorne) states the
 //    expected behaviour; it is not run and the script is unchanged (still "Shuffle this minion into your deck").
-//  - BLOCKED-STANDARD GVG_033 (data/pools/pool-eligibility-v1.json), GVG_034 (plugin/Npc/TriggerValueData.cs),
+//  - BLOCKED-STANDARD GVG_033 (data/pools/pool-eligibility-v1.json), (GVG_034 was held for plugin/Npc/TriggerValueData.cs, which does not hold an id: registered),
 //    GVG_044 (plugin/Npc/TriggerMeasure.cs): Standard data uses them today. Their scripts are not changed here.
 internal static class WildY0bM2BProof
 {
@@ -27,6 +27,7 @@ internal static class WildY0bM2BProof
         WildSetsProof.Case("GVG_030", RoboCub);
         WildSetsProof.Case("GVG_031", Recycle);
         WildSetsProof.Case("GVG_032", GroveTender);
+        WildSetsProof.Case("GVG_034", MechBearCat);
         WildSetsProof.Case("GVG_036", Powermace);
         WildSetsProof.Case("GVG_037", ZapOMatic);
         WildSetsProof.Case("GVG_038", Crackle);
@@ -1135,7 +1136,7 @@ internal static class WildY0bM2BProof
 
     private static void RunUnregistered()
     {
-        foreach (var (id, scenario) in new (string, Action<Game, Controller, string>)[] { ("GVG_033", TreeOfLife), ("GVG_034", MechBearCat), ("GVG_044", SpiderTank) })
+        foreach (var (id, scenario) in new (string, Action<Game, Controller, string>)[] { ("GVG_033", TreeOfLife), ("GVG_044", SpiderTank) })
             for (int seed = 1; seed <= 3; seed++)
             {
                 var game = new Game(new GameConfig { RandomSeed = seed, StartPlayer = 1, Shuffle = false, SkipMulligan = true,
@@ -1152,7 +1153,7 @@ internal static class WildY0bM2BProof
                 Check(Canonical.State(game) == Canonical.State(game.CloneExact(history: true)), "exact clone after unregistered scenario " + id);
                 Check(Canonical.State(game) == Canonical.State(Game.LoadSnapshotWithPools(game.SaveSnapshot(), game.OfflinePools)), "snapshot after unregistered scenario " + id);
             }
-        Console.WriteLine("UNREGISTERED scenarios GVG_033, GVG_034, GVG_044 PASS; seeds=3; clone/snapshot");
+        Console.WriteLine("UNREGISTERED scenarios GVG_033, GVG_044 PASS; seeds=3; clone/snapshot");
     }
 
     private static void TreeOfLife(Game g, Controller p, string id)

@@ -3013,6 +3013,7 @@ namespace SabberStoneCore.CardSets
 				Trigger = TriggerBuilder
 					.Type(TriggerType.TURN_END)
 					.SetTask(new SummonTask("AT_019"))
+					.SetEitherTurn() // "At the end of the turn": either player's turn
 					.SetRemoveAfterTriggered()
 			}));
 

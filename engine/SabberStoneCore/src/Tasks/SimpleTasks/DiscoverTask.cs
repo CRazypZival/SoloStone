@@ -305,7 +305,6 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 					{
 						Cards.HeroCards().Where(p => !p.ExcludeFromLegacyRandomPools && p.Class != CardClass.NEUTRAL && p.Class != CardClass.INVALID)
 							.GroupBy(p => p.Class).Select(group => group.OrderBy(p => p.Id, StringComparer.Ordinal).First())
-							.OrderBy(p => (int)p.Class)
 							.Select(p => Cards.FromAssetId(p[GameTag.HERO_POWER])).Where(power => power.Class != heldClass).ToArray()
 					};
 					return cardSets;

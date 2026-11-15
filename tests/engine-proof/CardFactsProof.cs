@@ -208,7 +208,9 @@ internal static class CardFactsProof
                 Compare(CardLoader.Build(row, true), applied[i], differences);
                 // The engine's card list carries the identity too (Cards adds scripts, not definitions).
                 var engine = Cards.FromId(row.Id);
-                Check(engine.Tags.OrderBy(t => (int)t.Key).SequenceEqual(applied[i].Tags.OrderBy(t => (int)t.Key)) && engine.Text == applied[i].Text
+                // The Cleave rule (Lake Thresher, Magnataur Alpha, Foe Reaper 4000) is a script-owned engine tag, not part of the client row.
+                Check(engine.Tags.Where(t => t.Key != SabberStoneCore.Actions.CombatRules.Cleave).OrderBy(t => (int)t.Key)
+                    .SequenceEqual(applied[i].Tags.Where(t => t.Key != SabberStoneCore.Actions.CombatRules.Cleave).OrderBy(t => (int)t.Key)) && engine.Text == applied[i].Text
                     && engine.Races.SequenceEqual(applied[i].Races), "the engine loads the identity of " + row.Id);
             }
             else if (!ReferenceEquals(built[i], applied[i])) differences.Add(built[i].Id + " replaced without an identity row");

@@ -14,6 +14,9 @@ using static Core2026Proof;
 // Unregistered (not in the batch manifest), their scenarios kept below and run only with WILD_Y0B_M2E_UNREGISTERED=1:
 //  - BLOCKED-STANDARD GVG_103 Micro Machine and GVG_114 Sneed's Old Shredder (plugin/LocalCardCatalog.cs CoreUnlock rows and
 //    data/progression/core-2026-unlocks.json copy groups): Standard data uses them today. Their scripts are not changed here.
+//  - HELD GVG_112 Mogor the Ogre: its Standard golden games reach it through the legacy random pools, and scripting it (WildGvgTasks.Mogor, the
+//    Forgetful coin on every attack) changes core-2026 game "core-2026-2-vs-core-2026-3-s0-random" (legal-task hash at action 52). The script
+//    stays at base (no effect); the scenario is kept unregistered and FAILS until the card is released with a Standard golden audit.
 //    GVG_103 FAILS its scenario: the legacy script triggers only at the start of its owner's turn (no EitherTurn); the text says each turn.
 // AMOUNT TRAP: the client stores SPELLPOWER as 1; Mini-Mage and Soot Spewer really have Spell Damage +1 (the base value).
 internal static class WildY0bM2EProof
@@ -31,7 +34,6 @@ internal static class WildY0bM2EProof
         WildSetsProof.Case("GVG_109", MiniMage);
         WildSetsProof.Case("GVG_110", DrBoom);
         WildSetsProof.Case("GVG_111", MimironsHead);
-        WildSetsProof.Case("GVG_112", MogorTheOgre);
         WildSetsProof.Case("GVG_113", FoeReaper4000);
         WildSetsProof.Case("GVG_115", Toshley);
         WildSetsProof.Case("GVG_116", MekgineerThermaplugg);
@@ -1525,7 +1527,7 @@ internal static class WildY0bM2EProof
 
     private static void RunUnregistered()
     {
-        foreach (var (id, scenario) in new (string, Action<Game, Controller, string>)[] { ("GVG_103", MicroMachine), ("GVG_114", SneedsOldShredder) })
+        foreach (var (id, scenario) in new (string, Action<Game, Controller, string>)[] { ("GVG_103", MicroMachine), ("GVG_114", SneedsOldShredder), ("GVG_112", MogorTheOgre) })
             try
             {
                 for (int seed = 1; seed <= 3; seed++)
