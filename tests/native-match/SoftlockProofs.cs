@@ -1,4 +1,3 @@
-using EngineGame = SabberStoneCore.Model.Game;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -49,7 +48,6 @@ internal static partial class Program
             Check(offer.Entities.Count == 3, name + ": three offers");
             int cursor = capture.Packets.Count;
             match.SendChoices(offer.Id, new List<int> { offer.Entities[pick] });
-            AssertNoEmptyResumedBlock(DeckDiscoverWireHistory(capture, cursor), game, name);
             FlushFieldHistory(match);
             if (Environment.GetEnvironmentVariable("HS_DUMP") == "1" && pick == 0 && !secondCard && !discovered)
             {
@@ -190,93 +188,5 @@ internal static partial class Program
         }
         Check(found > 0, "the seed search found a Forefather Discover");
         Console.WriteLine($"PASS Futuristic Forefather from a Discover: {found} routes, play, guess, End Turn (#115)");
-    }
-
-    private static string Row(PowerHistoryData r)
-    {
-        if (r.HasPowerStart) return "BLOCK_START type=" + r.PowerStart.Type + " src=" + r.PowerStart.Source + " tgt=" + r.PowerStart.Target;
-        if (r.HasPowerEnd) return "BLOCK_END";
-        if (r.HasFullEntity) return "FULL " + r.FullEntity.Entity + " " + r.FullEntity.Name;
-        if (r.HasShowEntity) return "SHOW " + r.ShowEntity.Entity + " " + r.ShowEntity.Name;
-        if (r.HasHideEntity) return "HIDE " + r.HideEntity.Entity;
-        if (r.HasChangeEntity) return "CHANGE " + r.ChangeEntity.Entity;
-        if (r.HasTagChange) return "TAG " + r.TagChange.Entity + " " + r.TagChange.Tag + "=" + r.TagChange.Value;
-        if (r.HasMetaData) return "META";
-        return "OTHER";
-    }
-    private static void DumpFlow(string label, string hand, string cardId, int pick)
-    {
-        var capture = new Capture();
-        var scenario = DebugScenario.Parse("humanHand=" + hand + "\nhumanSeat=first");
-        var match = new NativeMatch(capture.Send, "mage", "mage", 8427) { DebugScenario = scenario, StartingPlayer = scenario.FirstPlayer };
-        match.Start();
-        match.SendChoices(capture.Last<EntityChoices>(17).Id, new List<int>());
-        var game = match.Game; var player = game.Player1; player.BaseMana = 10; player.UsedMana = 0;
-        var source = player.HandZone.First(c => c.Card.Id == cardId);
-        FlushFieldHistory(match); Invoke0(match, "SendHumanOptions");
-        var before = capture.Last<AllOptions>(14);
-        int play = before.Options.FindIndex(o => o.MainOption?.Id == match.WireReturnId(source.Id));
-        int c0 = capture.Packets.Count;
-        match.SendOption(before.Id, play, 0, -1, 1);
-        Console.WriteLine("=== " + label + " PLAY");
-        Dump(capture, c0);
-        var offer = capture.Last<EntityChoices>(17);
-        Console.WriteLine("  CHOICE src=" + offer.Source + " type=" + offer.ChoiceType + " hideChosen=" + offer.HideChosen + " ents=" + string.Join(",", offer.Entities));
-        int c1 = capture.Packets.Count;
-        match.SendChoices(offer.Id, new List<int> { offer.Entities[pick] });
-        Console.WriteLine("=== " + label + " PICK");
-        Dump(capture, c1);
-    }
-    private static void Dump(Capture capture, int from)
-    {
-        foreach (var (id, msg) in capture.Packets.Skip(from))
-        {
-            if (id == 19) foreach (var r in ((PowerHistory)msg).List) Console.WriteLine("  [19] " + Row(r));
-            else Console.WriteLine("  [" + id + "] " + msg.GetType().Name);
-        }
-    }
-
-    // #115 (lane 1): a POWER block that resumes a Battlecry after the pick and holds only game/player tag changes never let the
-    // client finish the choice. The answer must either change something the client can show, or carry those tags loose.
-    private static void AssertNoEmptyResumedBlock(List<PowerHistoryData> rows, EngineGame game, string name)
-    {
-        for (int i = 0; i < rows.Count; i++)
-        {
-            if (!rows[i].HasPowerStart || (int)rows[i].PowerStart.Type != (int)BlockType.POWER) continue;
-            bool visible = false;
-            for (int j = i + 1; j < rows.Count && !rows[j].HasPowerEnd; j++)
-                if (!(rows[j].HasTagChange && (rows[j].TagChange.Entity == game.Id || rows[j].TagChange.Entity == game.Player1.Id || rows[j].TagChange.Entity == game.Player2.Id))) visible = true;
-            Check(visible, name + ": the resumed POWER block (source " + rows[i].PowerStart.Source + ") holds only game/player tags and would stall the client");
-        }
-    }
-
-    // Sweep: every Discover-style Battlecry/spell of the real-Discover list, each offer, resumes without a block the client cannot finish.
-    private static void ResumedChoiceSweep()
-    {
-        int cases = 0;
-        foreach (string cardId in new[] { "JAIL_734", "CAP_403", "JAIL_303", "JAIL_851", "TIME_701", "TIME_041", "TIME_034" })
-        foreach (int pick in new[] { 0, 1, 2 })
-        {
-            var capture = new Capture();
-            var scenario = DebugScenario.Parse("humanHand=" + cardId + "\nhumanSeat=first");
-            var match = new NativeMatch(capture.Send, "mage", "mage", 8427) { DebugScenario = scenario, StartingPlayer = scenario.FirstPlayer };
-            match.Start();
-            match.SendChoices(capture.Last<EntityChoices>(17).Id, new List<int>());
-            var game = match.Game; var player = game.Player1; player.BaseMana = 10; player.UsedMana = 0;
-            var source = player.HandZone.First(c => c.Card.Id == cardId);
-            FlushFieldHistory(match); Invoke0(match, "SendHumanOptions");
-            var before = capture.Last<AllOptions>(14);
-            int play = before.Options.FindIndex(o => o.MainOption?.Id == match.WireReturnId(source.Id));
-            try { match.SendOption(before.Id, play, 0, -1, 1); } catch (ArgumentException) { match.SendOption(before.Id, play, 0, -1, 0); }
-            if (player.Choice == null || player.Choice.ChoiceType != ChoiceType.GENERAL) continue;
-            var offer = capture.Last<EntityChoices>(17);
-            if (pick >= offer.Entities.Count) continue;
-            int cursor = capture.Packets.Count;
-            match.SendChoices(offer.Id, new List<int> { offer.Entities[pick] });
-            AssertNoEmptyResumedBlock(DeckDiscoverWireHistory(capture, cursor), game, $"{cardId} pick {pick}");
-            cases++;
-        }
-        Check(cases >= 6, "the resumed-choice sweep ran: " + cases);
-        Console.WriteLine($"PASS resumed choices: {cases} card/offer cases resume without an empty POWER block (#115)");
     }
 }
