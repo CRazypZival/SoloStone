@@ -7,11 +7,13 @@ using System.Text;
 
 // Hard = today's NPCs (owner 2026-11-15). A fingerprint of Hard ladder, rematch and Casual picks, captured on main before
 // NPC difficulty existed (main 84fde88, the branch base). This file compiles against that main as well: to re-capture,
-// copy it into a main checkout and print HardPin.Fingerprint() from tests/npc-world. A diff here is a behaviour change of
-// Hard: it goes to the owner, never re-pinned to make the suite pass.
+// copy it into a main checkout and print HardPin.Fingerprint() from tests/npc-world. Ratings are hashed at 3 decimals so
+// last-digit math-library differences between platforms (macOS capture, Linux CI) do not count. A diff here is a behaviour
+// change of Hard: it goes to the owner and is never re-pinned to make the suite pass. An intentional, reviewed change to
+// data/npc (deck admission, notables, names) re-captures only with the owner's OK.
 internal static class HardPin
 {
-    internal const string Expected = "bfb3a4cf63fd014a3bf83c2d36b25c26272c12541e0e520f27f6e5ef53b643cb";
+    internal const string Expected = "96249d89269afbe10050a7a4d6e60e009d484b1f9346c0d05b3bc14c8f0a56a6";
 
     private const long Profile = 777001;
 
@@ -25,8 +27,8 @@ internal static class HardPin
     }
 
     private static string Line(string kind, int i, NpcEncounter e, double target) => string.Join("|", kind, i.ToString(CultureInfo.InvariantCulture),
-        e.Npc.Id, e.Deck.Id, e.Skill.Id, e.Rating.ToString("R", CultureInfo.InvariantCulture), e.MatchSeed.ToString(CultureInfo.InvariantCulture),
-        e.Reason, target.ToString("R", CultureInfo.InvariantCulture));
+        e.Npc.Id, e.Deck.Id, e.Skill.Id, e.Rating.ToString("F3", CultureInfo.InvariantCulture), e.MatchSeed.ToString(CultureInfo.InvariantCulture),
+        e.Reason, target.ToString("F3", CultureInfo.InvariantCulture));
 
     internal static string Fingerprint()
     {
