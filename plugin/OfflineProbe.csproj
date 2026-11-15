@@ -114,4 +114,5 @@
   <ItemGroup>
     <EmbeddedResource Include="../data/progression/card-mastery.json" LogicalName="SoloStone.Progression.card-mastery.json" />
   </ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../data/arena/arena-rules-v1.json" LogicalName="SoloStone.Arena.arena-rules-v1.json" /></ItemGroup>
 </Project>
