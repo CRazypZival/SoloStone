@@ -3358,7 +3358,7 @@
 "GVG_043":["daedf10e","<b>Grido di Battaglia:</b> +1 Attacco a un tuo servitore casuale."],
 "GVG_043e":["0639b73f","+1 Attacco."],
 "GVG_045":["04d682a3","Infligge da $2 a $4 danni a un servitore. Evoca un Imp 1/1 per ogni danno inflitto."],
-"GVG_046":["c34f4f70","<b>Provocazione</b>. <b>Grido di Battaglia:</b> ottiene +1 Attacco per ogni altra tua Bestia."],
+"GVG_046":["2c340317","[x]<b>Provocazione</b>. Ha +1\nAttacco per ogni altra\nBestia che controlli."],
 "GVG_046e":["9e53c7c5","Attacco aumentato."],
 "GVG_047":["b1e7c2f9","Distrugge un servitore nemico casuale. <b>Combo:</b> inoltre, distrugge l'Arma dell'avversario."],
 "GVG_048":["c3e3ec29","<b>Grido di Battaglia:</b> +2 Attacco agli altri tuoi Robot."],

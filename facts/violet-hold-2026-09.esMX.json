@@ -3357,7 +3357,7 @@
 "GVG_043":["daedf10e","<b>Grito de batalla:</b> otorga +1 de Ataque a un esbirro aliado aleatorio."],
 "GVG_043e":["0639b73f","+1 de Ataque."],
 "GVG_045":["04d682a3","Inflige $2-$4 de daño a un esbirro. Invoca un Diablillo 1/1 por cada punto de daño infligido."],
-"GVG_046":["c34f4f70","<b>Provocación</b>. <b>Grito de batalla:</b> obtiene +1 de Ataque por cada Bestia que tengas."],
+"GVG_046":["2c340317","<b>Provocación</b>\nTiene +1 de Ataque por_cada Bestia que_controles."],
 "GVG_046e":["9e53c7c5","Ataque aumentado."],
 "GVG_047":["b1e7c2f9","Destruye un esbirro enemigo aleatorio. <b>Combo:</b> destruye el arma de tu adversario."],
 "GVG_048":["c3e3ec29","<b>Grito de batalla:</b> otorga +2 de Ataque a tus otros Mecas."],

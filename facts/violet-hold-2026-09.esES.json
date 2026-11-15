@@ -3357,7 +3357,7 @@
 "GVG_043":["daedf10e","<b>Grito de batalla:</b> Otorga +1 p. de ataque a un esbirro amistoso aleatorio."],
 "GVG_043e":["0639b73f","+1 p. de ataque."],
 "GVG_045":["04d682a3","Inflige $2 - $4 p. de daño a un esbirro. Invoca un diabillo 1/1 por cada punto de daño infligido."],
-"GVG_046":["c34f4f70","<b>Provocar</b>. <b>Grito de batalla:</b> Obtiene +1 p. de ataque por cada otra bestia que tengas."],
+"GVG_046":["2c340317","<b>Provocar</b>\nTiene +1 p. de ataque por cada otra bestia que controles."],
 "GVG_046e":["9e53c7c5","Ataque aumentado."],
 "GVG_047":["b1e7c2f9","Destruye a un esbirro enemigo aleatorio. <b>Combo:</b> Destruye el arma de tu oponente."],
 "GVG_048":["c3e3ec29","<b>Grito de batalla:</b> Otorga +2_p. de ataque a tus otros robots."],

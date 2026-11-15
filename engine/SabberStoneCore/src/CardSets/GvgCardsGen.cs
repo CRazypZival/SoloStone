@@ -260,7 +260,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_041a", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_TARGET_TO_PLAY,0},{PlayReq.REQ_MINION_TARGET,0}}, new Power
 			{
-				PowerTask = new AddEnchantmentTask("GVG_041c", EntityType.SOURCE)
+				PowerTask = new AddEnchantmentTask("GVG_041c", EntityType.TARGET)
 			}));
 
 			// ------------------------------------------ SPELL - DRUID
@@ -286,7 +286,7 @@ namespace SabberStoneCore.CardSets
 			// [GVG_046] King of Beasts - COST:5 [ATK:2/HP:6]
 			// - Race: beast, Set: gvg, Rarity: rare
 			// --------------------------------------------------------
-			// Text: <b>Taunt</b>. <b>Battlecry:</b> Gain +1 Attack for each other Beast you have.
+			// Text: <b>Taunt</b> Has +1 Attack for each other Beast you control. (37.0: a 1/5 for 3)
 			// --------------------------------------------------------
 			// GameTag:
 			// - TAUNT = 1
@@ -294,10 +294,9 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_046", new CardDef(new Power
 			{
-				// TODO [GVG_046] King of Beasts && Test: King of Beasts_GVG_046
 				InfoCardId = "GVG_046e",
-				//PowerTask = null,
-				//Trigger = null,
+				Aura = new AdaptiveEffect(GameTag.ATK, EffectOperator.ADD,
+					p => p.Controller.BoardZone.CountOf(m => m != p && !m.IsDormant && m.IsRace(Race.BEAST)))
 			}));
 
 			// ---------------------------------------- MINION - HUNTER
@@ -312,7 +311,7 @@ namespace SabberStoneCore.CardSets
 			cards.Add("GVG_048", new CardDef(new Power
 			{
 				PowerTask = ComplexTask.Create(
-					new IncludeTask(EntityType.MINIONS),
+					new IncludeTask(EntityType.MINIONS_NOSOURCE),
 					new FilterStackTask(SelfCondition.IsRace(Race.MECHANICAL)),
 					new AddEnchantmentTask("GVG_048e", EntityType.STACK))
 			}));
@@ -328,10 +327,12 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_049", new CardDef(new Power
 			{
-				// TODO [GVG_049] Gahz'rilla && Test: Gahz'rilla_GVG_049
 				InfoCardId = "GVG_049e",
-				//PowerTask = null,
-				//Trigger = null,
+				Trigger = new Trigger(TriggerType.TAKE_DAMAGE)
+				{
+					TriggerSource = TriggerSource.SELF,
+					SingleTask = new AddEnchantmentTask("GVG_049e", EntityType.SOURCE)
+				}
 			}));
 
 			// ---------------------------------------- MINION - HUNTER
@@ -459,9 +460,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_049e", new CardDef(new Power
 			{
-				// TODO [GVG_049e] Might of Zul'Farrak && Test: Might of Zul'Farrak_GVG_049e
-				//PowerTask = null,
-				//Trigger = null,
+				Enchant = new Enchant(ATK.Effect(EffectOperator.MUL, 2))
 			}));
 
 		}
@@ -1004,13 +1003,21 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_028", new CardDef(new Power
 			{
-				Trigger = new Trigger(TriggerType.CAST_SPELL)
-				{
-					TriggerSource = TriggerSource.ENEMY,
-					SingleTask = ComplexTask.Create(
-						new CopyTask(EntityType.TARGET, Zone.HAND),
-						new AddCardTo("GVG_028t", EntityType.OP_HAND))
-				}
+				// Two independent triggers: a full hand on one side must not cancel the other half.
+				// Gallywix's Coin "won't trigger Gallywix".
+				Trigger = new MultiTrigger(
+					new Trigger(TriggerType.CAST_SPELL)
+					{
+						TriggerSource = TriggerSource.ENEMY,
+						Condition = new SelfCondition(me => me.Card.Id != "GVG_028t"),
+						SingleTask = new CopyTask(EntityType.TARGET, Zone.HAND)
+					},
+					new Trigger(TriggerType.CAST_SPELL)
+					{
+						TriggerSource = TriggerSource.ENEMY,
+						Condition = new SelfCondition(me => me.Card.Id != "GVG_028t"),
+						SingleTask = new AddCardTo("GVG_028t", EntityType.OP_HAND)
+					})
 			}));
 
 			// ----------------------------------------- MINION - ROGUE
@@ -1068,10 +1075,24 @@ namespace SabberStoneCore.CardSets
 			cards.Add("GVG_047", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_ENEMY_TARGET,0},{PlayReq.REQ_MINION_TARGET,0}}, new Power
 			{
 				PowerTask = ComplexTask.DestroyRandomTargets(1, EntityType.OP_MINIONS),
-				ComboTask = ComplexTask.Create(
-					new RandomTask(1, EntityType.OP_MINIONS),
-					new IncludeTask(EntityType.OP_WEAPON, null, true),
-					new DestroyTask(EntityType.STACK))
+				// Combo: also the weapon, even when there is no minion to destroy (an empty random pick must not end the task).
+				ComboTask = new CustomTask((g, c, s, t, stack) =>
+				{
+					var minions = IncludeTask.GetEntities(EntityType.OP_MINIONS, c, s, t, null);
+					if (minions.Count > 0)
+					{
+						var victim = minions[g.Random.Next(minions.Count)];
+						g.OnRandomHappened(true);
+						Actions.DeathContextRules.RecordDestroy(victim, s);
+						victim.Destroy();
+					}
+					var weapon = c.Opponent.Hero.Weapon;
+					if (weapon != null)
+					{
+						Actions.DeathContextRules.RecordDestroy(weapon, s);
+						weapon.Destroy();
+					}
+				})
 			}));
 
 			// ----------------------------------------- WEAPON - ROGUE
@@ -1170,7 +1191,7 @@ namespace SabberStoneCore.CardSets
 				PowerTask = new EnqueueTask(4, ComplexTask.Create(
 					new RandomMinionTask(GameTag.CARDRACE, (int)Race.MURLOC),
 					new AddStackTo(EntityType.HAND)))
-			}));
+			}) { Configure = card => { card.Overload = 3; } });  // the client row stores OVERLOAD as 1 for every amount
 
 			// ---------------------------------------- MINION - SHAMAN
 			// [GVG_066] Dunemaul Shaman - COST:4 [ATK:5/HP:4]
@@ -1200,16 +1221,20 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_029", new CardDef(new Power
 			{
-				// TODO Test: Ancestor's Call_GVG_029
-				PowerTask = ComplexTask.Create(
-					new IncludeTask(EntityType.HAND),
-					new FilterStackTask(SelfCondition.IsMinion),
-					new RandomTask(1, EntityType.STACK),
-					new SummonStackTask(true),
-					new IncludeTask(EntityType.OP_HAND),
-					new FilterStackTask(SelfCondition.IsMinion),
-					new RandomTask(1, EntityType.STACK),
-					new SummonStackTask(true))
+				// Each hand is handled on its own: an empty hand or a full board on one side never cancels the other side.
+				PowerTask = new CustomTask((g, c, s, t, stack) =>
+				{
+					foreach (var owner in new[] { c, c.Opponent })
+					{
+						if (owner.BoardZone.IsFull) continue;
+						var minions = owner.HandZone.GetAll(card => card.Card.Type == CardType.MINION);
+						if (minions.Length == 0) continue;
+						var pick = minions[g.Random.Next(minions.Length)];
+						g.OnRandomHappened(true);
+						owner.HandZone.Remove(pick);
+						Generic.SummonBlock(g, (Minion)pick, -1, s);
+					}
+				})
 			}));
 
 			// ----------------------------------------- SPELL - SHAMAN
@@ -1397,10 +1422,11 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_045", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_TARGET_TO_PLAY,0},{PlayReq.REQ_MINION_TARGET,0}}, new Power
 			{
+				// One Imp per damage actually dealt: a Divine Shield or Immunity absorbs it (no Imps), overkill and Spell Damage count.
 				PowerTask = ComplexTask.Create(
 					new MathRandTask(2, 4),
-					new DamageNumberTask(EntityType.TARGET, true),
-					new EnqueueNumberTask(new SummonTask("GVG_045t"), true))
+					new DamageNumberTask(EntityType.TARGET, true, storeDealt: true),
+					new EnqueueNumberTask(new SummonTask("GVG_045t")))
 			}));
 
 		}
@@ -1540,9 +1566,23 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_050", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_MINIMUM_TOTAL_MINIONS,1}}, new Power
 			{
-				// TODO [GVG_050] Bouncing Blade && Test: Bouncing Blade_GVG_050
-				//PowerTask = null,
-				//Trigger = null,
+				// Each hit picks a random minion that can take damage (an Immune or untouchable one could never end the loop),
+				// and the loop stops as soon as any minion has died. Bounded: every hit removes a Divine Shield or Health.
+				PowerTask = new CustomTask((g, c, s, t, stack) =>
+				{
+					var spell = s as IPlayable;
+					for (int hits = 0; hits < 4096; hits++)
+					{
+						var pool = new List<Minion>();
+						pool.AddRange(g.Player1.BoardZone.GetAll(m => m.Zone.Type == Zone.PLAY && !m.ToBeDestroyed && m.Health > 0 && !m.Untouchable && !m.IsImmune));
+						pool.AddRange(g.Player2.BoardZone.GetAll(m => m.Zone.Type == Zone.PLAY && !m.ToBeDestroyed && m.Health > 0 && !m.Untouchable && !m.IsImmune));
+						if (pool.Count == 0) return;
+						var hit = pool[g.Random.Next(pool.Count)];
+						g.OnRandomHappened(true);
+						Generic.DamageCharFunc.Invoke(spell, hit, 1, true);
+						if (g.Player1.BoardZone.Any(m => m.ToBeDestroyed || m.Health <= 0) || g.Player2.BoardZone.Any(m => m.ToBeDestroyed || m.Health <= 0)) return;
+					}
+				})
 			}));
 
 			// ---------------------------------------- SPELL - WARRIOR
