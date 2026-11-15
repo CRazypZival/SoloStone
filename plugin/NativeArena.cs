@@ -48,16 +48,19 @@ internal static partial class NativeArena
     // Informational notices (Underground, Disclaimer, no store, match not started) go to lastNotice and never touch the error state.
     private static string lastError, lastNotice;
     private static int errorSeq;
-    private static bool mutationPending, startingMatch, disabled, arenaMatch;
-    // One owner for "the current match is an Arena match". The follow-up match task derives it from the pending match's mode.
-    internal static bool MatchActive => arenaMatch;
-    internal static void SetMatchContext(bool arena) { arenaMatch = arena; }
+    private static bool mutationPending, startingMatch, disabled;
+    // Set when the DRAFT scene never finished loading (NativeArenaLoad): entry is refused for the session, but every offline
+    // patch stays active so the scene that is being left never reaches retail code.
+    private static string loadFailure;
+    // The match's own record says whether it is an Arena match (NativeArenaMatch.OwnsArenaMatch): no flag to set or forget.
+    internal static bool MatchActive => OwnsArenaMatch();
     private static bool Offline => NativeUIProbe.Active && !disabled;
+    private static bool EntryBlocked => disabled || loadFailure != null;
     // A failure anywhere in Arena disables Arena only. Every patch is gated on Offline, so the rest of the game is untouched.
     internal static void Disable(string reason, Exception error = null)
     {
         if (disabled) return;
-        disabled = true; arenaMatch = false;
+        disabled = true;
         log?.LogError("NATIVE_ARENA disabled: " + reason + (error == null ? "" : " " + error.GetBaseException().Message));
     }
     internal static void Unavailable() => Notice("Arena is unavailable in this session.");
@@ -79,6 +82,7 @@ internal static partial class NativeArena
             ("GetSaveArenaDeckResponse", nameof(SaveReply)), ("GetDraftError", nameof(ErrorReply)) })
             Patch(harmony, typeof(Network), pair.Item1, pair.Item2);
         Patch(harmony, typeof(ArenaLandingPageManager), "Awake", nameof(BeforeScene));
+        harmony.Patch(Required(typeof(ArenaLandingPageManager), "Awake"), postfix: new HarmonyMethod(typeof(NativeArena), nameof(LandingModels)));
         Patch(harmony, typeof(DraftDisplay), "Awake", nameof(BeforeScene));
         Patch(harmony, typeof(ArenaLandingPageManager), "SpendTicket", nameof(Enter));
         Patch(harmony, typeof(ArenaLandingPageManager), "ToggleUndergroundState", nameof(Underground));
@@ -109,6 +113,7 @@ internal static partial class NativeArena
         Patch(harmony, typeof(TavernTicketDisplay), "OpenTavernTicketProductPage", nameof(NoStore));
         harmony.Patch(Required(typeof(DraftManager), "OnLoggedIn"), postfix: new HarmonyMethod(typeof(NativeArena), nameof(LoggedIn)));
         harmony.Patch(Required(typeof(GameMgr), "GetPostGameSceneMode"), postfix: new HarmonyMethod(typeof(NativeArena), nameof(ReturnToDraft)));
+        InstallLoadWatch(harmony);
     }
 
     private static MethodInfo Required(Type owner, string name, Type[] args = null) =>
@@ -133,13 +138,17 @@ internal static partial class NativeArena
     // False when Arena cannot open: the caller must not navigate (a native notice is already shown).
     internal static bool PrepareScene()
     {
-        if (disabled) { Unavailable(); return false; }
+        if (EntryBlocked) { Unavailable(); return false; }
         try { Bootstrap(); }
         catch (Exception error) { Disable("scene bootstrap failed", error); Unavailable(); return false; }
-        arenaMatch = false;
         return true;
     }
-    private static void BeforeScene() { if (Offline) PrepareScene(); }
+    private static void BeforeScene()
+    {
+        if (!Offline) return;
+        try { Bootstrap(); }
+        catch (Exception error) { Disable("scene bootstrap failed", error); }
+    }
     private static void SeedSession(DraftManager manager)
     {
         manager.SetUndergroundState(false);
@@ -150,7 +159,7 @@ internal static partial class NativeArena
     private static bool HomeButton(Box __instance)
     {
         if (!NativeUIProbe.Active) return true;
-        if (disabled) { Unavailable(); return false; }
+        if (EntryBlocked) { Unavailable(); return false; }
         if (!NativeRewardUI.BlocksHome && !NativeAchievements.Active && !NativeProfileSelector.BlocksHome)
             __instance.FireButtonPressEvent(Box.ButtonType.ARENA);
         return false;
@@ -158,7 +167,7 @@ internal static partial class NativeArena
     private static bool HomeArena()
     {
         if (!NativeUIProbe.Active) return true;
-        if (disabled) { Unavailable(); return false; }
+        if (EntryBlocked) { Unavailable(); return false; }
         NativeUIProbe.Navigate(SceneMgr.Mode.DRAFT);
         return false;
     }
@@ -379,7 +388,6 @@ internal static partial class NativeArena
         try
         {
             if (!Service().StartMatch(out string error)) Notice(error ?? "Arena match could not start.");
-            else arenaMatch = true;
         }
         catch (Exception error) { Fail(error.GetBaseException().Message); }
         finally { startingMatch = false; }

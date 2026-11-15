@@ -534,6 +534,9 @@ public sealed partial class LocalProfile : IDisposable
     public LocalMatchRecord Pending => Copy(data.Pending);
     public IReadOnlyList<LocalMatchRecord> History => data.Matches.Select(Copy).ToArray();
     internal LocalMatchRecord LastSettledMatch => Copy(data.Matches.LastOrDefault());
+    // Cheap mode reads (no record copy) for per-frame callers such as Arena match ownership.
+    internal string PendingMode => data.Pending?.Mode;
+    internal string LastSettledMode => data.Matches.Count == 0 ? null : data.Matches[data.Matches.Count - 1].Mode;
     // Head-to-head with one NPC from SETTLED matches only; the pending match never counts.
     public LocalNpcRecord NpcRecord(string npcId) => LocalNpcRecord.Of(data.Matches, npcId);
     public int Gold => profileOptions.InfiniteGold ? ProfileCatalog.UnlimitedGold : data.GoldBalance;

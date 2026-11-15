@@ -332,10 +332,13 @@ internal static class ArenaChecks
     private static void Registry(string root)
     {
         using var profile = new LocalProfile(Path.Combine(root, "arena-registry.xml"));
+        // Binding is explicit (NativeUIProbe.BindSave): the crafting ledger no longer sets Arena as a side effect.
+        var service = new ArenaService(profile);
+        ArenaServiceRegistry.Current = service;
         CraftingLedgerRegistry.Current = new LocalCraftingLedger(profile);
-        Check(ArenaServiceRegistry.Current is ArenaService, "bound save registers Arena");
         CraftingLedgerRegistry.Current = null;
-        Check(ArenaServiceRegistry.Current == null, "unbound clears Arena");
+        Check(ReferenceEquals(ArenaServiceRegistry.Current, service), "ledger changes never rebind or clear Arena");
+        ArenaServiceRegistry.Current = null;
     }
 
     private static void Bot()

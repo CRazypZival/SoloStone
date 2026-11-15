@@ -100,10 +100,10 @@ internal static partial class NativeArena
         ContentsRequest(false); ArenaServiceRegistry.Current = new ArenaStubService(_ => new[] { "A", "B", "C" });
         int delivered = received.Count; Tick(); Check(received.Count == delivered, "replies are scoped to service identity");
         Network.BeginDraft outside = null; Check(BeginReply(ref outside), "stash is available only during dispatch");
-        SetMatchContext(true); var mode = SceneMgr.Mode.TOURNAMENT; ReturnToDraft(ref mode); Check(mode == SceneMgr.Mode.DRAFT, "Arena returns to draft with VS_AI transport");
+        ArenaMatchOwned = true; var mode = SceneMgr.Mode.TOURNAMENT; ReturnToDraft(ref mode); Check(mode == SceneMgr.Mode.DRAFT, "Arena returns to draft with VS_AI transport");
         Check(NavigationTarget(SceneMgr.Mode.TOURNAMENT) == SceneMgr.Mode.DRAFT && NavigationTarget(SceneMgr.Mode.HUB) == SceneMgr.Mode.HUB,
             "post-reward picker navigation returns to Arena without changing other destinations");
-        SetMatchContext(false); mode = SceneMgr.Mode.TOURNAMENT; ReturnToDraft(ref mode); Check(mode == SceneMgr.Mode.TOURNAMENT, "other modes preserve route");
+        ArenaMatchOwned = false; mode = SceneMgr.Mode.TOURNAMENT; ReturnToDraft(ref mode); Check(mode == SceneMgr.Mode.TOURNAMENT, "other modes preserve route");
         // Informational notices never touch the error state; failures bump errorSeq.
         errorsBefore = errorSeq; Underground(); Disclaimer(); NoStore();
         Check(errorSeq == errorsBefore && lastNotice != null, "notices are not errors");

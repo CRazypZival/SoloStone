@@ -99,6 +99,16 @@ foreach (var contract in new[] {
     ("PresenceMgr", "SetPrevStatus", Array.Empty<string>(), "Boolean")
 }) MethodSignature(gameMetadata, contract.Item1, contract.Item2, contract.Item3, contract.Item4, signatures);
 Console.WriteLine("PASS Arena native message, boot and return contracts");
+// The DRAFT boot watch (plugin/NativeArenaLoad.cs) reads every wait of the scene-loaded coroutines by field name.
+foreach (var (typeName, fieldName, fieldType) in new[] {
+    ("DraftDisplay", "m_confirmButton", "NormalButton"), ("DraftDisplay", "m_heroPower", "Actor"),
+    ("DraftDisplay", "m_currentMode", "DraftMode"), ("DraftDisplay", "m_netCacheReady", "Boolean"),
+    ("DraftDisplay", "m_arenaLandingPageManagerWidget", "Widget"), ("DraftScene", "m_arenaLandingPageWidget", "WidgetTemplate"),
+    ("ArenaLandingPageManager", "m_isNormalWidgetLoaded", "Boolean"), ("ArenaLandingPageManager", "m_isUndergroundWidgetLoaded", "Boolean"),
+    ("ArenaLandingPageManager", "m_isWidgetDoneInitialStateChanging", "Boolean"), ("SceneMgr", "m_scene", "PegasusScene") })
+    if (Field(gameMetadata, typeName, fieldName).DecodeSignature(signatures, (object)null) != fieldType)
+        throw new Exception("Arena boot watch field changed: " + typeName + "." + fieldName);
+Console.WriteLine("PASS Arena boot watch reads the pinned client's scene-loaded waits");
 if (!Calls(plugin, pluginMetadata, Method(pluginMetadata, "NativeUIProbe", "Navigate")).Contains(("NativeArena", "NavigationTarget")))
     throw new Exception("Arena post-reward routing bypasses the shared navigation target");
 var hooks = new[] {

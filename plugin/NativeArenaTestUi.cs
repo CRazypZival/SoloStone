@@ -42,12 +42,21 @@ internal static partial class NativeArena
                 { "serviceType", ArenaServiceRegistry.Current?.GetType().Name }, { "stub", ArenaServiceRegistry.Current is ArenaStubService }, { "available", !disabled },
                 { "phoneUI", (bool)UniversalInputManager.UsePhoneUI }, { "matchActive", MatchActive },
                 { "pendingReplies", TestControlProtocol.List(replies.Select(reply => (object)reply.Id)) },
-                { "lastReplyIds", TestControlProtocol.List(lastReplies.Cast<object>()) }, { "error", lastError ?? view.Error }, { "errorSeq", errorSeq }, { "notice", lastNotice } };
+                { "lastReplyIds", TestControlProtocol.List(lastReplies.Cast<object>()) }, { "error", lastError ?? view.Error }, { "errorSeq", errorSeq }, { "notice", lastNotice },
+                { "loadSeconds", draftLoadBegan < 0 ? (object)null : Math.Round(Time.realtimeSinceStartup - draftLoadBegan, 1) },
+                { "loadFailure", loadFailure }, { "firstWait", firstWait }, { "waits", Waits() } };
         }
         catch (Exception error) { return new JsonNode { { "error", error.GetBaseException().Message } }; }
     }
 
-    private static object Field(object owner, string name) => owner == null ? null : AccessTools.Field(owner.GetType(), name)?.GetValue(owner);
+    // The last DRAFT load's wait conditions (NativeArenaLoad.ReadWaits), in the client's order.
+    private static JsonNode Waits()
+    {
+        var node = new JsonNode();
+        foreach (var wait in waits) node[wait.Key] = wait.Value;
+        return node;
+    }
+
     internal static void NameControls(Action<PegUIElement, string> name, List<PegUIElement> elements, List<PegUIElementProxy> proxies)
     {
         if (!InDraft) return;

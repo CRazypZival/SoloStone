@@ -23,8 +23,8 @@ internal static class NativeGameplayRank
     {
         profile = LocalLadder.Profile;
         pending = profile?.Pending;
-        // Casual and Arena keep the native unranked GT_VS_AI presentation.
-        if (NativeArena.MatchActive || pending != null && CasualRules.IsCasual(pending.Mode)) return false;
+        // Casual and Arena keep the native unranked GT_VS_AI presentation: never a rank in an Arena match.
+        if (pending != null ? CasualRules.IsCasual(pending.Mode) || ArenaRules.IsArena(pending.Mode) : NativeArena.MatchActive) return false;
         return NativeUIProbe.OwnsGameplayRank(LocalLadder.Screen, LocalLadder.MatchId, pending?.Id,
             ClientBridge.DiagnosticMatchId);
     }

@@ -8,6 +8,9 @@ using PegasusUtil;
 internal static partial class NativeArena
 {
     private static void UpdatePresentation() { }
+    // Production derives this from the pending/last settled match record (plugin/NativeArenaMatch.cs).
+    internal static bool ArenaMatchOwned;
+    private static bool OwnsArenaMatch() => ArenaMatchOwned;
     private static void Check(bool ok, string message) { if (!ok) throw new Exception("Arena: " + message); }
 }
 

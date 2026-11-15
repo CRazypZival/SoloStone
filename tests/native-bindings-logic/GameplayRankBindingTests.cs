@@ -106,11 +106,19 @@ internal static class GameplayRankBindingTests
         Check(!Ranked(false) && ReferenceEquals(Rank(new Player(Player.Side.FRIENDLY), native), native)
             && ReferenceEquals(Rank(new Player(Player.Side.OPPOSING), native), native),
             "Casual match keeps the native unranked result and translators");
+        profile.Pending.Mode = "Arena";
+        Check(!Ranked(false) && ReferenceEquals(Rank(new Player(Player.Side.FRIENDLY), native), native)
+            && ReferenceEquals(Rank(new Player(Player.Side.OPPOSING), native), native),
+            "an Arena pending match never shows a rank: native unranked presentation with VS_AI transport");
         profile.Pending.Mode = null;
+        Check(Ranked(false), "a Ranked pending match is still projected");
+        var arenaPending = profile.Pending;
+        profile.Pending = null;
         NativeArena.MatchActive = true;
         Check(!Ranked(false) && ReferenceEquals(Rank(new Player(Player.Side.FRIENDLY), native), native),
-            "Arena match keeps native unranked presentation with VS_AI transport");
+            "after settlement the Arena post-game keeps native unranked presentation");
         NativeArena.MatchActive = false;
+        profile.Pending = arenaPending;
         Check(ReferenceEquals(Rank(new Player(Player.Side.INVALID), native), native),
             "unknown player side keeps native translator");
         Check(log.Infos.Any(line => line.Contains("side=FRIENDLY") && line.Contains("legend=9") && line.Contains("showOpponent=True"))
@@ -177,6 +185,7 @@ internal static class GrindTiers
     internal static GrindTier Find(string id) { id ??= "standard"; if (!Rows.TryGetValue(id, out var tier)) Rows[id] = tier = new GrindTier(); return tier; }
 }
 internal static class CasualRules { internal static bool IsCasual(string mode) => mode == "Casual"; }
+internal static class ArenaRules { internal static bool IsArena(string mode) => mode == "Arena"; }
 internal sealed class MatchRow { internal string Result; }
 internal sealed class LadderPosition { internal int StarIndex, BestStarIndex; internal double Rating; internal bool LegendReached; }
 internal sealed class LadderRankRow { internal int StarLevel, Stars; internal bool Legend; }

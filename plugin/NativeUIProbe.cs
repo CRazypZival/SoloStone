@@ -155,11 +155,7 @@ internal static partial class NativeUIProbe
     {
         if (!ReferenceEquals(selectedProfile, LocalLadder.Profile))
             throw new InvalidOperationException("Native and ladder profiles differ");
-#if STANDARD_PROOF
-        CraftingLedgerRegistry.Current = null;
-#else
-        CraftingLedgerRegistry.Current = selectedProfile == null ? null : new LocalCraftingLedger(selectedProfile);
-#endif
+        BindSave(selectedProfile);
         Reports = reports ?? Reports;
         log = logger; runId = launchId;
         NativeShop.Initialize(harmony, logger);
@@ -306,17 +302,25 @@ internal static partial class NativeUIProbe
         if (selectedProfile == null || !ReferenceEquals(selectedProfile, LocalLadder.Profile))
             throw new InvalidOperationException("Native and ladder profiles differ");
         if (active || attempted || ready) throw new InvalidOperationException("Native save bootstrap already started.");
-#if STANDARD_PROOF
-        CraftingLedgerRegistry.Current = null;
-#else
-        CraftingLedgerRegistry.Current = new LocalCraftingLedger(selectedProfile);
-#endif
+        BindSave(selectedProfile);
     }
 
     internal static void ResetStartupProfile()
     {
         if (active || attempted || ready) return;
+        BindSave(null);
+    }
+
+    // The crafting ledger and the Arena service act on the bound save: both are set and cleared together, here only.
+    private static void BindSave(LocalProfile selectedProfile)
+    {
+#if STANDARD_PROOF
         CraftingLedgerRegistry.Current = null;
+        ArenaServiceRegistry.Current = null;
+#else
+        CraftingLedgerRegistry.Current = selectedProfile == null ? null : new LocalCraftingLedger(selectedProfile);
+        ArenaServiceRegistry.Current = selectedProfile == null ? null : new ArenaService(selectedProfile);
+#endif
     }
 
     private static MethodInfo Required(Type type, string name, Type[] args = null) =>
@@ -380,6 +384,7 @@ internal static partial class NativeUIProbe
             }
             if (!ready) return;
             NativeArena.Update();
+            NativeArena.WatchSceneLoad();
             if (AtHome()) NativeHomeUI.UpdateJournal(Box.Get(), message => log.LogInfo(message), NativeHiddenEntries.Active);
             if (sceneWaiting && SplashScreen.Get() == null && !SceneMgr.Get().IsTransitioning() && SceneMgr.Get().GetMode() == target)
             {
@@ -1489,7 +1494,6 @@ internal static partial class NativeUIProbe
         scene.NotifySceneLoaded();
         target = SceneMgr.Mode.HUB; sceneBegan = Time.realtimeSinceStartup; sceneWaiting = scene.IsTransitioning();
         if (!sceneWaiting) State("SceneLoaded:HUB");
-        NativeArena.SetMatchContext(false);
         NativeHomeUI.BeginHub();
         ConfigureHomeButtons(box, true);
         return false;
@@ -1564,7 +1568,12 @@ internal static partial class NativeUIProbe
             if (!NativeResultsUI.CanNavigate(mode == SceneMgr.Mode.HUB)) return;
             if (mode != SceneMgr.Mode.HUB && mode != SceneMgr.Mode.PACKOPENING && mode != SceneMgr.Mode.COLLECTIONMANAGER && mode != SceneMgr.Mode.TOURNAMENT && mode != SceneMgr.Mode.DRAFT)
                 throw new ArgumentException("Unsupported native UI target");
-            if (mode == SceneMgr.Mode.DRAFT && !NativeArena.PrepareScene()) return;
+            // Arena refused (its notice is up): from HUB stay put; from anywhere else (the post-game route) go home, never strand.
+            if (mode == SceneMgr.Mode.DRAFT && !NativeArena.PrepareScene())
+            {
+                if (SceneMgr.Get().GetMode() == SceneMgr.Mode.HUB) return;
+                mode = SceneMgr.Mode.HUB;
+            }
             if (mode == SceneMgr.Mode.PACKOPENING)
             {
                 if (Profile.PackRevealPending) RememberPendingReceipt();
@@ -1587,6 +1596,21 @@ internal static partial class NativeUIProbe
             else Processor.QueueJob(transition);
         }
         catch (Exception error) { Fail(error); }
+    }
+    // Leaves a scene that never finished loading through the client's own navigation: retail itself calls SetNextMode(HUB)
+    // mid-load when Arena turns out disabled (DraftDisplay.OnNetCacheReady, DraftManager.OnError). Null, or why it cannot.
+    internal static string LeaveStuckScene(SceneMgr.Mode stuck, SceneMgr.Mode destination)
+    {
+        if (!ready || failure.Length != 0) return "native UI is not ready";
+        if (!SceneMgr.IsInitialized()) return "SceneMgr is missing";
+        var scene = SceneMgr.Get();
+        if (scene.GetMode() != stuck) return "the scene is " + scene.GetMode();
+        if (scene.IsModeRequested(SceneMgr.Mode.FATAL_ERROR)) return "a fatal error is pending";
+        if (scene.GetNextMode() != SceneMgr.Mode.INVALID) return "the client already requested " + scene.GetNextMode();
+        target = destination; sceneWaiting = true; sceneBegan = Time.realtimeSinceStartup;
+        State("Leaving:" + stuck + "->" + destination);
+        scene.SetNextMode(destination);
+        return null;
     }
     private static IEnumerator<IAsyncJobResult> StageScene(SceneMgr.Mode mode)
     {
