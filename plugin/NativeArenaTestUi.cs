@@ -83,7 +83,7 @@ internal static partial class NativeArena
     }
 
     private static bool IsBackLabel(string label) => label != null
-        && (label.Trim().Equals("Back", StringComparison.OrdinalIgnoreCase) || label.Trim().Equals(GameStrings.Get("GLUE_BACK"), StringComparison.OrdinalIgnoreCase));
+        && (label.Trim().Equals(NativeStrings.Get("GLOBAL_BACK", "Back"), StringComparison.OrdinalIgnoreCase) || label.Trim().Equals(GameStrings.Get("GLUE_BACK"), StringComparison.OrdinalIgnoreCase));
 
     internal static bool HasAncestorNamed(Transform node, string name)
     {
