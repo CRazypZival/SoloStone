@@ -112,7 +112,7 @@
 "AT_073e":["2668cab8","+1/+1."],
 "AT_074":["c7522ca3","Donne +3_ATQ et <b>Bouclier divin</b> à un serviteur."],
 "AT_074e2":["0335d601","+3 ATQ et <b>Bouclier divin</b>."],
-"AT_075":["b4e08b37","Vos recrues de la Main d’argent ont +1 ATQ."],
+"AT_075":["c1bbe6d0","Vos recrues de la Main d’argent ont +2_ATQ et <b>Provocation</b>."],
 "AT_075e":["f5283307","Le maître des chevaux de guerre donne_+1 ATQ à ce serviteur."],
 "AT_076":["ac562101","<b>Exaltation :</b> invoque un Murloc aléatoire."],
 "AT_077":["cf20e502","<b>Cri de guerre_:</b> révèle un serviteur de chaque deck. Si le vôtre coûte plus, gagne +1_Durabilité."],
