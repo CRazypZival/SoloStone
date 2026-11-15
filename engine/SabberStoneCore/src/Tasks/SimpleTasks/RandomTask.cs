@@ -88,6 +88,23 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 		private readonly int _amount;
 		private readonly EntityType _type;
 
+		/// <summary>
+		/// Set while the chain is built when the picked entities go straight into a damage or destroy task: such an
+		/// effect ignores a character that is already mortally wounded or pending destruction (it cannot be picked
+		/// again while the death phase is still to come). Healing, buffs and area effects still see those characters.
+		/// </summary>
+		internal bool SkipMortallyWounded { get; private set; }
+
+		/// <summary>Marks every random pick in a chain that feeds a damage or destroy task on the picked stack.</summary>
+		internal static void MarkHarmfulPicks(ISimpleTask[] chain)
+		{
+			for (int i = 0; i + 1 < chain.Length; i++)
+				if (chain[i] is RandomTask pick &&
+				    (chain[i + 1] is DamageTask { Type: EntityType.STACK } ||
+				     chain[i + 1] is DestroyTask { TargetType: EntityType.STACK }))
+					pick.SkipMortallyWounded = true;
+		}
+
 		public RandomTask(int amount, EntityType type)
 		{
 			_amount = amount;
@@ -103,6 +120,15 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 			//List<IPlayable> entities = temp is List<IPlayable> list ? list : temp.ToList();
 
 			IList<IPlayable> entities = IncludeTask.GetEntities(in _type, in controller, source, target, stack?.Playables);
+
+			if (SkipMortallyWounded && entities.Count != 0)
+			{
+				var living = new List<IPlayable>(entities.Count);
+				foreach (IPlayable candidate in entities)
+					if (!(candidate is ICharacter character && character.IsDead))
+						living.Add(candidate);
+				entities = living;
+			}
 
 			if (entities.Count == 0)
 				return TaskState.STOP;

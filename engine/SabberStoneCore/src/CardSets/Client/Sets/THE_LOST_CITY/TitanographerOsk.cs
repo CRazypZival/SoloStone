@@ -199,7 +199,8 @@ namespace SabberStoneCore.CardSets.Client.Sets
                     } break;
                 case 22:
                     Buff(g,s,s,"TTN_721te");
-                    var enemies=c.Opponent.BoardZone.Where(m=>!m.Untouchable).Cast<ICharacter>().Append(c.Opponent.Hero).ToArray();
+                    var enemies=c.Opponent.BoardZone.Where(m=>!m.Untouchable).Cast<ICharacter>().Append(c.Opponent.Hero).Where(e=>!e.IsDead).ToArray();
+                    if (enemies.Length==0) break;
                     ctx.Damage(enemies[g.Random.Next(enemies.Length)].Id,4); break;
                 case 23: Buff(g,s,s,"TTN_721t1e"); Generic.Draw(c); break;
                 case 24: Buff(g,s,s,"TTN_721t2e2"); break;

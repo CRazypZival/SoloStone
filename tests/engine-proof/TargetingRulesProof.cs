@@ -14,9 +14,12 @@ internal static class TargetingRulesProof
     {
         var failures = new List<string>();
         var cases = new (string, Action)[] {
+            ("#120 random damage skips mortally wounded", RandomDamageSkipsMortallyWounded),
+            ("#120 nothing left", RandomDamageWithNothingElseLeft),
             ("#121 mass transform skips Untouchable", MassTransformSkipsUntouchable),
             ("#138 transform resets stats", TransformResetsStats),
             ("#121 Untouchable sweep", UntouchableSweep),
+            ("#120 mortally wounded sweep", MortallyWoundedSweep),
             ("#139 Slime 'em! empty boards", SlimeEmEmptyBoards) };
         foreach (var (name, proof) in cases)
         {
@@ -25,6 +28,40 @@ internal static class TargetingRulesProof
         }
         if (failures.Count != 0) throw new Exception(string.Join("\n", failures));
         Console.WriteLine("PASS targeting rules: " + cases.Length + " proof groups");
+    }
+
+    // #120: two Sol'etos Deathrattles die together; the first 5-damage ping may pick the lone enemy minion, the second must not
+    // pick it again while it is still pending death.
+    private static void RandomDamageSkipsMortallyWounded()
+    {
+        int minionThenHero = 0;
+        for (int seed = 1; seed <= 60; seed++)
+        {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(seed);
+            var target = Summon(p.Opponent, "CS2_182");
+            var a = Summon(p, "TLC_817t4"); var b = Summon(p, "TLC_817t4");
+            a.ToBeDestroyed = true; b.ToBeDestroyed = true;
+            g.DeathProcessingAndAuraUpdate();
+            Verify(target.Damage <= 5, $"seed {seed}: the pending-death minion took a second random hit (damage {target.Damage})");
+            int hero = p.Opponent.Hero.Damage;
+            Verify(target.Damage == 5 ? hero == 5 : hero == 10, $"seed {seed}: both pings land (minion {target.Damage}, hero {hero})");
+            if (target.Damage == 5) minionThenHero++;
+        }
+        Verify(minionThenHero > 0, "the minion-first ordering was exercised");
+    }
+
+    // The effect does nothing when every candidate is mortally wounded or pending destroy.
+    private static void RandomDamageWithNothingElseLeft()
+    {
+        for (int seed = 1; seed <= 30; seed++)
+        {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(seed);
+            var enemyMinion = Summon(p.Opponent, "CS2_182"); enemyMinion.Damage = 9;
+            var hero = p.Opponent.Hero; hero.Damage = 29; hero.ToBeDestroyed = true;
+            var death = Summon(p, "TLC_817t4");
+            death.ToBeDestroyed = true; g.DeathProcessingAndAuraUpdate();
+            Verify(enemyMinion.Damage == 9 && hero.Damage == 29, $"seed {seed}: no candidate left, nothing is hit (minion {enemyMinion.Damage}, hero {hero.Damage})");
+        }
     }
 
     // #121: Archmage Rafaam transforms every non-Rafaam minion except an Untouchable one.
@@ -154,6 +191,41 @@ internal static class TargetingRulesProof
             Play(g, p, "JAIL_EVENT_102");
             Verify(portal.Card.Id == "UNG_829t2", "Desperate Bribe leaves the portal as it is");
         });
+        if (failures.Count != 0) throw new Exception(string.Join("; ", failures));
+    }
+
+    // #120 sweep: a random harmful effect never picks a minion that is already mortally wounded, so the live ones take it all.
+    private static void MortallyWoundedSweep()
+    {
+        var failures = new List<string>();
+        for (int seed = 1; seed <= 25; seed++)
+        {
+            Parts(failures, "Disciple seed " + seed, () => { // Disciple of Demise: one destroy
+                var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(seed);
+                var b = Summon(p.Opponent, "CS2_182"); var a = Wounded(p.Opponent);
+                Cast(g, p, "TIME_EVENT_301");
+                Verify(b.Zone.Type == Zone.GRAVEYARD, $"Disciple seed {seed}: the live minion is the pick");
+            });
+            Parts(failures, "Frame Job seed " + seed, () => { // Frame Job: two destroys
+                var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(seed);
+                var b = Summon(p.Opponent, "CS2_182"); var c = Summon(p.Opponent, "CS2_182"); var a = Wounded(p.Opponent);
+                Cast(g, p, "CAP_403");
+                Verify(b.Zone.Type == Zone.GRAVEYARD && c.Zone.Type == Zone.GRAVEYARD, $"Frame Job seed {seed}: both live minions die");
+            });
+            Parts(failures, "Tome Translator seed " + seed, () => { // Tome Translator missiles: the wounded minion takes none
+                var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(seed);
+                var b = Summon(p.Opponent, "CS2_182"); var a = Wounded(p.Opponent); var damage = a.Damage;
+                Cast(g, p, "BE_327t2");
+                Verify(a.Damage == damage, $"Tome Translator seed {seed}: the wounded minion was not hit again");
+            });
+            Parts(failures, "Osk and Follow the Fuse seed " + seed, () => { // Osk ability 22 and Follow the Fuse: the wounded enemy minion is never the pick, the hero or the live minion is
+                var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(seed);
+                var b = Summon(p.Opponent, "CS2_182"); var a = Wounded(p.Opponent); var damage = a.Damage;
+                Cast(g, p, "TLC_452t22"); Cast(g, p, "CAP_101");
+                Verify(a.Damage == damage, $"Osk / Follow the Fuse seed {seed}: the wounded minion was not hit again");
+                Verify(b.Damage + p.Opponent.Hero.Damage == 6, $"Osk / Follow the Fuse seed {seed}: both hits land on live targets");
+            });
+        }
         if (failures.Count != 0) throw new Exception(string.Join("; ", failures));
     }
 

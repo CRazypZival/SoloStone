@@ -84,7 +84,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
             card.Power=new Power { PowerTask=new CustomTask((g,c,s,t,stack)=>{
                 for(int i=0;i<6;i++)
                 {
-                    var targets=c.BoardZone.Concat(c.Opponent.BoardZone).Where(m=>m.Id!=s.Id && !m.Untouchable && !m.ToBeDestroyed).ToArray();
+                    var targets=c.BoardZone.Concat(c.Opponent.BoardZone).Where(m=>m.Id!=s.Id && !m.Untouchable && !m.IsDead).ToArray();
                     if(targets.Length==0) break;
                     Generic.DamageCharFunc((IPlayable)s,targets[g.Random.Next(targets.Length)],1,false);
                     g.DeathProcessingAndAuraUpdate();
