@@ -867,11 +867,11 @@ namespace SabberStoneCore.CardSets.Standard
 			// [CS2_032] Flamestrike - COST:7
 			// - Fac: neutral, Set: core, Rarity: free
 			// --------------------------------------------------------
-			// Text: Deal $5 damage to all enemy minions. @spelldmg
+			// Text: Deal $4 damage to all enemy minions. @spelldmg
 			// --------------------------------------------------------
 			cards.Add("CS2_032", new CardDef(new Power
 			{
-				PowerTask = new DamageTask(5, EntityType.OP_MINIONS, true)
+				PowerTask = new DamageTask(4, EntityType.OP_MINIONS, true)
 			}));
 
 			// ------------------------------------------- SPELL - MAGE
