@@ -560,6 +560,33 @@ namespace SabberStoneCore.Kettle
             return new EffectSourceScope(this);
         }
 
+        // Cards whose own play effect on the client is a deck-spawn spell: it reads the DECK FULL_ENTITYs of its own POWER
+        // block (SpawnToDeckSpell.AddPowerTargets) and, with none there, never attaches, so the card's FX is lost (#153).
+        // Their generated deck cards stay directly in the POWER block, as retail sends them (Marrowslicer), and keep the
+        // FULL/SHOW/HIDE/TARGET shape without the generic sub-spell scope. Chosen from each card's play effect name in the
+        // pinned effect census; a card that is wrongly here loses only the generic flight, a card wrongly left out keeps
+        // losing its own effect. Cards with another play effect (a missile, a deck swap) keep the generic scope.
+        private static readonly HashSet<string> deckSpawnPlaySpells = new HashSet<string> {
+            "AT_035", "BOT_087", "BOT_288", "BOT_511", "BRM_007", "CFM_602b", "CFM_660", "DAL_010", "DAL_060", "DAL_565",
+            "DAL_582", "GIL_815", "GVG_056", "ICC_091", "ICC_215", "JAIL_882", "LOE_002", "LOE_019t", "LOE_079", "LOE_110",
+            "LOE_111", "LOOT_026", "LOOT_106", "LOOT_526", "OG_255", "UNG_851"
+        };
+
+        public static bool IsDeckSpawnPlaySpell(string cardId) => cardId != null && deckSpawnPlaySpells.Contains(cardId);
+
+        private bool InOwnDeckSpawnSpell(IPlayable generated)
+        {
+            var block = CurrentBlock;
+            if (block == null || block.BlockType != BlockType.POWER || block.EffectIndex.GetValueOrDefault() != 0) return false;
+            string source = block.EffectCardId;
+            if (string.IsNullOrEmpty(source))
+            {
+                if (!generated.Game.IdEntityDic.TryGetValue(block.Source, out var entity)) return false;
+                source = entity.Card.Id;
+            }
+            return IsDeckSpawnPlaySpell(source);
+        }
+
         internal bool GeneratedShuffle(IPlayable card, bool reveal)
         {
             int creation = Last.FindLastIndex(e => e is PowerHistoryFullEntity full && full.Entity.Id == card.Id
@@ -577,18 +604,18 @@ namespace SabberStoneCore.Kettle
             full.Entity.Tags = new Dictionary<GameTag, int> {
                 [GameTag.ZONE] = (int)Zone.DECK, [GameTag.CONTROLLER] = card.Controller.PlayerId, [GameTag.ENTITY_ID] = card.Id
             };
-            var presentation = new List<IPowerHistoryEntry> {
-                new PowerHistorySubSpellStart { Source = card.Controller.Hero.Id, SpellPrefabGuid = GeneratedShufflePrefab },
-                full
-            };
+            bool ownSpell = InOwnDeckSpawnSpell(card);
+            var presentation = new List<IPowerHistoryEntry>();
+            if (!ownSpell) presentation.Add(new PowerHistorySubSpellStart { Source = card.Controller.Hero.Id, SpellPrefabGuid = GeneratedShufflePrefab });
+            presentation.Add(full);
             // Random stacks and hidden deck copies must not gain identity through presentation.
             if (reveal) presentation.Add(PowerHistoryBuilder.ShowEntity(card));
             presentation.AddRange(new IPowerHistoryEntry[] {
                 PowerHistoryBuilder.HideEntity(card),
-                new PowerHistoryMetaData { Type = MetaDataType.TARGET, Data = 0, Info = new List<int> { card.Id } },
-                new PowerHistorySubSpellEnd()
+                new PowerHistoryMetaData { Type = MetaDataType.TARGET, Data = 0, Info = new List<int> { card.Id } }
             });
-            int open = JoinableShuffleEnd(card, creation);
+            if (!ownSpell) presentation.Add(new PowerHistorySubSpellEnd());
+            int open = ownSpell ? -1 : JoinableShuffleEnd(card, creation);
             if (open >= 0)
             {
                 // Retail SpawnToDeckSpell.AddPowerTargets flies every DECK FULL of one sub-spell together;

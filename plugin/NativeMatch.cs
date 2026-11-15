@@ -4732,8 +4732,14 @@ public sealed class NativeMatch
         bool Typed(int id) => wireEntities.TryGetValue(id, out var entity) && entity.CardType is not (0 or 1 or 2 or 6)
             && entity.Zone != (int)EngineZone.REMOVEDFROMGAME
             && (segment.Sub == null || !retiring.Contains(id));
+        // A card's own deck-spawn spell (SpawnToDeckSpell) targets the DECK FULL_ENTITYs it creates; those anonymous
+        // targets are the spawn's own and are never an impact target, so they are not rewritten to a typed anchor (#153).
+        var spawned = (segment.Sub?.Tasks ?? segment.Tasks).Where(t => t.HasFullEntity
+            && t.FullEntity.Tags.Any(tag => tag.Name == (int)GameTag.ZONE && tag.Value == (int)EngineZone.DECK))
+            .Select(t => t.FullEntity.Entity).ToHashSet();
         var metadata = (segment.Sub?.Tasks ?? segment.Tasks).Where(t => t.HasMetaData && (int)t.MetaData.Type == 0
-            && (t.MetaData.Data == 0 || t.MetaData.Data == start.Source)).ToArray();
+            && (t.MetaData.Data == 0 || t.MetaData.Data == start.Source)
+            && !(t.MetaData.Info.Count > 0 && t.MetaData.Info.All(spawned.Contains))).ToArray();
         // Native scans the whole segment, not just tasks before the first hidden tag. Preserve valid late TARGETs.
         if (segment.Sub == null && metadata.Any(t => t.MetaData.Info.Any(Typed))
             && metadata.All(t => t.MetaData.Info.All(Typed))) return null;
