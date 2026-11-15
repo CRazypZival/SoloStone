@@ -2,6 +2,7 @@ using System.Text.Json;
 using HsSim;
 using SabberStoneCore.Config;
 using SabberStoneCore.Enums;
+using SabberStoneCore.Kettle;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
 using SabberStoneCore.Tasks.PlayerTasks;
@@ -83,6 +84,7 @@ internal static class WildY0bM1BProof
             Core2026Proof.Check(p.Hero.Damage == 4 && silenced.Zone.Type == Zone.GRAVEYARD, "a Silenced Majordomo has no Deathrattle: the hero keeps its damage");
             Kill(g, Summon(p, id));
             Core2026Proof.Check(p.Hero.Card.Id == "BRM_027h" && p.Hero.Damage == 0, "another Majordomo replaces the hero again (fresh 8 Health)");
+            HeroReplacement();
             End(g);
             opp.Hero.Damage = 9;
             var silent = Summon(opp, id); silent.Silence(); Kill(g, silent);
@@ -233,6 +235,38 @@ internal static class WildY0bM1BProof
     /// BRM_024, BRM_025, BRM_031, FP1_001, FP1_011 (dependency of CORE_AT_062)); their scripts are not touched. BLOCKED-HSDATA: the 37.0
     /// English text differs from the card file's, and the locale files cannot be regenerated without hsdata (BRM_028, BRM_034,
     /// FP1_005, FP1_008, FP1_012). IDENTITY-PENDING lines list what the Wild identity row would still change; they are not failures.</summary>
+    /// <summary>A hero replaced by a Deathrattle or Battlecry (ReplaceHeroTask) reaches the client with its owner and entity id (Ragnaros is a Neutral
+    /// hero: its inherit tags used to be a plain dictionary, so CONTROLLER and ENTITY_ID never reached FULL_ENTITY), and keeps a friendly
+    /// hero-targeted aura (Fallen Hero's +1 Hero Power damage) like PlayCard.PlayHeroCore does. Real scripts: BRM_027 (killed by EX1_279), EX1_323.</summary>
+    internal static void HeroReplacement()
+    {
+        foreach (string source in new[] { "BRM_027", "EX1_323" })
+        {
+            var f = new Game(new GameConfig { RandomSeed = 3, StartPlayer = 1, Shuffle = false, SkipMulligan = true,
+                Player1HeroClass = CardClass.PALADIN, Player2HeroClass = CardClass.MAGE, History = true, Logging = false,
+                Player1Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(),
+                Player2Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(), FormatType = FormatType.FT_WILD });
+            f.StartGame();
+            var fp = f.Player1;
+            foreach (var opening in fp.HandZone.ToArray()) { fp.HandZone.Remove(opening); fp.SetasideZone.Add(opening); }
+            fp.BaseMana = 10;
+            Summon(fp, "AT_003"); // Fallen Hero: Your Hero Power deals 1 extra damage (an AuraType.HERO aura)
+            var oldHero = fp.Hero;
+            Core2026Proof.Check(oldHero[GameTag.HEROPOWER_DAMAGE] == 1, "fixture: the aura is on the first hero");
+            if (source == "BRM_027") Kill(f, Summon(fp, "BRM_027")); // the Deathrattle replaces the hero
+            else Play(f, fp, "EX1_323");
+            f.DeathProcessingAndAuraUpdate();
+            var hero = fp.Hero;
+            string ragnarosOrJaraxxus = source == "BRM_027" ? "BRM_027h" : "EX1_323h";
+            Core2026Proof.Check(hero.Id != oldHero.Id && hero.Card.Id == ragnarosOrJaraxxus, source + " replaced the hero");
+            Core2026Proof.Check(hero[GameTag.CONTROLLER] == fp.PlayerId && hero[GameTag.ENTITY_ID] == hero.Id, source + ": the new hero carries CONTROLLER and ENTITY_ID");
+            var full = f.PowerHistory.Full.OfType<PowerHistoryFullEntity>().Last(x => x.Entity.Id == hero.Id);
+            Core2026Proof.Check(full.Entity.Tags.TryGetValue(GameTag.CONTROLLER, out int owner) && owner == fp.PlayerId
+                && full.Entity.Tags.TryGetValue(GameTag.ENTITY_ID, out int entityId) && entityId == hero.Id, source + ": the hero's FULL_ENTITY carries CONTROLLER and ENTITY_ID");
+            Core2026Proof.Check(hero[GameTag.HEROPOWER_DAMAGE] == 1, source + ": the friendly hero aura moves to the new hero: new " + hero[GameTag.HEROPOWER_DAMAGE] + " old " + oldHero[GameTag.HEROPOWER_DAMAGE]);
+        }
+    }
+
     internal static void BlockedProofs()
     {
         BlockedFailures.Clear();

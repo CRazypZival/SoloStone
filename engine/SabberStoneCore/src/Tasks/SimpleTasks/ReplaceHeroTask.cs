@@ -11,6 +11,7 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Affero General Public License for more details.
 #endregion
+using SabberStoneCore.Actions;
 using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
@@ -58,8 +59,12 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 				playable.Controller.SetasideZone.Add(playable.Zone.Remove(playable));
 			// Same inheritance as PlayCard.PlayHeroCore: a Neutral hero (Ragnaros) keeps the player's class for class-bound rules (Imbue).
 			var inherit = _heroCard.Class == CardClass.NEUTRAL || _heroCard.Class == CardClass.INVALID
-				? new System.Collections.Generic.Dictionary<GameTag, int> { [GameTag.CLASS] = (int)controller.HeroClass } : null;
+				? new EntityData { [GameTag.CLASS] = (int)controller.HeroClass } : null; // EntityData, as Controller.AddHero: a plain dictionary is copied and the ids would never reach it
+			var oldHero = controller.Hero;
 			controller.AddHeroAndPower(_heroCard, _powerCard, inherit);
+			// The same steps as PlayCard.PlayHeroCore after the swap: the new hero power's trigger, the aura rebind, the hero's own trigger.
+			HeroSwapRules.ActivateHeroPowerTrigger(controller.Hero);
+			HeroSwapRules.RebindAuras(controller, oldHero, controller.Hero);
 			if (_weaponCard != null)
 				controller.Hero.AddWeapon(Entity.FromCard(in controller, in _weaponCard) as Weapon);
 			return TaskState.COMPLETE;
