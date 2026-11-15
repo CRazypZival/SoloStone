@@ -146,6 +146,48 @@ internal static class CardFactsProof
 
     // Wild identity rows: exactly the Wild manifests' ids, each the base card's id and dbf, loaded in the base card's place with
     // the overlay rules; every other card loads from its base row. The loader refuses a row it cannot place.
+    // Tags the client stores as a flag (1) and the engine reads as the amount (tools/gen_card_facts.py AMOUNT_TAGS).
+    internal static readonly SabberStoneCore.Enums.GameTag[] AmountTags = { SabberStoneCore.Enums.GameTag.SPELLPOWER, SabberStoneCore.Enums.GameTag.OVERLOAD };
+
+    internal static int? TextAmount(SabberStoneCore.Enums.GameTag tag, string text)
+    {
+        string plain = System.Text.RegularExpressions.Regex.Replace(text ?? "", "<[^>]*>", "");
+        var found = System.Text.RegularExpressions.Regex.Match(plain, tag == SabberStoneCore.Enums.GameTag.SPELLPOWER
+            ? @"Spell Damage \+(\d+)" : @"Overload:?\s*\((\d+)\)");
+        return found.Success ? int.Parse(found.Groups[1].Value) : (int?)null;
+    }
+
+    // An identity card with an amount tag plays the amount its text states (Spell Damage +5 is 5, not the client's flag 1).
+    private static int CheckAmounts(IEnumerable<(CardFacts.Entity Row, Card Card)> cards)
+    {
+        int checkedTags = 0;
+        foreach (var (row, card) in cards)
+            foreach (var tag in AmountTags)
+            {
+                if (!card.Tags.ContainsKey(tag)) continue;
+                string text = (string)row.Tags.First(t => t.GameTag == SabberStoneCore.Enums.GameTag.CARDTEXT).TagValue;
+                Check(card.Tags[tag] == TextAmount(tag, text), "identity amount " + tag + " of " + row.Id + ": " + card.Tags[tag]);
+                Check(tag != SabberStoneCore.Enums.GameTag.SPELLPOWER || card.SpellPower == card.Tags[tag], "identity SpellPower of " + row.Id);
+                Check(tag != SabberStoneCore.Enums.GameTag.OVERLOAD || card.Overload == card.Tags[tag], "identity Overload of " + row.Id);
+                checkedTags++;
+            }
+        return checkedTags;
+    }
+
+    /// <summary>A scratch card file's identity rows (e.g. a temporary manifest entry): applied to its base rows, amounts checked.</summary>
+    internal static void IdentityFile(string path)
+    {
+        var facts = CardFacts.Read(File.OpenRead(path), CardFacts.Meta);
+        var built = facts.Cards.Select(e => CardLoader.Build(e, false)).ToArray();
+        var applied = CardLoader.ApplyIdentity(built, facts.Identity);
+        var at = built.Select((c, i) => (c.Id, i)).GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First().i);
+        int amounts = CheckAmounts(facts.Identity.Select(row => (row, applied[at[row.Id]])));
+        if (at.TryGetValue("EX1_563", out int malygos) && facts.Identity.Any(row => row.Id == "EX1_563"))
+            Check(applied[malygos].SpellPower == 5 && applied[malygos][SabberStoneCore.Enums.GameTag.SPELLPOWER] == 5, "EX1_563 identity keeps Spell Damage +5");
+        Console.WriteLine($"PASS identity file {path}: {facts.Identity.Length} rows, {amounts} amount tags"
+            + (facts.Identity.Any(row => row.Id == "EX1_563") ? "; EX1_563 SpellPower=" + applied[malygos].SpellPower : ""));
+    }
+
     private static void Identity(CardFacts.Document facts)
     {
         var listed = Directory.GetFiles("tests/progression/batches/wild", "*.txt").OrderBy(p => p, StringComparer.Ordinal)
@@ -172,6 +214,10 @@ internal static class CardFactsProof
             else if (!ReferenceEquals(built[i], applied[i])) differences.Add(built[i].Id + " replaced without an identity row");
         }
         CheckEmpty(differences, "identity rows");
+        CheckAmounts(facts.Identity.Select(row => (row, Cards.FromId(row.Id))));
+        Check(TextAmount(SabberStoneCore.Enums.GameTag.SPELLPOWER, "<b>Spell Damage +5</b>") == 5
+            && TextAmount(SabberStoneCore.Enums.GameTag.OVERLOAD, "<b><b>Overload</b>:</b> (3)") == 3
+            && TextAmount(SabberStoneCore.Enums.GameTag.OVERLOAD, "Draw a card.") == null, "amount text parsing");
         // Legacy Standard pools and legality (2021 StandardSets) read an identity card by its base row's set.
         var baseById = facts.Cards.GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
         foreach (var row in facts.Identity)
