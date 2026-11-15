@@ -47,6 +47,9 @@ public sealed class NpcDifficultyLevel
     public double SoftKeep { get; }            // at the Core step: chance a soft picked deck (power tier >= 4, not Aggro) stays
     public DifficultyBoost Bottom { get; }     // boost at the Core step and Bronze (position <= 0)
     public DifficultyBoost Top { get; }        // boost at the level's top (position = LegendIndex - ShiftStars)
+    // The Core step serves a beginner deck (NpcBeginnerDecks, weaker than the player's Core starter) instead of the class's Core
+    // starter (owner 2026-11-15: play alone was too small a lever for Easy). Falls back to the starter when a class has none.
+    public bool BeginnerDecks { get; internal set; }
     internal NpcDifficultyLevel(string id, string name, string summary, bool locked, int shiftStars, double softKeep,
         DifficultyBoost bottom, DifficultyBoost top)
     { Id = id; Name = name; Summary = summary; Locked = locked; ShiftStars = shiftStars; SoftKeep = softKeep;
@@ -132,9 +135,10 @@ public static class NpcDifficulties
         ExtremeId = NpcDifficultyIds.Extreme;
 
     public static readonly NpcDifficultyLevel Easy = new NpcDifficultyLevel(EasyId, NpcDifficultyIds.Name(EasyId),
-        NpcDifficultyIds.Summary(EasyId), false, 60, 0.3,
-        bottom: new DifficultyBoost(2.0, 1.4, 0.6, 0.6, 2.0, 4, 9, 0.5),
-        top: new DifficultyBoost(1.3, 1.1, 0.3, 0.3, 0.6, 2, 3, 0.75));
+        NpcDifficultyIds.Summary(EasyId), false, 60, 0,
+        // Sim round 1 (2026-11-15): the strongest natural boost; no missed short lethal, fewer passes than Hard.
+        bottom: new DifficultyBoost(3.0, 2.0, 1.0, 0.9, 3.0, 5, 14, 0.25),
+        top: new DifficultyBoost(1.5, 1.2, 0.4, 0.4, 1.0, 3, 5, 0.5)) { BeginnerDecks = true };
     public static readonly NpcDifficultyLevel Medium = new NpcDifficultyLevel(MediumId, NpcDifficultyIds.Name(MediumId),
         NpcDifficultyIds.Summary(MediumId), false, 30, 0.3,
         bottom: new DifficultyBoost(1.5, 1.2, 0.4, 0.45, 1.7, 4, 7, 0.75),
@@ -194,7 +198,7 @@ public static class NpcCoreDecks
     public static NpcDeckLibrary Include(NpcDeckLibrary library)
     {
         if (library == null) return null;
-        var extra = Entries().Where(entry => library.Find(entry.Id) == null).ToList();
+        var extra = Entries().Concat(NpcBeginnerDecks.Entries()).Where(entry => library.Find(entry.Id) == null).ToList();
         return extra.Count == 0 ? library : new NpcDeckLibrary(library.Schema, library.LibraryVersion, library.ActiveMeta, library.Decks.Concat(extra));
     }
 
@@ -233,15 +237,15 @@ public static class NpcDifficultyShaper
     // deck keeps its place. The matchmaker rolls it before it builds candidates, so the queue rules judge the decks actually served.
     public readonly struct CoreDecision
     {
-        public readonly bool Core, SoftKeep;
-        public CoreDecision(bool core, bool softKeep) { Core = core; SoftKeep = softKeep; }
+        public readonly bool Core, SoftKeep, Beginner;
+        public CoreDecision(bool core, bool softKeep, bool beginner = false) { Core = core; SoftKeep = softKeep; Beginner = beginner; }
     }
 
     public static CoreDecision Decide(NpcDifficultyLevel level, int position, int seed)
     {
         double chance = level == null ? 0 : level.CoreChance(position);
         if (chance <= 0 || new MatchRng(seed, StreamCore).NextDouble() >= chance) return default(CoreDecision);
-        return new CoreDecision(true, new MatchRng(seed, StreamSoftKeep).NextDouble() < level.SoftKeep);
+        return new CoreDecision(true, new MatchRng(seed, StreamSoftKeep).NextDouble() < level.SoftKeep, level.BeginnerDecks);
     }
 
     // The deck a picked deck becomes under the decision: itself, or the Core deck of its class.
@@ -250,7 +254,8 @@ public static class NpcDifficultyShaper
         if (!decision.Core || picked == null || library == null) return picked;
         bool soft = picked.Tags.PowerTier >= 4 && picked.Tags.Archetype != DeckArchetype.Aggro;
         if (soft && decision.SoftKeep) return picked;
-        return library.Find(NpcCoreDecks.IdFor(picked.Class)) ?? picked;
+        return (decision.Beginner ? library.Find(NpcBeginnerDecks.IdFor(picked.Class)) : null)
+            ?? library.Find(NpcCoreDecks.IdFor(picked.Class)) ?? picked;
     }
 
     // A Core deck stands in for a deck of its class: an NPC "owns" it when it owns any deck of that class.

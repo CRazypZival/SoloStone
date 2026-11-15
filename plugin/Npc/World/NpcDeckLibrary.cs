@@ -203,7 +203,7 @@ public sealed class NpcDeckLibrary
             if (deck.Origin == null || !(deck.Origin == "golden" || deck.Origin.StartsWith("recipe:", StringComparison.Ordinal)
                 || deck.Origin.StartsWith("candidate:", StringComparison.Ordinal) || deck.Origin.StartsWith("batch-3:", StringComparison.Ordinal)
                 || (deck.Origin == "casual-curated" && deck.Admission == "casual")
-                || (deck.Origin == NpcCoreDecks.Origin && deck.Admission == NpcCoreDecks.Admission)))
+                || ((deck.Origin == NpcCoreDecks.Origin || deck.Origin == NpcBeginnerDecks.Origin) && deck.Admission == NpcCoreDecks.Admission)))
                 problems.Add(at + "bad origin " + deck.Origin);
             int total = deck.Cards.Sum(c => c.Count);
             int size = LocalDecks.DeckSize(deck.Cards.Select(c => c.Id));

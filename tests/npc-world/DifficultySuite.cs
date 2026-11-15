@@ -172,8 +172,8 @@ internal static class DifficultySuite
             && mediumTop.Temperature == master.Temperature, "Medium's boost has faded at its top");
         var easyBottom = NpcDifficulties.Easy.Apply(novice, novice, -30);
         Program.Require(easyBottom.Chance(MistakeKind.TradeTarget) > novice.Chance(MistakeKind.TradeTarget)
-            && easyBottom.Chance(MistakeKind.IgnoreAoeRisk) >= 0.6 && easyBottom.Budget.PlanNodes == 3500 && easyBottom.Temperature >= 2,
-            "Easy bottom: more mistakes, half the search");
+            && easyBottom.Chance(MistakeKind.IgnoreAoeRisk) >= 0.6 && easyBottom.Budget.PlanNodes == NpcDifficultyLevel.MinPlanNodes && easyBottom.Temperature >= 3,
+            "Easy bottom: more mistakes, a quarter of the search at the 1750-node floor");
     }
 
     private static bool Close(DifficultyBoost a, DifficultyBoost b) => Math.Abs(a.MistakeScale - b.MistakeScale) < 1e-9
