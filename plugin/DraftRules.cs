@@ -26,7 +26,13 @@ public sealed class DraftRules
     // Built on the first offer only: reading the rules (View with no run, validation) never touches the card pool.
     private readonly Lazy<EngineCard[]> pool;
 
-    private DraftRules()
+    // Tests only: the same rules over a fixed card list (a tiny pool exercises the offer fallback).
+    internal static DraftRules WithPool(IEnumerable<EngineCard> cards) => new DraftRules(cards.ToArray());
+    // Called once with a message when an offer had to fall back (the plugin logs it); never throws.
+    internal static Action<string> FallbackLog;
+    internal static bool fallbackLogged;
+
+    private DraftRules(EngineCard[] poolOverride = null)
     {
         using (var stream = typeof(DraftRules).Assembly.GetManifestResourceStream("SoloStone.Arena.arena-rules-v1.json"))
         {
@@ -52,6 +58,7 @@ public sealed class DraftRules
             || rarities.Length == 0 || rarities.Any(row => row.Value <= 0 || row.Key == Rarity.LEGENDARY)
             || rewards.Length != MaxWins + 1 || rewards.Any(row => row.Any(value => value < 0)))
             throw new InvalidOperationException("Invalid Arena rules.");
+        if (poolOverride != null) { pool = new Lazy<EngineCard[]>(() => poolOverride); return; }
         pool = new Lazy<EngineCard[]>(() => LocalCardCatalog.ActivePoolIds().Select(Cards.FromId).Where(LocalCardCatalog.IsStandardLegal).Where(Eligible)
             .OrderBy(card => card.Id, StringComparer.Ordinal).ToArray());
     }
@@ -98,7 +105,7 @@ public sealed class DraftRules
             foreach (var row in rarities) { roll -= row.Value; if (roll < 0) { rarity = row.Key; break; } }
         }
         var candidates = allowed.Where(card => card.Rarity == rarity || rarity == Rarity.COMMON && card.Rarity == Rarity.FREE).ToList();
-        if (candidates.Count < OfferSize) throw new InvalidOperationException("Draft pool cannot fill this rarity offer.");
+        if (candidates.Count < OfferSize) candidates = Fallback(allowed, rarity, slot);
         var result = new List<string>();
         for (int i = 0; i < OfferSize; i++)
         {
@@ -108,6 +115,25 @@ public sealed class DraftRules
             result.Add(chosen.Id); candidates.Remove(chosen);
         }
         return result.AsReadOnly();
+    }
+
+    // A future pool change can leave a rarity bucket (or the legendary first pick) under OfferSize. The offer never fails: it widens
+    // deterministically to the other rarities in table order (legendary last, so a later pick gets one only when nothing else fills it),
+    // then to every eligible card by id. Only a pool with fewer eligible cards than an offer is unrecoverable.
+    private List<EngineCard> Fallback(EngineCard[] allowed, Rarity rarity, int slot)
+    {
+        var order = new List<Rarity> { rarity };
+        order.AddRange(rarities.Select(row => row.Key).Where(key => key != rarity));
+        if (!order.Contains(Rarity.LEGENDARY)) order.Add(Rarity.LEGENDARY);
+        var result = new List<EngineCard>();
+        foreach (var next in order) {
+            result.AddRange(allowed.Where(card => (card.Rarity == next || next == Rarity.COMMON && card.Rarity == Rarity.FREE) && !result.Contains(card)));
+            if (result.Count >= OfferSize) break;
+        }
+        if (result.Count < OfferSize) result = allowed.OrderBy(card => card.Id, StringComparer.Ordinal).ToList();
+        if (result.Count < OfferSize) throw new InvalidOperationException("Draft pool cannot fill an offer.");
+        if (!fallbackLogged) { fallbackLogged = true; FallbackLog?.Invoke("Arena offer for slot " + slot + " fell back: fewer than " + OfferSize + " " + rarity + " cards in the pool."); }
+        return result;
     }
 
     private int ClassWeight(EngineCard card) => card.Class == CardClass.NEUTRAL && card.MultiClassGroup == 0

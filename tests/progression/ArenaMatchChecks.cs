@@ -40,7 +40,7 @@ internal static class ArenaMatchChecks
     {
         var run = profile.ArenaRun;
         string key = ArenaRules.DeckKey(run.RunId);
-        var frozen = context ? profile.AchievementContextFor(LocalDecks.ArenaDeckFor(key, run.Hero, run.Deck), true, Npc, 1300, "Gold") : null;
+        var frozen = context ? profile.AchievementContextFor(LocalDecks.ArenaDeckFor(key, run.Hero, run.Deck), true, Npc, 1300, "Gold", null, null, true) : null;   // as LocalLadder: owned cards only
         return profile.BeginLaunch(key, NpcDeck, seed, Npc, NpcDeck, 1300, frozen, ArenaRules.Mode, _ => { });
     }
 
@@ -55,6 +55,7 @@ internal static class ArenaMatchChecks
         string path = Path.Combine(root, "arena-m-begin.xml");
         using var profile = new LocalProfile(path); Fund(profile);
         Check(ArenaRules.IsArena("Arena") && !ArenaRules.IsRanked("Arena") && !ArenaRules.IsRanked("Casual") && ArenaRules.IsRanked(null), "mode helpers");
+        Check(!ArenaRules.CarriesNpcMemory(ArenaRules.Mode) && ArenaRules.CarriesNpcMemory(null) && ArenaRules.CarriesNpcMemory(CasualRules.Mode), "Arena opponents bring no rival memory");
         Reject(() => profile.Begin("arena:none", "npc-x", 1, Npc, NpcDeck, 1300, ArenaRules.Mode), "Arena begin without a run");
         var service = new ArenaService(profile); Ok(service.Begin("gate"));
         string key = ArenaRules.DeckKey(profile.ArenaRun.RunId);
@@ -212,6 +213,13 @@ internal static class ArenaMatchChecks
         Check(pet != null, "pet owned");
         int xp = profile.PetXp(LocalShop.Default.PetFamily(pet));
         var run = profile.ArenaRun;
+        // Owner 2026-11-15, owned cards only: the player owns (normal copies) some drafted cards, not the rest.
+        var distinct = run.Deck.Distinct().ToList();
+        var mine = distinct.Take(Math.Max(1, distinct.Count / 3)).ToList();
+        profile.CommitChange(next => { foreach (string id in mine) if (next.Collection.All(row => row.Id != id)) next.Collection.Add(new LocalCardCount { Id = id, Count = 1, Acquired = 1 }); return true; });
+        var ownedNow = new HashSet<string>(profile.StoredCollection.Where(row => row.Value > 0).Select(row => LocalCardCatalog.CopyGroup(row.Key)));
+        var unowned = distinct.Where(id => !ownedNow.Contains(LocalCardCatalog.CopyGroup(id))).ToList();
+        Check(unowned.Count > 0 && mine.All(id => ownedNow.Contains(LocalCardCatalog.CopyGroup(id))), "test deck mixes owned and unowned cards");
         var pending = Start(profile);
         int gold = profile.Gold; long dust = profile.DustBalance;
         var done = profile.Settle(pending.Id, "Won", 12, false, null, 1300, null, null, new LocalPetXpCounts { Medium = 4 });
@@ -219,11 +227,28 @@ internal static class ArenaMatchChecks
         Check(done.ClassXpAfter - done.ClassXpBefore == LocalProfile.MatchClassXp(done) && done.ClassXpAfter > done.ClassXpBefore, "class XP is the pace-scaled Ranked amount");
         Check(LocalCardMastery.EligibleWin(done) && !LocalProfile.XpWin(done), "mastery counts the win, win portraits do not");
         var counts = LocalCardMastery.WinCounts(profile.History);
-        Check(run.Deck.Distinct().All(id => counts.TryGetValue(id, out int wins) && wins == 1), "every drafted card earns the mastery win");
+        Check(distinct.Where(id => ownedNow.Contains(LocalCardCatalog.CopyGroup(id))).All(id => counts.TryGetValue(id, out int wins) && wins == 1), "owned drafted cards earn the mastery win");
+        Check(unowned.All(id => !counts.ContainsKey(id)), "unowned drafted cards earn nothing");
+        // Many wins: an unowned card never reaches a threshold, so no premium copy of it is ever granted; an owned one does.
+        string copyPath = path + "-mastery.xml"; File.Copy(path, copyPath, true);
+        var data = Read(copyPath);
+        var template = done;
+        for (int i = 0; i < 60; i++) {
+            var clone = (LocalMatchRecord)new XmlSerializer(typeof(LocalMatchRecord)).Deserialize(new StringReader(Serialize(template)))!;
+            clone.Id = "arena-mastery-" + i; clone.MasteryGrants = null; clone.AchievementContext.MatchId = clone.Id;
+            data.Matches.Add(clone);
+        }
+        data.Matches.RemoveAll(m => m.Id == done.Id);
+        data.MasteryGrants.Clear(); data.PremiumCollection.Clear();
+        LocalCardMastery.Grant(data, null);
+        Check(data.MasteryGrants.Count > 0 && data.MasteryGrants.All(g => !unowned.Contains(g.CardId)), "only owned cards reach a mastery grant");
+        Check(data.PremiumCollection.All(row => !unowned.Contains(row.Id)), "no premium copy of an unowned card is granted");
         Check(profile.Gold == gold && profile.DustBalance == dust && profile.Achievements.Unlocks.Count == 0 && done.AchievementGrants.Count == 0
             && done.AchievementEvidenceFingerprint == null, "no gold, dust or achievement");
         Reload(path);   // the saved Arena record (frozen context, no fingerprint) loads again
     }
+
+    private static string Serialize(LocalMatchRecord record) { var text = new StringWriter(); new XmlSerializer(typeof(LocalMatchRecord)).Serialize(text, record); return text.ToString(); }
 
     private static void Unchanged(string root)
     {

@@ -37,6 +37,8 @@ internal static partial class NativeArena
                 { "phase", view.Phase.ToString() }, { "slot", view.Slot }, { "nativeSlot", NativeSlot(view) }, { "wins", view.Wins }, { "losses", view.Losses },
                 { "maxWins", view.MaxWins }, { "maxLosses", view.MaxLosses }, { "hero", view.HeroCardId }, { "runId", view.RunId },
                 { "offers", TestControlProtocol.List((view.Phase == ArenaPhase.ChoosingHero ? view.HeroOffers : view.Offers).Cast<object>()) },
+                { "reward", view.Reward == null ? null : new JsonNode { { "runId", view.Reward.RunId }, { "wins", view.Reward.Wins }, { "gold", view.Reward.Gold },
+                    { "dust", view.Reward.Dust }, { "packTypes", TestControlProtocol.List(view.Reward.PackTypes.Cast<object>()) } } },
                 { "deckCount", view.Deck.Count }, { "entryCost", view.EntryCost }, { "gold", view.GoldBalance },
                 { "service", ArenaServiceRegistry.Current == null ? null : ArenaServiceRegistry.Current is ArenaStubService ? "stub" : "real" },
                 { "serviceType", ArenaServiceRegistry.Current?.GetType().Name }, { "stub", ArenaServiceRegistry.Current is ArenaStubService }, { "available", !disabled },
@@ -80,6 +82,9 @@ internal static partial class NativeArena
         return node;
     }
 
+    private static bool IsBackLabel(string label) => label != null
+        && (label.Trim().Equals("Back", StringComparison.OrdinalIgnoreCase) || label.Trim().Equals(GameStrings.Get("GLUE_BACK"), StringComparison.OrdinalIgnoreCase));
+
     internal static bool HasAncestorNamed(Transform node, string name)
     {
         for (var at = node; at != null; at = at.parent) if (at.name == name) return true;
@@ -102,12 +107,14 @@ internal static partial class NativeArena
             GameObject go = value as GameObject ?? (value as Component)?.gameObject;
             if (go == null) return;
             foreach (var element in go.GetComponentsInChildren<PegUIElement>(true))
-                if (element.GetComponent<Clickable>() != null || element is UIBButton || element is NormalButton || element is PlayButton) name(element, id);
+                if ((element.GetComponent<Clickable>() != null || element is UIBButton || element is NormalButton || element is PlayButton)
+                    && element.name.IndexOf("Clickblocker", StringComparison.OrdinalIgnoreCase) < 0) name(element, id);  // a blocker is never a control
         }
         NameRoot(Field(display, "m_confirmButton"), "draft.confirm");
         NameRoot(Field(display, "m_playButton"), "arena.play");
         NameRoot(Field(display, "m_retireButtonWidget"), "arena.retire");
         NameRoot(Field(display, "m_doneButton"), "arena.back");
+        NameRoot(Field(display, "m_doneButtonWidget"), "arena.back");
         NameRoot(Field(display, "m_viewDeckButtonWidget"), "arena.view-deck");
         NameRoot(Field(display, "m_PhoneLargeViewDeckButton"), "arena.view-deck");
         NameRoot(Field(display, "m_PhoneDraftBackButton"), "arena.back");
@@ -123,10 +130,21 @@ internal static partial class NativeArena
         {
             if (element is UIBButton && HasAncestorNamed(element.transform, "ArenaLandingPage_BottomBar")) name(element, "arena.back");
             else if (element.name == "rewardsChest") name(element, "arena.rewards.preview");
+            // The "Run Complete!" chest (ArenaRewardsClaimPopup(Clone)/ArenaRewardChestsClaimable/ArenaRewardChestsClaimable/Clickable): no client field holds it.
+            else if (HasAncestorNamed(element.transform, "ArenaRewardChestsClaimable") && HasAncestorNamed(element.transform, "ArenaRewardsClaimPopup(Clone)")
+                && !(element is RewardPackage)) name(element, "arena.rewards.chest");
             // The draft screen's tray Back (retail lets a player leave mid-draft; DraftDisplay's navigate-back exits to Home).
             else if ((element is UIBButton || element.GetComponent<Clickable>() != null) && HasAncestorNamed(element.transform, "DraftTrayContainer")
                 && HasAncestorNamed(element.transform, "Button_Framed_Simple")) name(element, "arena.back");
         }
+        // Ready Up's bottom-right Back (no client field is known to hold it on every layout): while Ready Up is showing, an active
+        // button of the draft screen labelled Back is the screen's Back. AssignIds keeps the hittable instance as the bare id.
+        if (display != null && Read().Phase == ArenaPhase.Ready)
+            foreach (var element in display.GetComponentsInChildren<PegUIElement>(false))
+                if (element != null && (element is UIBButton || element.GetComponent<Clickable>() != null)
+                    && element.name.IndexOf("Clickblocker", StringComparison.OrdinalIgnoreCase) < 0
+                    && IsBackLabel(NativeUiTree.Label(element)))
+                    name(element, "arena.back");
         if (Field(display, "m_choices") is IEnumerable choices)
         {
             string kind = Read().Phase == ArenaPhase.ChoosingHero ? "hero" : "card";

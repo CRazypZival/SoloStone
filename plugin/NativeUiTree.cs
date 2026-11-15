@@ -528,7 +528,7 @@ internal static class NativeUiTree
         }
     }
 
-    private static string Label(PegUIElement element)
+    internal static string Label(PegUIElement element)
     {
         if (UberTextText == null) return null;
         foreach (Component text in element.GetComponentsInChildren(UberTextText.DeclaringType, false))

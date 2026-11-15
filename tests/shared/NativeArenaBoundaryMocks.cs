@@ -16,7 +16,7 @@ internal static partial class NativeArena
 
 internal sealed class ManualLogSource { internal void LogInfo(string value) { } internal void LogWarning(string value) { } internal void LogError(string value) { } }
 internal static class Time { internal static int frameCount; internal static float realtimeSinceStartup { get; set; } }
-internal static class NativeUIProbe { internal static bool Active; }
+internal static class NativeUIProbe { internal static bool Active; internal static int Left; internal static string LeaveStuckScene(SceneMgr.Mode stuck, SceneMgr.Mode destination) { Left++; return null; } }
 internal sealed class SceneMgr
 {
     internal enum Mode { HUB, TOURNAMENT, DRAFT, GAMEPLAY }

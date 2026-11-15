@@ -54,7 +54,11 @@ internal static partial class NativeArena
     private static string loadFailure;
     // The match's own record says whether it is an Arena match (NativeArenaMatch.OwnsArenaMatch): no flag to set or forget.
     internal static bool MatchActive => OwnsArenaMatch();
-    private static bool Offline => NativeUIProbe.Active && !disabled;
+    // Offline = every Arena patch is armed (the offline UI is active), also after Arena disabled itself: a DRAFT scene that is still
+    // open must never fall through to retail code (SpendTicket, matchmaking, MakeDraftChoice, store). Live = Arena actually works.
+    private static bool Offline => NativeUIProbe.Active;
+    private static bool Live => NativeUIProbe.Active && !disabled;
+    private static bool Inert(bool popup = true) { Notice("Arena is unavailable in this session.", popup); return false; }
     private static bool EntryBlocked => disabled || loadFailure != null;
     // A failure anywhere in Arena disables Arena only. Every patch is gated on Offline, so the rest of the game is untouched.
     internal static void Disable(string reason, Exception error = null)
@@ -62,6 +66,9 @@ internal static partial class NativeArena
         if (disabled) return;
         disabled = true;
         log?.LogError("NATIVE_ARENA disabled: " + reason + (error == null ? "" : " " + error.GetBaseException().Message));
+        // A DRAFT scene open right now would keep showing Arena that no longer answers: leave it through the client's own navigation.
+        try { if (InDraft) log?.LogError("NATIVE_ARENA_DISABLED " + (NativeUIProbe.LeaveStuckScene(SceneMgr.Mode.DRAFT, SceneMgr.Mode.HUB) ?? "returning to HUB")); }
+        catch (Exception) { }
     }
     internal static void Unavailable() => Notice("Arena is unavailable in this session.");
     private static bool InDraft => Offline && SceneMgr.IsInitialized() && SceneMgr.Get().GetMode() == SceneMgr.Mode.DRAFT;
@@ -176,7 +183,7 @@ internal static partial class NativeArena
 
     internal static void Update()
     {
-        if (!Offline) return;
+        if (!Live) return;
         try { UpdatePresentation(); }
         catch (Exception error) { Disable("presentation failed", error); return; }
         int count = replies.Count;
@@ -269,6 +276,7 @@ internal static partial class NativeArena
     private static bool SessionRequest()
     {
         if (!Offline) return true;
+        if (disabled) return Inert(false);
         Queue(SessionResponseId, "GetArenaSessionResponse", BuildSession(Read()), false);
         return false;
     }
@@ -281,6 +289,7 @@ internal static partial class NativeArena
     private static bool ContentsRequest(bool __0)
     {
         if (!Offline) return true;
+        if (disabled) return Inert(false);
         if (__0) { Notice(UndergroundNotice); return false; }
         QueueContents(Read());
         return false;
@@ -301,12 +310,14 @@ internal static partial class NativeArena
     private static bool BeginRequest(bool __0)
     {
         if (!Offline) return true;
+        if (disabled) return Inert();
         if (__0) Notice(UndergroundNotice); else BeginRun();
         return false;
     }
     private static bool Enter(ArenaLandingPageManager __instance)
     {
         if (!Offline) return true;
+        if (disabled) return Inert();
         if (BeginRun() != null)
         {
             __instance.GetWidget().TriggerEvent("MOVETO_DRAFTING");
@@ -317,6 +328,7 @@ internal static partial class NativeArena
     private static bool ChoiceRequest(long __0, int __1, int __2, int __3, bool __4, bool __5, List<int> __6)
     {
         if (!Offline) return true;
+        if (disabled) return Inert();
         if (mutationPending) return false;
         ArenaView before = Read();
         var offers = before.Phase == ArenaPhase.ChoosingHero ? before.HeroOffers : before.Offers;
@@ -332,6 +344,7 @@ internal static partial class NativeArena
     private static bool RetireRequest(long __0, int __1, int __2, bool __3)
     {
         if (!Offline) return true;
+        if (disabled) return Inert();
         if (__0 != DeckId || __3) { Refuse("Arena run is stale."); return false; }
         ArenaView view = Mutate(service => service.Retire());
         if (view != null) Queue(RetiredId, "GetRetiredDraft", new Network.DraftRetired { Deck = DeckId, Chest = Chest(view.Reward) });
@@ -340,6 +353,7 @@ internal static partial class NativeArena
     private static bool AckRequest(long __0, int __1, bool __2)
     {
         if (!Offline) return true;
+        if (disabled) return Inert();
         if (__0 != DeckId || __2) { Refuse("Arena reward is stale."); return false; }
         ArenaView before = Read();
         ArenaView view = Mutate(service => service.AcknowledgeReward(before.RunId));
@@ -349,12 +363,14 @@ internal static partial class NativeArena
     private static bool PremiumsRequest()
     {
         if (!Offline) return true;
+        if (disabled) return Inert(false);
         Queue(PremiumsId, "GetDraftRemovePremiumsResponse", BuildContents(Read()));
         return false;
     }
     private static bool RatingRequest()
     {
         if (!Offline) return true;
+        if (disabled) return Inert(false);
         var view = Read();
         Queue(RatingId, "GetArenaRatingInfoResponse", new ArenaRatingInfoResponse { PlayerInfo = new ArenaPlayerInfo {
             NormalWins = view.Wins, NormalLosses = view.Losses, NormalMaxWins = view.MaxWins, NormalMaxLosses = view.MaxLosses,
@@ -364,6 +380,7 @@ internal static partial class NativeArena
     private static bool ArenaDeckChanges(CollectionDeck __instance, CollectionDeck.ChangeSource __0)
     {
         if (!Offline || __instance.Type != DeckType.DRAFT_DECK) return true;
+        if (disabled) return Inert(false);
         // Arena autosaves never enter the constructed editor, its ownership validation, or the login-gated sender.
         if (__0 == CollectionDeck.ChangeSource.Arena)
             SaveRequest(__instance.ID, null, 0, 0, null, false);
@@ -372,6 +389,7 @@ internal static partial class NativeArena
     private static bool SaveRequest(long __0, List<Network.CardUserData> __1, long __2, int __3, RuneType[] __4, bool __5)
     {
         if (!Offline) return true;
+        if (disabled) return Inert(false);
         // MVP decks are immutable: answer with the authoritative deck, never persist an editor's reconstruction.
         if (__0 != DeckId || __5) { Refuse("Arena deck is stale."); return false; }
         var deck = new PegasusUtil.DeckContents { DeckId = DeckId };
@@ -380,11 +398,12 @@ internal static partial class NativeArena
         Queue(SaveId, "GetSaveArenaDeckResponse", new SaveArenaDeckResponse { Decks = deck });
         return false;
     }
-    private static bool RedraftRequest() { if (!Offline) return true; Refuse("Redraft is unavailable in this Arena mode."); return false; }
+    private static bool RedraftRequest() { if (!Offline) return true; if (disabled) return Inert(); Refuse("Redraft is unavailable in this Arena mode."); return false; }
 
     private static bool FindGame()
     {
         if (!Offline) return true;
+        if (disabled) return Inert();
         if (startingMatch || mutationPending || DraftDisplay.Get()?.IsRewardsFlowPending == true) return false;
         startingMatch = true;
         try
@@ -396,10 +415,10 @@ internal static partial class NativeArena
         return false;
     }
     // Keep GT_VS_AI transport/presentation. Only post-game routing changes; retail's OnGameOver must not count a second result.
-    internal static SceneMgr.Mode NavigationTarget(SceneMgr.Mode mode) => Offline && MatchActive && mode == SceneMgr.Mode.TOURNAMENT ? SceneMgr.Mode.DRAFT : mode;
-    private static void ReturnToDraft(ref SceneMgr.Mode __result) { if (Offline && MatchActive) __result = SceneMgr.Mode.DRAFT; }
-    private static bool Underground() { if (!Offline) return true; Notice(UndergroundNotice); return false; }
-    private static bool Disclaimer() { if (!Offline) return true; Notice(RulesText(Read())); return false; }
+    internal static SceneMgr.Mode NavigationTarget(SceneMgr.Mode mode) => Live && MatchActive && mode == SceneMgr.Mode.TOURNAMENT ? SceneMgr.Mode.DRAFT : mode;
+    private static void ReturnToDraft(ref SceneMgr.Mode __result) { if (Live && MatchActive) __result = SceneMgr.Mode.DRAFT; }
+    private static bool Underground() { if (!Offline) return true; if (disabled) return Inert(); Notice(UndergroundNotice); return false; }
+    private static bool Disclaimer() { if (!Offline) return true; if (disabled) return Inert(); Notice(RulesText(Read())); return false; }
     internal const string UndergroundNotice = "This Arena mode is coming in a later SoloStone update.";
     // The "?" button: our own rules, not retail's first-visit slides (5 wins, other players).
     internal static string RulesText(ArenaView view) =>
@@ -413,7 +432,7 @@ internal static partial class NativeArena
     private static bool PhaseSeen(ref bool __result) { if (!Offline) return true; __result = true; return false; }
     private static bool NormalPremium(ref TAG_PREMIUM __result) { if (!Offline) return true; __result = TAG_PREMIUM.NORMAL; return false; }
     private static bool DraftHeroPremium(ref TAG_PREMIUM __result) { if (!InDraft) return true; __result = TAG_PREMIUM.NORMAL; return false; }
-    private static bool Tickets(ref int __result) { if (!Offline) return true; __result = 1; return false; }
+    private static bool Tickets(ref int __result) { if (!InDraft) return true; __result = 1; return false; }
     private static bool MaxWins(ref int __result) { if (!Offline) return true; __result = Read().MaxWins; return false; }
     private static bool MaxLosses(ref int __result) { if (!Offline) return true; __result = Read().MaxLosses; return false; }
     private static bool NoPresence() => !Offline || !InDraft && !MatchActive;

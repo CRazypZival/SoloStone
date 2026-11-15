@@ -25,17 +25,25 @@ public sealed partial class LocalProfile
     };
 
     internal LocalAchievementPendingContext AchievementContextFor(LocalDeck deck, bool personal,
-        string npcId, double npcRating, string npcBand, IEnumerable<LocalDeckCard> premiumEntries = null, IEnumerable<LocalSideboard> premiumSideboards = null)
+        string npcId, double npcRating, string npcBand, IEnumerable<LocalDeckCard> premiumEntries = null, IEnumerable<LocalSideboard> premiumSideboards = null, bool ownedCardsOnly = false)
     {
         if (deck == null) throw new ArgumentNullException(nameof(deck));
         var owned = new HashSet<string>(RealOwnedCollection(data).Where(row => row.Value > 0)
             .Select(row => LocalCardCatalog.CopyGroup(row.Key)), StringComparer.Ordinal);
+        var main = AchievementCards(deck.CardIds, premiumEntries);
+        // Arena (owner 2026-11-15, owned cards only): the frozen deck lists only cards the player owned as normal copies of the real
+        // collection (no loaners) when the match started, so mastery never counts a drafted card the player does not own. Earlier Arena
+        // records froze the whole deck and stay valid (shape only).
+        if (ownedCardsOnly) {
+            var normal = new HashSet<string>(data.Collection.Where(row => row.Count > 0).Select(row => LocalCardCatalog.CopyGroup(row.Id)), StringComparer.Ordinal);
+            main = main.Where(row => normal.Contains(LocalCardCatalog.CopyGroup(row.BaseCardId))).ToList();
+        }
         return new LocalAchievementPendingContext {
             EligibleWorldMatch = true,
             PersonalDeck = personal,
             StartingHero = deck.Hero,
             StartingHeroClass = Cards.FromId(deck.Hero).Class.ToString(),
-            MainDeck = AchievementCards(deck.CardIds, premiumEntries),
+            MainDeck = main,
             Sideboards = AchievementCards(deck.Sideboards.SelectMany(row => row.Value), premiumSideboards?.SelectMany(row => row.CardEntries)),
             CraftedAndOwnedBaseCardIds = data.Achievements.Career.CraftedBaseCardIds
                 .Where(owned.Contains).Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToList(),
