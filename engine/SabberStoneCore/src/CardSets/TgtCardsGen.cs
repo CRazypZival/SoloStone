@@ -18,6 +18,7 @@ using SabberStoneCore.Model.Zones;
 using System;
 #endif
 using System.Collections.Generic;
+using System.Linq;
 using SabberStoneCore.Auras;
 using SabberStoneCore.Conditions;
 using SabberStoneCore.Enchants;
@@ -900,10 +901,10 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_075", new CardDef(new Power
 			{
-				// TODO [AT_075] Warhorse Trainer && Test: Warhorse Trainer_AT_075
+				// 37.0: +2 Attack and Taunt, for every Silver Hand Recruit variant (tag 3444 marks them).
 				Aura = new Aura(AuraType.BOARD_EXCEPT_SOURCE, "AT_075e")
 				{
-					Condition = SelfCondition.IsSilverHandRecruit
+					Condition = new SelfCondition(p => p is Minion && (p.Card.Id == "CS2_101t" || p.Card[(GameTag)3444] != 0))
 				}
 			}));
 
@@ -940,9 +941,34 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_079", new CardDef(new Power
 			{
-				// TODO [AT_079] Mysterious Challenger && Test: Mysterious Challenger_AT_079
-				//PowerTask = null,
-				//Trigger = null,
+				// Like Mad Scientist's Deathrattle, for every distinct Secret in the deck: a Secret already in play (same card) or a
+				// full Secret zone stops it; the order of the Secrets is random, so the five-Secret cap picks at random.
+				PowerTask = ComplexTask.Create(
+					new IncludeTask(EntityType.DECK),
+					new FilterStackTask(SelfCondition.IsSecret),
+					new FuncPlayablesTask(stack =>
+					{
+						if (stack == null || stack.Count == 0) return null;
+						Controller c = stack[0].Controller;
+						var candidates = new List<IPlayable>();
+						foreach (var secret in stack)
+						{
+							if (c.SecretZone.Any(s => s.Card.AssetId == secret.Card.AssetId)) continue;
+							if (candidates.Any(s => s.Card.AssetId == secret.Card.AssetId)) continue;
+							candidates.Add(secret);
+						}
+						while (candidates.Count > 0 && !c.SecretZone.IsFull)
+						{
+							IPlayable pick = candidates[c.Game.Random.Next(candidates.Count)];
+							candidates.Remove(pick);
+							c.DeckZone.Remove(pick);
+							pick.Power.Trigger?.Activate(pick);
+							c.SecretZone.Add((Spell) pick);
+							if (c == c.Game.CurrentPlayer)
+								pick.IsExhausted = true;
+						}
+						return null;
+					}))
 			}));
 
 			// --------------------------------------- MINION - PALADIN
@@ -958,10 +984,10 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_081", new CardDef(new Power
 			{
-				// TODO [AT_081] Eadric the Pure && Test: Eadric the Pure_AT_081
 				InfoCardId = "AT_081e",
-				//PowerTask = null,
-				//Trigger = null,
+				PowerTask = ComplexTask.Create(
+					new IncludeTask(EntityType.OP_MINIONS),
+					new AddEnchantmentTask("AT_081e", EntityType.STACK))
 			}));
 
 			// --------------------------------------- MINION - PALADIN
@@ -1023,40 +1049,26 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_078", new CardDef(new Power
 			{
+				// 37.0: each player keeps one minion with the highest Attack; a tie is broken at random, a lone minion is kept.
 				PowerTask = new FuncNumberTask(p =>
 				{
-					ReadOnlySpan<Minion> minions = p.Controller.BoardZone.GetSpan();
-					ReadOnlySpan<Minion> opMinions = p.Controller.Opponent.BoardZone.GetSpan();
-
-					int max = -1;
-					int maxIndex = -1;
-					for (int i = 0; i < minions.Length; i++)
+					foreach (var owner in new[] { p.Controller, p.Controller.Opponent })
 					{
-						int atk = minions[i].AttackDamage;
-						if (atk <= max) continue;
-						max = atk;
-						maxIndex = i;
+						var minions = owner.BoardZone.ToArray();
+						if (minions.Length == 0) continue;
+						int max = int.MinValue;
+						var top = new List<Minion>();
+						foreach (var minion in minions)
+						{
+							int atk = minion.AttackDamage;
+							if (atk > max) { max = atk; top.Clear(); }
+							if (atk == max) top.Add(minion);
+						}
+						var keep = top.Count == 1 ? top[0] : top[p.Game.Random.Next(top.Count)];
+						foreach (var minion in minions)
+							if (minion != keep)
+								minion.Destroy();
 					}
-
-					if (maxIndex > 0)
-						for (int i = 0; i < minions.Length; i++)
-							if (i != maxIndex)
-								minions[i].Destroy();
-
-					max = maxIndex = -1;
-
-					for (int i = 0; i < opMinions.Length; i++)
-					{
-						int atk = opMinions[i].AttackDamage;
-						if (atk <= max) continue;
-						max = atk;
-						maxIndex = i;
-					}
-
-					if (maxIndex > 0)
-						for (int i = 0; i < opMinions.Length; i++)
-							if (i != maxIndex)
-								opMinions[i].Destroy();
 					return 0;
 				})
 			}));
@@ -1096,11 +1108,11 @@ namespace SabberStoneCore.CardSets
 			// [AT_075e] Might of the Hostler (*) - COST:0
 			// - Set: tgt,
 			// --------------------------------------------------------
-			// Text: Warhorse Trainer is granting this minion +1 Attack.
+			// Text: Warhorse Trainer is granting +2 Attack and <b>Taunt</b>. (37.0)
 			// --------------------------------------------------------
 			cards.Add("AT_075e", new CardDef(new Power
 			{
-				Enchant = Enchants.Enchants.GetAutoEnchantFromText("AT_075e")
+				Enchant = new Enchant(Effects.Attack_N(2), Effects.TauntEff)
 			}));
 
 			// ---------------------------------- ENCHANTMENT - PALADIN
@@ -1111,9 +1123,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_081e", new CardDef(new Power
 			{
-				// TODO [AT_081e] Purified && Test: Purified_AT_081e
-				//PowerTask = null,
-				//Trigger = null,
+				Enchant = new Enchant(Effects.SetAttack(1))
 			}));
 
 		}
@@ -1947,12 +1957,14 @@ namespace SabberStoneCore.CardSets
 			// Text: Also damages the minions next to whomever
 			//       he attacks.
 			// --------------------------------------------------------
+			// Retail: the Cleave rule of Lake Thresher; Silence turns it off (CombatRules.CleaveTargets).
 			cards.Add("AT_067", new CardDef(new Power
 			{
-				// TODO [AT_067] Magnataur Alpha && Test: Magnataur Alpha_AT_067
-				//PowerTask = null,
-				//Trigger = null,
-			}));
+			}) { Configure = card =>
+			{
+				card.Implemented = true;
+				card.Tags[SabberStoneCore.Actions.CombatRules.Cleave] = 1;
+			} });
 
 			// --------------------------------------- MINION - WARRIOR
 			// [AT_069] Sparring Partner - COST:2 [ATK:3/HP:2]
@@ -2006,10 +2018,25 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_072", new CardDef(new Power
 			{
-				PowerTask = ComplexTask.Create(
-					new DrawTask(true, 3),
-					new FilterStackTask(SelfCondition.IsMinion),
-					new SummonStackTask(true))
+				// Retail, three times over: a minion on top of the deck goes straight to the battlefield (not drawn, so no draw
+				// triggers) while there is room; any other top card, or a minion with no room, is drawn (empty deck: fatigue).
+				PowerTask = new FuncNumberTask(p =>
+				{
+					var c = p.Controller;
+					for (int i = 0; i < 3; i++)
+					{
+						if (p.Game.State == SabberStoneCore.Enums.State.COMPLETE) break;
+						var deck = c.DeckZone;
+						if (!deck.IsEmpty && !deck.DrawWithRandom && deck[deck.Count - 1] is Minion top && !c.BoardZone.IsFull)
+						{
+							deck.Remove(top);
+							SabberStoneCore.Actions.Generic.SummonBlock(p.Game, top, -1, p);
+						}
+						else
+							SabberStoneCore.Actions.Generic.Draw(c);
+					}
+					return 0;
+				})
 			}));
 
 			// --------------------------------------- MINION - WARRIOR
@@ -2182,11 +2209,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_080", new CardDef(new Power
 			{
-				Trigger = new Trigger(TriggerType.INSPIRE)
-				{
-					Condition = new SelfCondition(p => p.Controller.HeroPowerActivationsThisTurn == 1),
-					SingleTask = new SetGameTagTask(GameTag.EXHAUSTED, 0, EntityType.HERO_POWER)
-				}
+				Aura = new ExtraHeroPowerUseAura()
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -2668,12 +2691,11 @@ namespace SabberStoneCore.CardSets
 			// PlayReq:
 			// - REQ_MINION_TARGET = 0
 			// --------------------------------------------------------
-			cards.Add("AT_115", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_MINION_TARGET,0}}, new Power
+			cards.Add("AT_115", new CardDef(new Power
 			{
-				// TODO [AT_115] Fencing Coach && Test: Fencing Coach_AT_115
+				// 37.0: a Battlecry with no target; the discount is an enchantment on the Hero Power, spent by its next use.
 				InfoCardId = "AT_115e",
-				//PowerTask = null,
-				//Trigger = null,
+				PowerTask = new AddEnchantmentTask("AT_115e", EntityType.HERO_POWER)
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -2749,6 +2771,7 @@ namespace SabberStoneCore.CardSets
 					.Type(TriggerType.PLAY_CARD)
 					.SetTask(new AddEnchantmentTask("AT_121e", EntityType.SOURCE))
 					.SetCondition(SelfCondition.IsBattleCryCard)
+					.SetSource(TriggerSource.FRIENDLY)
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -3198,9 +3221,9 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_115e", new CardDef(new Power
 			{
-				// TODO [AT_115e] Fencing Practice && Test: Fencing Practice_AT_115e
-				//PowerTask = null,
-				//Trigger = null,
+				Enchant = new Enchant(Effects.ReduceCost(2)),
+				Trigger = TriggerBuilder.Type(TriggerType.INSPIRE)
+					.SetTask(RemoveEnchantmentTask.Task)
 			}));
 
 			// ---------------------------------- ENCHANTMENT - NEUTRAL
