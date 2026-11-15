@@ -692,6 +692,7 @@ namespace SabberStoneCore.CardSets
 			{
 				Trigger = new Trigger(TriggerType.CAST_SPELL)
 				{
+					TriggerSource = TriggerSource.FRIENDLY, // "each time YOU cast a spell"
 					SingleTask = ComplexTask.Create(
 						new RandomCardTask(CardType.INVALID, CardClass.HUNTER),
 						new AddStackTo(EntityType.HAND))

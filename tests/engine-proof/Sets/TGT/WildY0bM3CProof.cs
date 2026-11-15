@@ -595,14 +595,22 @@ internal static class WildY0bM3CProof
                 Play(next, owner, Frostbolt, next.Player2.Hero);
                 Check(owner.HandZone.Count == 2, "the effect continues on a clone");
             });
-            // The opponent casts a spell DURING my turn, while my Lock and Loads are active: they only count my own spells.
-            var theirSpell = (Spell)Add(p.Opponent, Frostbolt);
-            Generic.CastSpell(p.Opponent, g, theirSpell, p.Opponent.Hero, 0);
-            g.DeathProcessingAndAuraUpdate();
-            Check(p.HandZone.Count == 0, "the opponent's spell during my turn gives me nothing: " + string.Join(",", p.HandZone.Select(c => c.Card.Id)));
             End(g);
             Play(g, p.Opponent, Frostbolt, p.Opponent.Hero);
             Check(p.HandZone.Count == 0, "the opponent's spell on their own turn gives me nothing: " + string.Join(",", p.HandZone.Select(c => c.Card.Id)));
+            // Forced on a separate game (the turn check is bypassed, so its history is not reused): the opponent plays a spell DURING my turn,
+            // while my Lock and Load is active. It only counts my own spells (TriggerSource.FRIENDLY; ALL would hand me a card).
+            var f = Fixture(11); var fp = f.Player1; ParkHand(fp);
+            PlayEntity(f, fp, Add(fp, id));
+            var theirSpell = (Spell)Add(fp.Opponent, Frostbolt);
+            fp.Opponent.BaseMana = 10; fp.Opponent.UsedMana = 0; fp.Opponent.Hero.Armor = 500;
+            f.CurrentPlayer = fp.Opponent;
+            Check(Generic.PlayCard(fp.Opponent, theirSpell, fp.Opponent.Hero), "the opponent plays a spell during my turn");
+            f.CurrentPlayer = fp;
+            f.DeathProcessingAndAuraUpdate();
+            Check(fp.HandZone.Count == 0, "the opponent's spell during my turn gives me nothing: " + string.Join(",", fp.HandZone.Select(c => c.Card.Id)));
+            Play(f, fp, Frostbolt, fp.Opponent.Hero);
+            Check(fp.HandZone.Count == 1, "my own spell in the same turn still gives a card: " + fp.HandZone.Count);
             ParkHand(p);
             End(g);
             int held2 = p.HandZone.Count;
