@@ -14,9 +14,11 @@ if (args.Contains("--attack-trigger-cards-only")) { AttackTriggerSweepProof.Posi
 if (args.Contains("--attack-trigger-inventory-only")) { AttackTriggerSweepProof.Inventory(); return; }
 if (args.Contains("--core-card-proofs-only")) { Core2026Proof.CardProofs(); return; }
 if (args.Contains("--wrathspike-only")) { StandardSetsProof.Run(selectedProofs: new Action[] { WrathspikeBruteProof.Run }); return; }
-if (GroupProofs.TryRun(args, proof => StandardSetsProof.Run(selectedProofs: new[] { proof }), allowUnmatched: true)) return;
+if (GroupProofs.TryRun(args, proof => StandardSetsProof.Run(selectedProofs: new[] { proof }), allowUnmatched: true,
+    runWildCards: proof => WildSetsProof.Run(proof))) return;
 if (args.Length == 2 && args[0] == "--colossal-regression") { ColossalDestinationRegressionProof.Run(args[1]); return; }
 if (args.Contains("--yogg-only")) { B18TYoggProof.Run(); return; }
+if (args.Contains("--wild-sets-only")) { WildSetsProof.Run(); return; }
 if (args.Contains("--facilities-only")) { GroupProofs.Run(ProofKind.Facility); return; }
 if (args.Contains("--nozdormu-newest-only")) { StandardSetsProof.Run(selectedProofs: new Action[] { TimelordNozdormuProof.Run }); return; }
 if (args.Contains("--release-meta-cards-only")) { StandardSetsProof.Run(selectedProofs: new Action[] {
@@ -612,6 +614,7 @@ ForcedAttackBudgetProof.Run();
 BonusEffectsProof.Run();
 EnemyBoardCopyProof.Run();
 StandardSetsProof.Run();
+WildSetsProof.Run();
 QuestLifecycleProof.Run();
 QuestOpeningProof.Run();
 QuestSnapshotProof.Run();

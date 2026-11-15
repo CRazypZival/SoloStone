@@ -14,7 +14,8 @@ The file is generated from the client's card definitions by private tooling that
 ```text
 { "schemaVersion": 1, "meta": "<label>",
   "cards":   [ <row>, ... ],
-  "overlay": { "schemaVersion": 1, "sourceBuild": "<client build>", "exportSha256": "<hex>", "cards": [ <row>, ... ] } }
+  "overlay": { "schemaVersion": 1, "sourceBuild": "<client build>", "exportSha256": "<hex>", "cards": [ <row>, ... ] },
+  "identity": [ <row>, ... ] }
 ```
 
 | Row field | Required | Meaning |
@@ -32,6 +33,12 @@ The file is generated from the client's card definitions by private tooling that
 | `snapshot` | no | Overlay only: a private token definition, never added to the card list |
 
 `cards` and `overlay.cards` keep their source order: it sets the order of the card list, and so of random pools and the first card per `dbf`. Overlay rows get the overlay rules in `CardLoader.Build`.
+
+## Wild identity rows
+
+`identity` (optional; absent means none) holds the client identity of the old cards a Wild wave has proven: every ID listed in `tests/progression/batches/wild/*.txt`, no other. Each row has the overlay row's shape and content (`name` and `text` required; the export's tags plus `CARD_SET` 183 and `COLLECTIBLE` 321, sorted; `refs`), taken from the same client export as the overlay (`overlay.exportSha256`), and the `id` and `dbf` of the base row it stands for. Rows are in base-row order.
+
+`CardLoader.ApplyIdentity` replaces that base card with the identity row, in the base card's place, so the card list order does not move, and builds it with the overlay rules (as a client definition: no ` @spelldmg` suffix, zero-valued tags kept as present, weapon durability from health). It refuses a row whose `id` is not exactly one base card, whose `dbf` differs, a duplicate row, or one without type, set and collectible. The base row stays in `cards`, byte for byte, so every unlisted card loads as before. The generator's `--check` and the `progression` suite's Wild batch check fail when the rows and the Wild manifests disagree.
 
 ## What is left out
 
@@ -57,6 +64,7 @@ The current file has no `reqs` or `entourage` rows because neither XML has any. 
 
 - `text` maps card ID to the raw text in the client's own format: the same `$`, `#`, `[x]`, `{0}` and `|4(...)` markers as the English text, with every `@` variant kept. Nothing is filled in, so the client builds the final string as it does for English.
 - `key` is the FNV-1a 32 hash (8 lowercase hex digits) of the UTF-8 of the English text the translation was made from, trimmed of whitespace at both ends. The plugin hashes the engine's current card text the same way (without its ` @spelldmg` suffix) and uses the translation only when the two agree. The engine rewrites about 20 cards after load, so a translation of the card file's text would say something else: these cards show English. A later engine edit falls back the same way, and a card file regenerated without its locale files fails the generator's `--check` and the launcher tests.
+- A Wild identity row's text replaces its base row's text. When the two are the same English (apart from whitespace at either end), the base translation stays; otherwise the row is translated from `hsdata` like an overlay row.
 - Every row of the card file that has English text has an entry, except the IDs in `excluded` (the source's English differs from the card file's: today none), `missing` (the source has no text in this locale: 16 or 17, all enchantments, tokens or modes outside the Standard collection) and `tokenMismatch` (the translation has other `$N` or `#N` numbers than the English: 1 to 4 per locale, e.g. BE_854 and JAIL_515 in ruRU). Those show English. Overlay snapshot rows (private token definitions) are not listed: the base card's text is what plays.
 - Sources: base cards, the localized text of the same card definitions as the card file (build 38377); overlay cards, HearthSim's `hsdata` card definitions for the 37.0.0.254477 client build (`overlayLocaleSha256` is the SHA-256 of that `CardDefs.xml`). A base card whose text exists only in English there takes its other languages from the same `hsdata` file. A translation is kept only when the source's English text equals the card file's, apart from whitespace at either end.
 

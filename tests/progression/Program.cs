@@ -16,6 +16,12 @@ if (args.SequenceEqual(new[] { "--deck-premiums-only" }))
     return;
 }
 
+if (args.SequenceEqual(new[] { "--wild-batches-only" }))
+{
+    WildBatchChecks.Run();
+    return;
+}
+
 if (args.SequenceEqual(new[] { "--standard-batches-only" }))
 {
     var batchRoot = Path.Combine(Path.GetTempPath(), "hs-standard-batches-" + Guid.NewGuid());
@@ -48,6 +54,7 @@ if (args.Length == 0)
     var premiumRoot = Path.Combine(Path.GetTempPath(), "hs-deck-premiums-" + Guid.NewGuid());
     Directory.CreateDirectory(premiumRoot);
     try { DeckPremiumChecks.Run(premiumRoot); } finally { Directory.Delete(premiumRoot, true); }
+    WildBatchChecks.Run();
     CraftingChecks.Run();
     TurnTimerOptionChecks.Run();
     FpsCounterOptionChecks.Run();

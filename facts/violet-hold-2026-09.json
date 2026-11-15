@@ -10724,4 +10724,16 @@
 {"id":"YOD_010","dbf":56077,"name":"Shotbot","text":"<b>Reborn</b>","textHash":"83a3ccc6304ccc71","tags":[[45,2],[47,2],[48,2],[114,0],[183,1403],[199,5],[200,17],[202,4],[203,1],[321,1],[1085,1]]},
 {"id":"YOG_514","dbf":101021,"name":"Chaotic Tendril","text":"<b>Battlecry:</b> Cast a\nrandom @-Cost spell.\nImprove your future\nChaotic Tendrils.","textHash":"5d18f252131b4c0b","tags":[[2,1],[45,1],[47,1],[48,1],[183,1858],[199,12],[202,4],[203,1],[218,1],[321,1],[1824,1]]},
 {"id":"YOP_001e","dbf":62005,"name":"Loner","text":"Your next <b>Outcast</b> card costs (1) less.","textHash":"bcbb5629a3ff8e5e","tags":[[183,1466],[199,12],[202,6],[321,0],[362,1]]}
-]}}
+]},
+"identity":[
+{"id":"CS2_028","dbf":457,"name":"Blizzard","text":"Deal $2 damage to all enemy minions and <b>Freeze</b> them.","textHash":"7706396b54c39fb8","tags":[[48,6],[183,3],[199,4],[201,3],[202,5],[203,3],[208,1],[251,1],[268,2],[321,1],[1635,3]]},
+{"id":"CS2_031","dbf":172,"name":"Ice Lance","text":"<b>Freeze</b> a character. If it was already <b>Frozen</b>, deal $4 damage instead.","textHash":"0f7466691cba2dad","tags":[[48,1],[183,3],[199,4],[201,3],[202,5],[203,1],[208,1],[251,1],[268,2],[321,1],[1635,3]]},
+{"id":"CS2_059","dbf":469,"name":"Blood Imp","text":"[x]  <b>Stealth</b>. At the end of your  \nturn, give another random\n friendly minion +1 Health.","textHash":"e8e330b0bbd46da7","tags":[[32,1],[45,1],[48,1],[183,3],[191,1],[199,9],[200,15],[201,3],[202,4],[203,1],[251,3],[268,2],[321,1],[1965,1]]},
+{"id":"CS2_104","dbf":1108,"name":"Rampage","text":"Give a damaged minion +3/+3.","textHash":"ff984ac65b419dd1","tags":[[48,2],[183,3],[199,10],[201,3],[202,5],[203,1],[251,1],[268,2],[321,1]]},
+{"id":"CS2_117","dbf":1651,"name":"Earthen Ring Farseer","text":"<b>Battlecry:</b> Restore #3_Health.","textHash":"993dd3af875a2753","tags":[[45,3],[47,3],[48,3],[183,3],[199,12],[202,4],[203,1],[218,1],[321,1]]},
+{"id":"CS2_188","dbf":242,"name":"Abusive Sergeant","text":"<b>Battlecry:</b> Give a minion +2_Attack this turn.","textHash":"bd4eb7ca78cc15bb","tags":[[45,1],[47,1],[48,1],[183,3],[199,12],[201,2],[202,4],[203,1],[218,1],[251,6],[321,1]]},
+{"id":"CS2_203","dbf":290,"name":"Ironbeak Owl","text":"<b>Battlecry:</b> <b>Silence</b> a_minion.","textHash":"0fe4b70d894c47cf","tags":[[45,1],[47,2],[48,3],[183,3],[199,12],[200,20],[201,1],[202,4],[203,1],[218,1],[251,7],[321,1]],"refs":[[339,1]]},
+{"id":"EX1_012","dbf":749,"name":"Bloodmage Thalnos","text":"<b>Spell Damage +1</b>\n<b>Deathrattle:</b> Draw a card.","textHash":"b78cf1ef79693e36","tags":[[45,1],[47,1],[48,2],[114,1],[183,3],[192,1],[199,12],[200,11],[201,3],[202,4],[203,5],[217,1],[251,4],[321,1],[2589,1]]},
+{"id":"EX1_016","dbf":1721,"name":"Sylvanas Windrunner","text":"<b>Deathrattle:</b> Take\ncontrol of a random\nenemy minion.","textHash":"21a98f8aa953c2aa","tags":[[45,5],[47,5],[48,6],[114,1],[183,3],[199,12],[200,11],[202,4],[203,5],[217,1],[321,1]]},
+{"id":"EX1_046","dbf":348,"name":"Dark Iron Dwarf","text":"<b>Battlecry:</b> Give a minion +2_Attack this turn.","textHash":"bd4eb7ca78cc15bb","tags":[[45,4],[47,4],[48,4],[183,3],[199,12],[201,2],[202,4],[203,1],[218,1],[251,6],[321,1]]}
+]}
