@@ -19,6 +19,9 @@ namespace SabberStoneCore.Model.RandomPools
     /// </summary>
     public sealed class MatchRandomPool
     {
+        /// <summary>Recorded in new game records; a record without it replays on the frozen legacy lists.</summary>
+        public const string PolicyVersion = "match-random/1";
+
         // Diagnostics only: (source card id or null, legacy?) for every accessor call. Tests and fuzz census set it.
         public static Action<string, bool> Census { get; set; }
 
@@ -40,10 +43,19 @@ namespace SabberStoneCore.Model.RandomPools
         private readonly ConcurrentDictionary<CardClass, Card[]> _classOnly = new ConcurrentDictionary<CardClass, Card[]>();
         private readonly ConcurrentDictionary<CardClass, Card[]> _classAndNeutral = new ConcurrentDictionary<CardClass, Card[]>();
         private readonly ConcurrentDictionary<CardClass, Card[]> _secrets = new ConcurrentDictionary<CardClass, Card[]>();
+        private readonly ConcurrentDictionary<CardClass, Card[]> _nonClass = new ConcurrentDictionary<CardClass, Card[]>();
+        private readonly Dictionary<string, OfflinePoolPolicy.Member> _byId;
+
+        // Discover's criteria pools, kept ON this pool so they live and die with their manifest and policy
+        // (a process-wide cache once leaked the first game's pool into later games).
+        internal ConcurrentDictionary<(object Criteria, CardClass Class), Card[][]> DiscoverMemo { get; } =
+            new ConcurrentDictionary<(object, CardClass), Card[][]>();
 
         /// <summary>True when this is the frozen legacy list set (same objects as Cards.AllStandard and friends).</summary>
         public bool Legacy { get; }
         public GenerationFormat Format { get; }
+        /// <summary>Legacy mode only: the FormatType whose frozen lists this pool hands out.</summary>
+        internal FormatType LegacyFormat => _legacyFormat;
         public PoolDestination Destination { get; }
         public string ManifestHash { get; }
 
@@ -61,8 +73,9 @@ namespace SabberStoneCore.Model.RandomPools
             if (format == GenerationFormat.Wild) source = source.Concat(WildExtra(manifest));
             foreach (var m in source)
             {
-                // Hero cards never belong to a random pool (legacy pools excluded them too).
-                if (m.Type == "HERO") continue;
+                // Hero cards never belong to a random pool (legacy pools excluded them too). Neither did they hold
+                // locations: each task keeps its current card-type behaviour (owner ruling, 2026-11-16).
+                if (m.Type == "HERO" || m.Type == "LOCATION") continue;
                 // Colossal bodies may be generated off-board, never selected for a direct summon/transform;
                 // a Herald Colossal is rejected from every pool (same rules as OfflineCardPools.Candidates).
                 if (m.Tags.TryGetValue(2247, out int colossal) && colossal > 0 &&
@@ -77,6 +90,8 @@ namespace SabberStoneCore.Model.RandomPools
                 members.Add(m); cards.Add(card);
             }
             _members = members.ToArray(); _all = cards.ToArray();
+            _byId = new Dictionary<string, OfflinePoolPolicy.Member>(StringComparer.Ordinal);
+            for (int i = 0; i < _all.Length; i++) _byId[_all[i].Id] = _members[i];
             _costMinions = new Dictionary<int, List<Card>>();
             // Buckets follow the CURRENT card cost, not the frozen legacy buckets.
             foreach (var card in _all)
@@ -136,6 +151,24 @@ namespace SabberStoneCore.Model.RandomPools
                 string name = OfflineCardPools.ClassName(c);
                 return Pick(m => m.Classes.Contains(name));
             });
+        }
+
+        /// <summary>New mode: the neutral side of a class pool (class+neutral cards that do not list the class).</summary>
+        public IReadOnlyList<Card> NonClass(CardClass heroClass)
+        {
+            if (Legacy) throw new NotSupportedException("NonClass is a new-mode accessor.");
+            return _nonClass.GetOrAdd(heroClass, c =>
+            {
+                string name = OfflineCardPools.ClassName(c);
+                return Pick(m => !m.Classes.Contains(name) && m.Classes.Contains("NEUTRAL"));
+            });
+        }
+
+        /// <summary>New mode: does the card list this class (a multi-class card counts for each class it lists)?</summary>
+        public bool InClass(Card card, CardClass cardClass)
+        {
+            if (Legacy) throw new NotSupportedException("InClass is a new-mode accessor.");
+            return _byId.TryGetValue(card.Id, out var m) && m.Classes.Contains(OfflineCardPools.ClassName(cardClass));
         }
 
         /// <summary>Secrets of the class pool, cached on this pool (new mode) or in the frozen legacy memo.</summary>
