@@ -102,6 +102,25 @@ internal static class ClassicWildChecks
         Check(LocalDecks.PlayerCoreStarterDecks.Count == 11 && LocalDecks.PlayerCoreStarterDecks.SelectMany(deck => deck.CardIds).All(LocalCardCatalog.IsStandardId),
             "starter loaners are Standard");
         Check(LocalDecks.NpcDecks.SelectMany(deck => deck.CardIds).All(LocalCardCatalog.IsStandardId), "showcase NPC decks are Standard");
+        // Every shipped Standard deck (NPC ranked and casual libraries, shop recipes incl. sideboards) holds only Standard ids;
+        // Holy Light and Truesilver Champion (CS2_089, CS2_097: Basic/Classic, Core printings hidden in 37.0) are Wild.
+        string root = RepoRoot.Find("data/npc/decks-v1.json") ?? throw new Exception("classic wild: repo root");
+        IEnumerable<string> Ids(System.Text.Json.JsonElement deck) =>
+            deck.GetProperty("cards").EnumerateArray().Select(row => row.GetProperty("id").GetString()!)
+                .Concat(deck.TryGetProperty("sideboards", out var boards) ? boards.EnumerateArray().SelectMany(board =>
+                    board.GetProperty("cards").EnumerateArray().Select(row => row.GetProperty("id").GetString()!)) : Enumerable.Empty<string>());
+        foreach (var (file, key) in new[] { ("data/npc/decks-v1.json", "decks"), ("data/npc/casual-decks-v1.json", "decks"), ("data/shop/recipes-v1.json", "recipes") })
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(root, file)));
+            foreach (var deck in doc.RootElement.GetProperty(key).EnumerateArray())
+            {
+                var wild = LocalCardCatalog.NonStandardIds(Ids(deck));
+                Check(wild.Count == 0, file + " " + deck.GetProperty("id").GetString() + " holds Wild cards: " + string.Join(",", wild));
+            }
+        }
+        Check(!LocalCardCatalog.IsStandardId("CS2_089") && !LocalCardCatalog.IsStandardId("CS2_097")
+            && !LocalProfile.ClassicReprints.ContainsKey("CS2_089") && !LocalProfile.ClassicReprints.ContainsKey("CS2_097"),
+            "Holy Light and Truesilver Champion are Wild with no Core reprint");
         Check(LocalCardCatalog.NonStandardIds(new[] { "CS2_182", "CORE_CS2_024", "CS2_182", "EX1_007" }).SequenceEqual(new[] { "CS2_182", "EX1_007" }),
             "non-Standard ids: deck order, each once");
         // Native answers (NativeFormatWild): card-level from the engine rule; set-level rotates every set but the active ones.
@@ -145,6 +164,11 @@ internal static class ClassicWildChecks
             var draft = profile.CreateDraft("Old mage", "HERO_08");
             profile.SaveDraft(draft.Id, draft.Name, draft.Hero, new[] { "CORE_CS2_024", "CORE_CS2_024" }, draft.SortOrder);
             Check(profile.WildCards(draft.Id).Count == 0, "a Core draft holds no Wild card");
+            var paladin = profile.CreateDraft("Old paladin", "HERO_04");
+            profile.SaveDraft(paladin.Id, paladin.Name, paladin.Hero, new[] { "CS2_089", "CS2_097", "CORE_ICC_038" }, paladin.SortOrder);
+            Check(profile.WildCards(paladin.Id).SequenceEqual(new[] { "CS2_089", "CS2_097" }) && !profile.IsDeckComplete(paladin.Id)
+                && profile.CustomDecks.Any(deck => deck.Id == paladin.Id),
+                "a saved deck with Holy Light and Truesilver stays listed, flagged Wild and unplayable");
         }
         finally { Directory.Delete(Path.GetDirectoryName(path), true); }
         Console.WriteLine("PASS classic wild: Standard rule, native format answers, new-profile Core commons, no Wild ownership");
