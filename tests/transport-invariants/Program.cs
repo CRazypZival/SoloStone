@@ -55,8 +55,8 @@ internal static class Program
                     try
                     {
                         var trial = new Runner(); var shape = trial.Run(candidate, verify: false);
-                        bool hit = trial.ViolationCount == 0 && trial.Completed.Values.Sum() == 1 && DeathrattleReplayProof.ExpectedFindingsOnly(shape);
-                        Console.WriteLine($"{(hit ? "HIT " : "miss")} {first} vs {second} s{seed}: violations={trial.ViolationCount} findings={shape.Findings.Count}");
+                        bool hit = trial.ViolationCount == 0 && trial.Completed.Values.Sum() == 1 && DeathrattleReplayProof.FelhunterDeathrattleBlocks(trial.LastGame) >= 2;
+                        Console.WriteLine($"{(hit ? "HIT " : "miss")} {first} vs {second} s{seed}: violations={trial.ViolationCount} findings={shape.Findings.Count} {string.Join(",", shape.Findings.Select(f => f.Rule + "/" + f.Card))}");
                     }
                     catch (Exception e) when (e is InvalidOperationException or HsSim.InvariantException) { Console.WriteLine($"error {first} vs {second} s{seed}: {e.Message}"); }
                 }
