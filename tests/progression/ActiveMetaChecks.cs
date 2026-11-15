@@ -117,6 +117,14 @@ internal static class ClassicWildChecks
             && NativeUIProjection.NativeSetIsRotated(true, NativeUIProjection.NativeEventSet) == false
             && NativeUIProjection.NativeSetIsRotated(true, 0) == null && NativeUIProjection.NativeSetIsRotated(true, be) == null
             && NativeUIProjection.NativeSetIsRotated(false, 3) == null, "native sets: active, EVENT stay Standard; INVALID, unreleased, inactive untouched");
+        Check(NativeUIProjection.NativeCardIsWild(true, "HERO_08") == null && NativeUIProjection.NativeCardIsWild(true, "HERO_08a") == null
+            && NativeUIProjection.NativeCardIsWild(true, "CORE_EX1_323") == null, "heroes, hero skins and hero cards keep the client's answer");
+        Check(NativeUIProjection.NativeSetIsRotated(true, (int)Cards.FromId("HERO_08a").Set) == null, "the hero skin set is not a card set and never rotates");
+        foreach (var pair in LocalProfile.ClassicReprints)
+            Check(!LocalCardCatalog.IsStandardId(pair.Key) && LocalCardCatalog.IsStandardId(pair.Value) && LocalCoreProgression.IsAvailable(pair.Value)
+                && Cards.FromId(pair.Key).Class == Cards.FromId(pair.Value).Class && LocalCardCatalog.CopyGroup(pair.Value) == pair.Key
+                && pair.Value.StartsWith("CORE_", StringComparison.OrdinalIgnoreCase), "Classic reprint pair " + pair.Key + " -> " + pair.Value);
+        Check(LocalProfile.ClassicReprints.Count >= 50, "Classic reprint map covers the Classic ledger's Core reprints");
         Check(NativeUIProjection.NativeFallbackSet(true, "CS2_024") == NativeUIProjection.NativeLegacySet
             && NativeUIProjection.NativeFallbackSet(true, "CORE_CS2_024") == null && NativeUIProjection.NativeFallbackSet(false, "CS2_024") == null,
             "a set-less Wild card shows as Legacy; a set-less Core card keeps INVALID");

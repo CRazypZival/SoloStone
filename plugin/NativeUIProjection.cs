@@ -148,7 +148,8 @@ internal static class NativeUIProjection
             if (nativeWild.TryGetValue(cardId, out bool? known)) return known;
             SabberStoneCore.Model.Card card;
             try { card = SabberStoneCore.Model.Cards.FromId(cardId); } catch (KeyNotFoundException) { card = null; }
-            bool? wild = card == null || !card.Collectible ? (bool?)null : !LocalCardCatalog.IsStandard(card);
+            // Heroes (base heroes are Basic-set collectibles, skins HERO_SKINS) are never Wild cards: leave them to the client.
+            bool? wild = card == null || !card.Collectible || card.Type == SabberStoneCore.Enums.CardType.HERO ? (bool?)null : !LocalCardCatalog.IsStandard(card);
             nativeWild[cardId] = wild;
             return wild;
         }
@@ -156,9 +157,14 @@ internal static class NativeUIProjection
     // A set: rotated unless it is an active-meta set or EVENT; INVALID (cards whose set arrives only with server timings,
     // Core reprints among them) and an unreleased meta set (a future expansion) keep the client's answer.
     internal const int NativeEventSet = 1941, NativeLegacySet = 1635;
+    // Only real card sets are answered: a set holding some engine collectible non-hero card, or Legacy (NativeFallbackSet);
+    // hero skins, Tavern Brawl, Battlegrounds, missions and other non-card sets keep the client's answer.
+    private static readonly Lazy<HashSet<int>> engineCardSets = new Lazy<HashSet<int>>(() => new HashSet<int>(
+        SabberStoneCore.Model.Cards.All.Where(card => card.Collectible && card.Type != SabberStoneCore.Enums.CardType.HERO)
+            .Select(card => (int)card.Set)) { NativeLegacySet });
     internal static bool? NativeSetIsRotated(bool active, int setId)
     {
-        if (!active || setId == 0 || LocalCardCatalog.IsUnreleasedMetaSet(setId)) return null;
+        if (!active || setId == 0 || LocalCardCatalog.IsUnreleasedMetaSet(setId) || !engineCardSets.Value.Contains(setId)) return null;
         return !(setId == NativeEventSet || LocalCardCatalog.IsStandardSet(setId));
     }
     // The set the client shows for a card it has no set for (INVALID): Legacy for a Wild Basic/Classic card, so set

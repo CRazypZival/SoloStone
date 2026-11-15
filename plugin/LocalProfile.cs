@@ -660,7 +660,8 @@ public sealed partial class LocalProfile : IDisposable
                 bool paceChanged = successor.Id != loaded.GrindTier;
                 if (paceChanged && !snapshot) loaded.GrindTier = successor.Id;
                 var repaired = RepairDeckPremiums(loaded, profileOptions.AllCosmetics);
-                bool granted = AdoptAchievementHeroSkins(loaded) | GrantCoreUnlocks(loaded) | GrantClassRewards(loaded, null) | LocalCardMastery.Grant(loaded, null);
+                var reprintGrants = GrantClassicReprints(loaded);
+                bool granted = AdoptAchievementHeroSkins(loaded) | GrantCoreUnlocks(loaded) | reprintGrants.Count > 0 | GrantClassRewards(loaded, null) | LocalCardMastery.Grant(loaded, null);
                 if ((granted || paceChanged || repaired.Count > 0) && !snapshot) { Commit(loaded); LogDeckRepairs(repaired); }
                 else data = loaded;
             }
@@ -1329,7 +1330,7 @@ public sealed partial class LocalProfile : IDisposable
     {
         var deck = GetDraft(id);
         if (deck == null) return false;
-        if (WildCards(id).Count != 0) return false;
+        if ((deck.Format ?? StandardFormat) != StandardFormat || WildCards(id).Count != 0) return false;
         try {
             PlayableDeck(deck.Name, deck.Hero, deck.Cards, deck.Sideboards);
             // Retail CollectionDeck.CanCardBeAddedAsOwned (254477): a sideboard copy is owned only beyond the main deck's
@@ -1907,6 +1908,7 @@ public sealed partial class LocalProfile : IDisposable
         foreach (var deck in next.CustomDecks ?? new List<LocalCustomDeck>()) if (deck != null && deck.Format == null) deck.Format = StandardFormat;
         ValidateV14(next, profileOptions.AllCosmetics, profileOptions.LegendRating, profileOptions.AllDecks);
         GrantCoreUnlocks(next);
+        LogDeckRepairs(GrantClassicReprints(next));
         GrantClassRewards(next, null);
         // O(history) catch-up keeps changed thresholds/metas current; real local histories are small.
         LocalCardMastery.Grant(next, null);
@@ -2029,7 +2031,8 @@ public sealed partial class LocalProfile : IDisposable
         if (profile.HiddenLoaners == null || profile.HiddenLoaners.Any(key => !IsStarterLoanerShape(key))
             || profile.HiddenLoaners.Distinct(StringComparer.Ordinal).Count() != profile.HiddenLoaners.Count)
             throw new InvalidOperationException("Invalid hidden starter decks.");
-        if (profile.Version >= 16 && profile.CustomDecks.Any(deck => deck.Format != null && deck.Format != StandardFormat))
+        // A format this build does not know (a later Wild mode) keeps the deck saved and unplayable here (IsDeckComplete).
+        if (profile.Version >= 16 && profile.CustomDecks.Any(deck => deck != null && deck.Format != null && !ValidName(deck.Format, 32)))
             throw new InvalidOperationException("Invalid deck format.");
     }
 
@@ -2038,17 +2041,22 @@ public sealed partial class LocalProfile : IDisposable
     private static readonly Lazy<IReadOnlyDictionary<string, string>> classicReprints = new Lazy<IReadOnlyDictionary<string, string>>(() =>
         new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(LocalCoreProgression.Unlocks
             .Where(unlock => unlock.CopyGroup != unlock.Id && LocalCardCatalog.IsStandardId(unlock.Id) && !LocalCardCatalog.IsStandardId(unlock.CopyGroup)
-                && !LocalCardCatalog.IsCore(unlock.CopyGroup))
+                && !LocalCardCatalog.IsCore(unlock.CopyGroup) && LocalCoreProgression.IsAvailable(unlock.Id) && SameClass(unlock.Id, unlock.CopyGroup))
             .GroupBy(unlock => unlock.CopyGroup, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.OrderBy(unlock => unlock.Id, StringComparer.Ordinal).First().Id, StringComparer.Ordinal)));
 
-    // V13-V15 -> V16 (#87), on the loaded data before validation and the backed-up commit. Nothing is deleted:
-    // 1. every owned Classic card with a Core reprint grants that Core card (CoreGrants is monotonic), up to its copies;
-    // 2. every saved deck (main and sideboards) moves those cards to the reprint, keeping each slot's premium (the
-    //    premium repair that follows every load drops a version the player does not own);
-    // 3. every deck is stamped Standard. A deck that still holds Wild cards loads as it is and is refused at queue time.
-    // Collection rows stay, so pending pack reveals, craft receipts and mastery keep validating against them.
-    internal static IReadOnlyList<string> MigrateClassicToV16(LocalProfileData profile)
+    private static bool SameClass(string core, string classic)
+    {
+        try {
+            var a = SabberStoneCore.Model.Cards.FromId(core); var b = SabberStoneCore.Model.Cards.FromId(classic);
+            return a != null && b != null && b.Collectible && a.Class == b.Class;
+        } catch (KeyNotFoundException) { return false; }
+    }
+
+    // #87: every owned Classic card with a Core reprint also owns that reprint (up to its copies). Monotonic like
+    // GrantCoreUnlocks; run by the V16 migration and by every V16 load and commit, so a Classic card that arrives later
+    // (an unopened Legacy pack from an old save) brings its reprint too.
+    internal static List<string> GrantClassicReprints(LocalProfileData profile)
     {
         var lines = new List<string>();
         var reprints = ClassicReprints;
@@ -2067,6 +2075,19 @@ public sealed partial class LocalProfile : IDisposable
             else continue;
             lines.Add("CLASSIC_REPRINT_GRANT classic=" + classic.Key + " core=" + core + " copies=" + copies);
         }
+        return lines;
+    }
+
+    // V13-V15 -> V16 (#87), on the loaded data before validation and the backed-up commit. Nothing is deleted:
+    // 1. every owned Classic card with a Core reprint grants that Core card (CoreGrants is monotonic), up to its copies;
+    // 2. every saved deck (main and sideboards) moves those cards to the reprint, keeping each slot's premium (the
+    //    premium repair that follows every load drops a version the player does not own);
+    // 3. every deck is stamped Standard. A deck that still holds Wild cards loads as it is and is refused at queue time.
+    // Collection rows stay, so pending pack reveals, craft receipts and mastery keep validating against them.
+    internal static IReadOnlyList<string> MigrateClassicToV16(LocalProfileData profile)
+    {
+        var lines = GrantClassicReprints(profile);
+        var reprints = ClassicReprints;
         foreach (var deck in profile.CustomDecks ?? new List<LocalCustomDeck>())
         {
             if (deck == null) continue;

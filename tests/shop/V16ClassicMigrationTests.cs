@@ -11,22 +11,26 @@ internal static class V16ClassicMigrationTests
     private static readonly XmlSerializer Serializer = new(typeof(LocalProfileData));
     private static LocalProfileData Read(string path) { using var stream = File.OpenRead(path); return (LocalProfileData)Serializer.Deserialize(stream); }
     private static void Write(string path, LocalProfileData data) { using var stream = File.Create(path); Serializer.Serialize(stream, data); }
-    private static long Mixed, Reprinted;
+    private static long Mixed, Reprinted, Legend;
 
-    internal static string V15Fixture(string root, string name, out byte[] original)
+    internal static string V15Fixture(string root, string name, out byte[] original, int version = 15)
     {
         string path = Path.Combine(root, name, "profile.xml");
         Directory.CreateDirectory(Path.GetDirectoryName(path));
         var data = Read(Path.Combine(AppContext.BaseDirectory, "profile-fixtures", "v14-mono-migrated.xml"));
-        data.Version = 15;
-        Mixed = data.NextCustomDeckId; Reprinted = Mixed + 1;
-        data.NextCustomDeckId = Reprinted + 1;
+        data.Version = version;
+        Mixed = data.NextCustomDeckId; Reprinted = Mixed + 1; Legend = Mixed + 2;
+        data.NextCustomDeckId = Legend + 1;
+        // A Classic legendary the save owns, and a deck that already mixes a Classic and a Core copy of one card.
+        if (!data.Collection.Any(row => row.Id == "EX1_559")) data.Collection.Add(new LocalCardCount { Id = "EX1_559", Count = 1, Acquired = 1 });
         LocalDeckCard Card(string id, int premium = 0) => new LocalDeckCard { Id = id, Premium = premium };
         data.CustomDecks.Add(new LocalCustomDeck { Id = Mixed, SortOrder = Mixed, Name = "Old Mage", Hero = "HERO_08",
             CardEntries = new List<LocalDeckCard> { Card("CS2_029"), Card("CS2_029"), Card("CS2_024", 1), Card("CS2_024"),
                 Card("CS2_179"), Card("CS2_182"), Card("CS2_182"), Card("CORE_DRG_107"), Card("CORE_DRG_107") } });
         data.CustomDecks.Add(new LocalCustomDeck { Id = Reprinted, SortOrder = Reprinted, Name = "Fireballs", Hero = "HERO_08",
             CardEntries = new List<LocalDeckCard> { Card("CS2_029"), Card("CS2_029") } });
+        data.CustomDecks.Add(new LocalCustomDeck { Id = Legend, SortOrder = Legend, Name = "Legend Mage", Hero = "HERO_08",
+            CardEntries = new List<LocalDeckCard> { Card("CS2_029"), Card("CORE_CS2_029"), Card("EX1_559") } });
         Write(path, data);
         original = File.ReadAllBytes(path);
         return path;
@@ -72,9 +76,29 @@ internal static class V16ClassicMigrationTests
         check(mixed.CardEntries.All(entry => entry.Premium == 0), "an unowned Golden reprint slot falls back to the owned Normal copy");
         check(after.CustomDecks.Where(deck => deck.Id == Mixed || deck.Id == Reprinted).All(deck => deck.Format == LocalProfile.StandardFormat),
             "every migrated deck is stamped Standard");
+        check(after.CustomDecks.Single(deck => deck.Id == Legend).CardEntries.Select(entry => entry.Id)
+            .SequenceEqual(new[] { "CORE_CS2_029", "CORE_CS2_029", "CORE_EX1_559" }) && Grant(after, "CORE_EX1_559") == 1,
+            "a Classic legendary moves to its one-copy reprint; a mixed Classic and Core pair becomes two Core copies");
         byte[] migrated = File.ReadAllBytes(path);
         using (var reopened = new LocalProfile(path)) check(reopened.WildCards(Mixed).Count == 1, "the migrated save reopens");
         check(migrated.SequenceEqual(File.ReadAllBytes(path)), "a second open migrates nothing again (restart is a no-op)");
+
+        // A Classic card that arrives after the upgrade (an old unopened Legacy pack) brings its reprint on the next load.
+        var later = Read(path);
+        later.CoreGrants.RemoveAll(row => row.Id == "CORE_EX1_559");
+        Write(path, later);
+        using (var reopened = new LocalProfile(path)) check(reopened.Collection.TryGetValue("CORE_EX1_559", out int legend) && legend == 1,
+            "a later-owned Classic card grants its reprint on load");
+        // A deck format this build does not know (a later Wild mode) loads, and its deck cannot be played here.
+        var unknown = Read(path);
+        unknown.CustomDecks.Single(deck => deck.Id == Reprinted).Format = "Wild";
+        Write(path, unknown);
+        using (var reopened = new LocalProfile(path))
+            check(!reopened.IsDeckComplete(Reprinted) && reopened.WildCards(Reprinted).Count == 0, "an unknown deck format loads and is not playable");
+        // V14 saves take the same upgrade, with a byte-exact .v14.bak.
+        string v14 = V15Fixture(root, "v14-classic", out byte[] v14original, 14);
+        using (var profile = new LocalProfile(v14)) check(profile.WildCards(Mixed).SequenceEqual(new[] { "CS2_182" }), "V14 save with Classic decks migrates");
+        check(Read(v14).Version == 16 && v14original.SequenceEqual(File.ReadAllBytes(v14 + ".v14.bak")), "V14 upgrade to V16 keeps a byte-exact .v14.bak");
 
         // Failure paths, as for V14: a conflicting backup refuses without touching anything; a failed commit keeps the save
         // and its backup, and the retry with the matching backup finishes the upgrade.

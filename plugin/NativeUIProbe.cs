@@ -992,9 +992,12 @@ internal static partial class NativeUIProbe
             audit.Add(id + "\t" + (int)set + "\t" + set + "\t" + GameUtils.GetCardSetFormat(set) + "\t"
                 + GameUtils.IsSetRotated(set) + "\t" + GameUtils.IsLegacySet(set) + "\t" + inDisplayable + "\t" + inWild + "\t" + inStandard
                 + "\t" + engineStandard + "\t" + nativeWildCard);
-            if (owned.TryGetValue(id, out int count) && count > 0
-                && (engineStandard ? !inStandard || nativeWildCard : !inWild || inStandard || !nativeWildCard))
-                missingOwned.Add(id + " set=" + set + (engineStandard ? " standard" : " wild"));
+            // A Standard card the client calls Wild would lock it out of decks: stop at boot. A Wild card the client calls
+            // Standard only weakens the native editor's refusal (the save still refuses it at Play), so it is logged.
+            if (owned.TryGetValue(id, out int count) && count > 0 && engineStandard && (!inStandard || nativeWildCard))
+                missingOwned.Add(id + " set=" + set + " standard");
+            else if (count > 0 && !engineStandard && (!inWild || inStandard || !nativeWildCard))
+                log.LogWarning("NATIVE_FORMAT_WILD_MISMATCH id=" + id + " set=" + set + " inWild=" + inWild + " inStandard=" + inStandard + " nativeWild=" + nativeWildCard);
         }
         audit.Add("#displayableSets\t" + string.Join(",", displayable.Select(set => (int)set + ":" + set)));
         audit.Add("#allWildSets\t" + string.Join(",", wild.OrderBy(set => (int)set).Select(set => (int)set + ":" + set)));
