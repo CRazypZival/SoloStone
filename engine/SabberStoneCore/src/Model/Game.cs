@@ -125,6 +125,9 @@ namespace SabberStoneCore.Model
 
 		internal void RestoreOfflinePools(OfflinePoolManifest manifest) => OfflinePools = manifest;
 		internal bool LegacyPoolReplay => _gameConfig.LegacyPoolReplay;
+		internal bool UnversionedRandomPoolReplay => _gameConfig.UnversionedRandomPoolReplay;
+		/// <summary>The match's random pool policy (see <see cref="GameConfig.PoolFormat"/>).</summary>
+		public GenerationFormat PoolFormat => _gameConfig.PoolFormat;
 
 		internal Util.DeepCloneableRandom Random { get; set; }
 
