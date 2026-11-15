@@ -81,7 +81,7 @@ internal static partial class Program
         foreach (string moved in new[] { "--rematch-only", "--canonical-privacy-assertions-only" })
             if (args.Contains(moved)) throw new ArgumentException(moved + " moved to the native-match-logic suite");
         ControllerAdmissionInvariant.Install();
-        if (args.Contains("--softlock-only")) { NativeMatch.ClockFreeBot = true; ForefatherGuessNative(); AnnouncerRewindDeathKnightNative(); ForefatherFromDiscoverNative(); return; }
+        if (args.Contains("--softlock-only")) { NativeMatch.ClockFreeBot = true; ForefatherGuessNative(); AnnouncerRewindDeathKnightNative(); ForefatherFromDiscoverNative(); ForefatherNpcGuessNative(); return; }
         if (args.Contains("--ledgerline-only")) { NativeMatch.ClockFreeBot = true; NpcWorldIntegrationTests.LedgerlineForefatherGuess(); return; }
         if (args.Contains("--match-event-log-review-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogReview(); return; }
         if (args.Contains("--match-event-log-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogNative(); return; }
@@ -253,6 +253,7 @@ internal static partial class Program
         ForefatherGuessNative();
         AnnouncerRewindDeathKnightNative();
         ForefatherFromDiscoverNative();
+        ForefatherNpcGuessNative();
         GroupProofs.Run(ProofKind.Native);
         if (args.Contains("--hand-buff-only")) return;
         OverloadManaParity();
