@@ -24,6 +24,9 @@ internal static class TargetingRulesProof
             ("#123 heal before death check", HealBeforeDeathCheck),
             ("#123 buff, aura, clone", BuffAndAuraRescue),
             ("#123 heal after death check", HealAfterDeathCheck),
+            ("#123 real damage path, Poisonous", RealDamageAndPoison),
+            ("#123 Silence, copy, transform", SilenceCopyTransform),
+            ("#123 snapshot at a decision", SnapshotWithMark),
             ("#121 Untouchable sweep", UntouchableSweep),
             ("#120 mortally wounded sweep", MortallyWoundedSweep),
             ("#139 Slime 'em! empty boards", SlimeEmEmptyBoards) };
@@ -263,6 +266,71 @@ internal static class TargetingRulesProof
         Verify(cw.Zone.Type == Zone.PLAY, "clone: healed before the check, survives");
         g2.DeathProcessingAndAuraUpdate();
         Verify(w.Zone.Type == Zone.GRAVEYARD, "original: untouched by the clone's heal, dies");
+    }
+
+    // #123 through the real damage path (TakeDamage), not by setting Damage: heal rescue, and a Poisonous hit makes the death final.
+    private static void RealDamageAndPoison()
+    {
+        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+        var m = Summon(p.Opponent, "CS2_182");
+        m.TakeDamage(p.Hero, 6);
+        Verify(m.IsDead && m.NativeTags.ContainsKey((GameTag)31420), "TakeDamage to lethal marks the wound");
+        m.TakeHeal(p.Hero, 3); g.DeathProcessingAndAuraUpdate();
+        Verify(m.Zone.Type == Zone.PLAY && m.Health == 2, "healed before the death check: survives");
+
+        var n = Summon(p.Opponent, "CS2_182"); var source = Summon(p, "CS2_182");
+        new SabberStoneCore.Tasks.SimpleTasks.AddEnchantmentTask("CORE_EDR_002e", SabberStoneCore.Tasks.SimpleTasks.EntityType.TARGET).Process(g, p, source, source);
+        Verify(source.Poisonous, "Poisonous source");
+        n.TakeDamage(p.Hero, 6);
+        Verify(n.NativeTags.ContainsKey((GameTag)31420), "ordinary damage marks it");
+        n.TakeDamage(source, 1);
+        Verify(!n.NativeTags.ContainsKey((GameTag)31420) && n.IsDead, "a Poisonous hit on a marked minion makes the death final");
+        n.TakeHeal(p.Hero, 10); g.DeathProcessingAndAuraUpdate();
+        Verify(n.Zone.Type == Zone.GRAVEYARD, "healing cannot undo a Poisonous kill");
+    }
+
+    // #123 edges: Silence keeps a damage mark; a copy never carries it; a same-type transform keeps main's result (the minion dies).
+    private static void SilenceCopyTransform()
+    {
+        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+        var m = Summon(p.Opponent, "CS2_182"); Summon(p.Opponent, "CS2_222"); // Stormwind Champion aura +1/+1
+        m.TakeDamage(p.Hero, 6);                                              // Health 6 with the aura: wounded to 0
+        Verify(m.IsDead && m.NativeTags.ContainsKey((GameTag)31420), "wounded under an aura");
+        m.Silence();
+        Verify(m.NativeTags.ContainsKey((GameTag)31420), "Silence keeps the damage-only mark");
+        m.TakeHeal(p.Hero, 3); g.DeathProcessingAndAuraUpdate();
+        Verify(m.Zone.Type == Zone.PLAY, "silenced minion healed before the death check still survives");
+
+        var g2 = QuestLifecycleProof.Fixture(); var p2 = g2.Player1;
+        var w = Summon(p2.Opponent, "CS2_182"); w.TakeDamage(p2.Hero, 6);
+        var copy = (Minion)SabberStoneCore.Actions.Generic.Copy(p2.Opponent, p2.Hero, w, Zone.PLAY);
+        Verify(copy != null && !copy.NativeTags.ContainsKey((GameTag)31420), "a copy carries no wound mark");
+        var kept = (Minion)SabberStoneCore.Actions.Generic.Copy(p2.Opponent, p2.Hero, w, Zone.PLAY, preserveBoardMinionState: true);
+        Verify(kept != null && !kept.NativeTags.ContainsKey((GameTag)31420), $"a state-preserving copy carries no wound mark (damage {kept?.Damage}, dead {kept?.IsDead})");
+
+        var g3 = QuestLifecycleProof.Fixture(); var p3 = g3.Player1;
+        var t = Summon(p3.Opponent, "CS2_182"); t.TakeDamage(p3.Hero, 6);
+        new SabberStoneCore.EffectSystem.EffectContext(g3, p3.Id, p3.Hero.Id).Transform(t.Id, "CS2_tk1");
+        g3.DeathProcessingAndAuraUpdate();
+        Verify(t.Zone.Type == Zone.GRAVEYARD, "same-type transform of a mortally wounded minion still dies, as on main (retail rule unsettled)");
+    }
+
+    // #123 snapshot at a decision boundary (Deathwing prompt) with a marked minion: the mark and the rescue survive save/load.
+    private static void SnapshotWithMark()
+    {
+        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+        var hero = Add(p, "CATA_190h"); PlayEntity(g, p, hero);
+        Verify(p.Choice != null, "decision open");
+        var m = Summon(p.Opponent, "CS2_182"); m.TakeDamage(p.Hero, 6);
+        Verify(m.NativeTags.ContainsKey((GameTag)31420), "marked while the prompt is open");
+        var loaded = Game.LoadSnapshot(g.SaveSnapshot());
+        var lm = (Minion)loaded.IdEntityDic[m.Id];
+        Verify(lm.NativeTags.ContainsKey((GameTag)31420) && lm.IsDead, "loaded game keeps the mark");
+        lm.TakeHeal(loaded.Player1.Hero, 3);
+        B14H3LifecycleProof.Answer(loaded, "CATA_190t10");
+        Verify(lm.Zone.Type == Zone.PLAY && lm.Health == 2, "loaded game: rescued by the heal");
+        B14H3LifecycleProof.Answer(g, "CATA_190t10");
+        Verify(m.Zone.Type == Zone.GRAVEYARD, "original game without a heal: the minion dies");
     }
 
     // #123 as reported: death creation removes every mortally wounded minion before any Deathrattle; a later heal cannot revive.

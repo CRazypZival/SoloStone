@@ -424,7 +424,11 @@ namespace SabberStoneCore.Actions
                             else p.AppliedEnchantments[i].Remove();
 
 					if (p is Minion m)
+					{
+						// Same-type transform of a mortally wounded minion: unchanged from main, it still dies (retail rule unsettled).
+						m.NativeTags.Remove(HealingRules.DamageWound);
 						m.ResetAttributes();
+					}
 					else
 						((Playable) p).ResetCost();
 				}
@@ -511,6 +515,7 @@ namespace SabberStoneCore.Actions
 				else
 				{
 					Playable entity;
+					p.NativeTags.Remove(HealingRules.DamageWound); // a changed-type entity is a fresh one, never mortally wounded
 					switch (newCard.Type)
 					{
                         case CardType.LOCATION:

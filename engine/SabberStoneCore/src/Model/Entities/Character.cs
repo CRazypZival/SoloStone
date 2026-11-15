@@ -455,7 +455,8 @@ namespace SabberStoneCore.Model.Entities
             bool healthReplaced = Actions.HealingRules.ReplaceHealthLoss(hero, amount);
             int healthBefore = Health;
             bool fatalCandidate = !ToBeDestroyed && Health > 0;
-            var poisonSource = minion != null && amount > 0 && !ToBeDestroyed
+            bool woundMarked = minion != null && NativeTags.ContainsKey(Actions.HealingRules.DamageWound);
+            var poisonSource = minion != null && amount > 0 && (!ToBeDestroyed || woundMarked)
                 ? PoisonousDamageSource(source, combat) : null;
             if (!healthReplaced)
                 using (game.Facts.SuppressHealth()) SetDamage(Actions.DamageArithmetic.Add(Damage, amount), poisonSource == null);
@@ -470,7 +471,8 @@ namespace SabberStoneCore.Model.Entities
 				Actions.QuestRules.DamageResolved(source.Controller, new DamageResolvedFact(source, this, dealt));
 
             // Resolve the keyword before damage reactions can silence the source or test survival.
-            if (minion != null && Damage - damageBefore > 0 && !ToBeDestroyed
+            // A Poisonous hit also ends a damage-only wound (clears the mark): the death becomes final.
+            if (minion != null && Damage - damageBefore > 0 && (!ToBeDestroyed || woundMarked)
                 && minion.Zone.Type == Enums.Zone.PLAY && poisonSource != null)
             {
                 using (_history ? game.PowerHistory.PoisonousSource(poisonSource, this) : null)

@@ -207,7 +207,8 @@ namespace SabberStoneCore.Model.Entities
 				if (removedHealth > 0)
 					Damage -= removedHealth;
 				BaseHealth = cardBaseHealth;
-				if (Damage >= BaseHealth) ToBeDestroyed = true;
+				// A damage-only mark stays a mark (the minion can still be rescued); anything else keeps main's explicit destroy.
+				if (Damage >= BaseHealth && !NativeTags.ContainsKey(Actions.HealingRules.DamageWound)) ToBeDestroyed = true;
 			}
 			else if (Health > cardBaseHealth)
 				Health = cardBaseHealth;
