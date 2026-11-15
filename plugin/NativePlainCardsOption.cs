@@ -53,6 +53,14 @@ internal static class NativePlainCardsOption
 
     private static readonly System.Reflection.FieldInfo HistoryTiles = AccessTools.Field(typeof(HistoryManager), "m_historyTiles");
     private static readonly System.Reflection.FieldInfo CurrentBigCard = AccessTools.Field(typeof(HistoryManager), "m_currentBigCard");
+    // In-match actors carry an Entity, not an EntityDef (that is collection and pack actors), so neither filters what is counted.
+    private static readonly System.Reflection.MethodInfo ActorEntity = AccessTools.Method(typeof(Actor), "GetEntity", Type.EmptyTypes);
+
+    private static string CardId(Actor actor)
+    {
+        try { return (ActorEntity?.Invoke(actor, null) as Entity)?.GetCardId() ?? actor.GetEntityDef()?.GetCardId(); }
+        catch (Exception) { return null; }
+    }
 
     private static JsonNode Walk()
     {
@@ -60,7 +68,7 @@ internal static class NativePlainCardsOption
         void Note(string where, Actor actor)
         {
             if (actor == null || actor.GetPremium() == TAG_PREMIUM.NORMAL || nonNormal.Count >= 20) return;
-            nonNormal.Add(new JsonNode { { "where", where }, { "cardId", actor.GetEntityDef()?.GetCardId() }, { "premium", actor.GetPremium().ToString() },
+            nonNormal.Add(new JsonNode { { "where", where }, { "cardId", CardId(actor) }, { "premium", actor.GetPremium().ToString() },
                 { "object", actor.gameObject.name } });
         }
         JsonNode Count(IEnumerable<TAG_PREMIUM> premiums)
@@ -71,7 +79,7 @@ internal static class NativePlainCardsOption
         }
 
         var actors = UnityEngine.Object.FindObjectsByType<Actor>(FindObjectsSortMode.None)
-            .Where(actor => actor != null && actor.gameObject.activeInHierarchy && actor.GetEntityDef() != null).ToArray();
+            .Where(actor => actor != null && actor.gameObject.activeInHierarchy).ToArray();
         foreach (var actor in actors) Note("scene", actor);
 
         var zones = new JsonNode();
@@ -95,9 +103,9 @@ internal static class NativePlainCardsOption
         {
             if (HistoryTiles?.GetValue(manager) is IEnumerable tiles)
                 foreach (var tile in tiles.OfType<Component>().Where(tile => tile != null))
-                    historyActors.AddRange(tile.GetComponentsInChildren<Actor>(true).Where(actor => actor.GetEntityDef() != null));
+                    historyActors.AddRange(tile.GetComponentsInChildren<Actor>(true));
             if (CurrentBigCard?.GetValue(manager) is Component big && big != null)
-                historyActors.AddRange(big.GetComponentsInChildren<Actor>(true).Where(actor => actor.GetEntityDef() != null));
+                historyActors.AddRange(big.GetComponentsInChildren<Actor>(true));
         }
         foreach (var actor in historyActors) Note("history", actor);
 
