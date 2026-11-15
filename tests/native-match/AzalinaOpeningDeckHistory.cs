@@ -85,7 +85,48 @@ internal static partial class Program
             }
         }
         Check(handCopies > 0 && deckCopies > 0, "fixture must deal copies into the opening hand and keep others in the deck");
+        int npcCopies = AzalinaOpeningNpcCopies();
         Console.WriteLine("PASS azalina opening deck: " + handCopies + " opening-hand copies revealed once into HAND, "
-            + deckCopies + " deck copies and " + beatrixCopies + " NPC Beatrix copies anonymous, all created with the game");
+            + deckCopies + " deck copies, " + beatrixCopies + " NPC Beatrix copies and " + npcCopies
+            + " NPC Azalina copies anonymous, all created with the game");
+    }
+
+    // The NPC plays Azalina: its copies of the human's cards stay anonymous for the human, in its deck and in its opening hand.
+    private static int AzalinaOpeningNpcCopies()
+    {
+        var npcDeck = new LocalDeck("Azalina NPC fixture", "HERO_09", new[] { "JAIL_430" }.Concat(Enumerable.Repeat("CS2_120", 19)).ToArray());
+        int total = 0, inHand = 0;
+        foreach (int seat in new[] { 1, 2 })
+        for (int seed = 1; seed <= 3; seed++)
+        {
+            var capture = new Capture();
+            var match = new NativeMatch(capture.Send, Cards.FromId("HERO_01"), Enumerable.Repeat(Cards.FromId("CS2_182"), 30), seed)
+                { StartingPlayer = seat };
+            typeof(NativeMatch).GetField("opponentDeck", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(match, npcDeck);
+            match.Start();
+            var game = match.Game;
+            string run = " (NPC Azalina, seed " + seed + ", seat " + seat + ")";
+            var opening = ((PowerHistory)capture.Packets.First(p => p.Id == 19).Message).List;
+            int block = opening.FindIndex(r => r.HasPowerStart);
+            var rows = capture.Packets.Where(p => p.Id == 19).SelectMany(p => ((PowerHistory)p.Message).List).ToList();
+            int azalina = game.IdEntityDic.Values.Single(e => e.Controller == game.Player2 && e.Card.Id == "JAIL_430").Id;
+            var copies = game.IdEntityDic.Values.Where(e => e.Controller == game.Player2 && e.Id != azalina
+                && e[GameTag.CREATOR] == azalina).ToArray();
+            Check(copies.Length == 20, "NPC Azalina must add 20 copies, got " + copies.Length + run);
+            foreach (var copy in copies)
+            {
+                total++;
+                if (copy.Zone.Type == EngineZone.HAND) inHand++;
+                string where = copy.Card.Id + "#" + copy.Id + run;
+                var full = rows.Single(r => r.HasFullEntity && r.FullEntity.Entity == copy.Id);
+                Check(opening.IndexOf(full) is int index && index >= 0 && index < block && string.IsNullOrEmpty(full.FullEntity.Name)
+                    && TagValue(full.FullEntity.Tags, GameTag.ZONE) == (int)EngineZone.DECK,
+                    "NPC copy must be an anonymous DECK FULL before the opening block: " + where);
+                Check(!rows.Any(r => r.HasShowEntity && r.ShowEntity.Entity == copy.Id && !string.IsNullOrEmpty(r.ShowEntity.Name)),
+                    "NPC Azalina copy identity sent to the human: " + where);
+            }
+        }
+        Check(inHand > 0, "NPC fixture must deal Azalina copies into the NPC's opening hand");
+        return total;
     }
 }

@@ -821,11 +821,12 @@ namespace SabberStoneCore.Model
 
 			HistoryFacts.FreezeInitial(this);
             Actions.PayloadRules.CaptureTracking(this);
+            int preparedFull = PowerHistory.Full.Count, preparedLast = PowerHistory.Last.Count;
             CardSets.Client.Sets.AzalinaSoulsever.PrepareDecks(this);
             DeckbuildingRules.Prepare(this);
             // Deckbuilding cards (Azalina's copies, Beatrix's sideboard copies) are starting deck cards: the client must create
             // them with the game, before the opening block, or a copy dealt into the opening hand shows face up at the deck.
-            if (opening != null) PowerHistory.HoistOpeningDeckEntities(opening);
+            if (opening != null) PowerHistory.HoistOpeningDeckEntities(opening, preparedFull, preparedLast);
 
 			// Capture restrictions before any opening card leaves its deck.
 			StartOfGameRules.Capture(this);
