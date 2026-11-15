@@ -147,7 +147,7 @@
 "AT_097":["a04c09fc","<b>Spott</b>"],
 "AT_098":["c987d15c","<b>Kampfschrei:</b> Kopiert die Heldenfähigkeit Eures Gegners."],
 "AT_099":["1e24a32a","<b>Inspiration:</b> Ruft einen Kriegskodo (3/5) herbei."],
-"AT_100":["a563ee55","<b>Inspiration:</b> Ruft einen Rekruten der Silbernen Hand (1/1) herbei."],
+"AT_100":["2328ec0e","<b>Inspiration:</b> Ruft einen Rekruten der Silbernen Hand ({0}) herbei."],
 "AT_103":["69282029","<b>Kampfschrei:</b>\nVerursacht 4 Schaden."],
 "AT_104":["979b79c3","[x]<b>Kampfschrei:</b> Deckt einen\nDiener aus jedem Deck auf. Stellt\nbei Eurem Helden #7 Leben\nwieder her, wenn Euer\nDiener mehr kostet."],
 "AT_105":["7a5f0b65","<b>Kampfschrei:</b> Fügt sich selbst 3 Schaden zu."],

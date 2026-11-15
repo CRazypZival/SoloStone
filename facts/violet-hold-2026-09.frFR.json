@@ -147,7 +147,7 @@
 "AT_097":["a04c09fc","<b>Provocation</b>"],
 "AT_098":["c987d15c","<b>Cri de guerre :</b> copie le pouvoir héroïque de votre adversaire."],
 "AT_099":["1e24a32a","<b>Exaltation : </b> invoque un kodo de guerre 3/5."],
-"AT_100":["a563ee55","<b>Exaltation :</b> invoque une recrue de la Main\nd’argent 1/1."],
+"AT_100":["2328ec0e","<b>Exaltation_:</b> invoque une recrue de la Main d’argent_{0}."],
 "AT_103":["69282029","<b>Cri de guerre :</b> inflige\n4 points de dégâts."],
 "AT_104":["979b79c3","<b>Cri de guerre :</b> révèle un serviteur de chaque deck. Si le vôtre coûte plus, rend #7 PV à votre héros."],
 "AT_105":["7a5f0b65","<b>Cri de guerre :</b> inflige\n3 points de dégâts à ce serviteur."],

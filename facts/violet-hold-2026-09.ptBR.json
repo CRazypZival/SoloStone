@@ -147,7 +147,7 @@
 "AT_097":["a04c09fc","<b>Provocar</b>"],
 "AT_098":["c987d15c","<b>Grito de Guerra:</b> Copie o Poder Heroico do seu oponente."],
 "AT_099":["1e24a32a","<b>Inspirar:</b> Evoque um Kodo de Guerra 3/5."],
-"AT_100":["a563ee55","<b>Inspirar:</b> Evoque um Recruta do Punho de Prata 1/1."],
+"AT_100":["2328ec0e","<b>Inspirar:</b>\nEvoque um {0} Recruta\ndo Punho de Prata."],
 "AT_103":["69282029","<b>Grito de Guerra:</b> Cause 4 de dano."],
 "AT_104":["979b79c3","<b>Grito de Guerra:</b> Revele um lacaio em cada deck. Se o seu custar mais, restaure #7 de Vida do seu herói."],
 "AT_105":["7a5f0b65","<b>Grito de Guerra:</b> Cause 3 de dano a este lacaio."],

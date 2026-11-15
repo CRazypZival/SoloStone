@@ -147,7 +147,7 @@
 "AT_097":["a04c09fc","<b>Provocación</b>."],
 "AT_098":["c987d15c","<b>Grito de batalla:</b> copia el poder de héroe de tu adversario."],
 "AT_099":["1e24a32a","<b>Inspirar:</b> invoca un kodo de guerra 3/5."],
-"AT_100":["a563ee55","<b>Inspirar:</b> invoca un Recluta de la Mano de Plata 1/1."],
+"AT_100":["2328ec0e","<b>Inspirar:</b> invoca un Recluta de la Mano de_Plata_{0}."],
 "AT_103":["69282029","<b>Grito de batalla:</b> inflige 4 de daño."],
 "AT_104":["979b79c3","<b>Grito de batalla:</b> revela un esbirro de cada mazo. Si el tuyo cuesta más, restaura #7 de salud a tu héroe."],
 "AT_105":["7a5f0b65","<b>Grito de batalla:</b> inflige 3 de daño a este esbirro."],

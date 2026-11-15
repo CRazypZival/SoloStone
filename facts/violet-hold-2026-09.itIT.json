@@ -147,7 +147,7 @@
 "AT_097":["a04c09fc","<b>Provocazione</b>"],
 "AT_098":["c987d15c","[x]<b>Grido di Battaglia:</b>\nsostituisce il tuo Potere Eroe\ncon quello dell'avversario."],
 "AT_099":["1e24a32a","<b>Ispirazione:</b> evoca un Kodo da Guerra 3/5."],
-"AT_100":["a563ee55","<b>Ispirazione:</b> evoca una Recluta Mano d'Argento 1/1."],
+"AT_100":["2328ec0e","<b>Ispirazione:</b> evoca\nuna Recluta Mano d'Argento_{0}."],
 "AT_103":["69282029","<b>Grido di Battaglia:</b> infligge 4 danni."],
 "AT_104":["979b79c3","[x]<b>Grido di Battaglia:</b>\nrigenera #7 Salute al tuo eroe\nse, mostrando un servitore per\n_mazzo, il tuo costa di più."],
 "AT_105":["7a5f0b65","<b>Grido di Battaglia:</b> infligge 3 danni a SE STESSO."],
