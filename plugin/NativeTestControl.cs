@@ -1894,6 +1894,8 @@ internal sealed partial class NativeTestControl
         AssertMainThread();
         var view = new View { MatchId = matchId, OptionsId = match?.HumanOptionsId ?? -1, ChoiceId = match?.HumanChoiceId ?? -1 };
         view.State["turnTimer"] = NativeTurnTimerOption.State(match);
+        try { view.State["opponentPets"] = NativeOpponentPetsOption.State(match); }
+        catch (Exception error) { view.State["opponentPets"] = new JsonNode { { "error", error.GetType().Name + " " + error.Message } }; }
         var front = GameState.Get(); var scene = SceneMgr.Get(); var input = InputManager.Get(); var zone = ZoneMgr.Get();
         view.QueuedChoiceCount = front != null && QueuedChoices?.GetValue(front) is ICollection queued ? queued.Count : -1;
         view.State["queuedChoiceCount"] = view.QueuedChoiceCount;
