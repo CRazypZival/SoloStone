@@ -4760,8 +4760,8 @@ namespace SabberStoneCore.CardSets.Standard
 			cards.Add("EX1_188", new CardDef(new Power
 			{
 				PowerTask = ComplexTask.Create(
-					new RandomMinionTask(GameTag.CARDRACE, (int)Race.BEAST),
-					new SummonTask())
+					new RandomMinionTask(GameTag.CARDRACE, (int)Race.BEAST) { ImplementedOnly = true },
+					new SummonTask(SummonSide.RIGHT))
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -4777,7 +4777,7 @@ namespace SabberStoneCore.CardSets.Standard
 			cards.Add("EX1_189", new CardDef(new Power
 			{
 				PowerTask = ComplexTask.Create(
-					new RandomCardTask(CardType.MINION, CardClass.INVALID, rarity: Rarity.LEGENDARY),
+					new RandomCardTask(CardType.MINION, CardClass.INVALID, rarity: Rarity.LEGENDARY) { ImplementedOnly = true },
 					new AddStackTo(EntityType.HAND))
 			}));
 
@@ -4793,7 +4793,7 @@ namespace SabberStoneCore.CardSets.Standard
 			// --------------------------------------------------------
 			cards.Add("EX1_190", new CardDef(new Power
 			{
-				PowerTask = ComplexTask.SummonAllFriendlyDiedThisTurn()
+				PowerTask = ComplexTask.SummonAllFriendlyDiedThisTurn(rightOfSource: true)
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL

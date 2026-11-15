@@ -436,8 +436,10 @@ namespace SabberStoneCore.CardSets
 			// - ELITE = 1
 			// - CANT_ATTACK = 1
 			// --------------------------------------------------------
+			// 37.0 prints "Can't attack" without the CANT_ATTACK tag, so it is a Silenceable aura (as Specter of Despair).
 			cards.Add("EX1_298", new CardDef(new Power
 			{
+				Aura = new AdaptiveEffect(new SelfCondition(_ => true), GameTag.CANT_ATTACK),
 				Trigger = new Trigger(TriggerType.TURN_END)
 				{
 					SingleTask = ComplexTask.DamageRandomTargets(1, EntityType.ENEMIES, 8)
