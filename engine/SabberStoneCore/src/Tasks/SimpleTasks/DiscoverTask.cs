@@ -298,10 +298,15 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 				case DiscoverType.BASIC_HEROPOWERS:
 				{
 					choiceAction = ChoiceAction.HEROPOWER;
+					// One basic Hero Power per class, taken from the class's base hero (never a skin's variant), and not
+					// the class of the Hero Power I hold now.
+					CardClass heldClass = controller.Hero.HeroPower?.Card.Class ?? controller.Hero.Card.Class;
 					Card[][] cardSets =
 					{
-						Cards.HeroCards().Where(p => !p.ExcludeFromLegacyRandomPools && p != controller.Hero.Card)
-							.Select(p => Cards.FromAssetId(p[GameTag.HERO_POWER])).ToArray()
+						Cards.HeroCards().Where(p => !p.ExcludeFromLegacyRandomPools && p.Class != CardClass.NEUTRAL && p.Class != CardClass.INVALID)
+							.GroupBy(p => p.Class).Select(group => group.OrderBy(p => p.Id, StringComparer.Ordinal).First())
+							.OrderBy(p => (int)p.Class)
+							.Select(p => Cards.FromAssetId(p[GameTag.HERO_POWER])).Where(power => power.Class != heldClass).ToArray()
 					};
 					return cardSets;
 				}
