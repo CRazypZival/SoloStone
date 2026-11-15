@@ -16,7 +16,7 @@ public sealed class ArenaService : IArenaService
             MaxWins = rules.MaxWins, MaxLosses = rules.MaxLosses, MaxSlot = rules.DeckSize,
             Slot = run == null || run.Hero == null ? 0 : run.Picks.Count + (run.Phase == ArenaPhase.Drafting ? 1 : 0),
             HeroCardId = run?.Hero, HeroOffers = run?.HeroOffers.ToList() ?? new List<string>(),
-            Offers = run?.Phase == ArenaPhase.Drafting ? rules.Offers(run.Seed, run.Picks.Count + 1, run.Hero, run.Deck).ToList() : new List<string>(),
+            Offers = run?.Phase == ArenaPhase.Drafting ? run.PendingOffers.ToList() : new List<string>(),
             Deck = run?.Deck.ToList() ?? new List<string>(), Reward = ArenaRun.CopyReward(run?.Reward),
             EntryCost = rules.EntryGold, GoldBalance = profile.Gold
         };
@@ -32,7 +32,11 @@ public sealed class ArenaService : IArenaService
     public ArenaView Begin(string requestId)
     {
         if (!ArenaRun.ValidRequest(requestId)) return Error("Invalid entry request id.");
-        if (profile.ArenaRequestSeen(requestId)) return View();
+        if (profile.ArenaRequestSeen(requestId)) {
+            // A retry of the entry that started the current run is the same call; any other seen id is spent (its run is gone).
+            var current = profile.ArenaRun;
+            return current != null && current.EntryRequestId == requestId ? View() : Error("Entry request already used.");
+        }
         if (profile.ArenaRun != null) return Error("An Arena run is already active.");
         if (profile.Pending != null) return Error("A match is pending.");
         if (profile.HasPendingRewardPresentation || profile.PackRevealPending) return Error("A reward presentation is pending.");
@@ -61,11 +65,15 @@ public sealed class ArenaService : IArenaService
             return Error("Invalid choice slot.");
         return Change(next => {
             var current = next.ArenaRun;
-            if (slot == 0) { current.HeroIndex = index; current.Hero = current.HeroOffers[index]; current.Phase = ArenaPhase.Drafting; }
-            else {
-                var offers = rules.Offers(current.Seed, slot, current.Hero, current.Deck).ToList();
+            // The offer shown is the stored one; the rules generate an offer only when it is first created (next pick below).
+            if (slot == 0) {
+                current.HeroIndex = index; current.Hero = current.HeroOffers[index]; current.Phase = ArenaPhase.Drafting;
+                current.PendingOffers = rules.Offers(current.Seed, 1, current.Hero, current.Deck).ToList();
+            } else {
+                var offers = current.PendingOffers.ToList();
                 current.Picks.Add(new ArenaPick { Offers = offers, Index = index }); current.Deck.Add(offers[index]);
-                if (current.Picks.Count == rules.DeckSize) current.Phase = ArenaPhase.Ready;
+                if (current.Picks.Count == rules.DeckSize) { current.Phase = ArenaPhase.Ready; current.PendingOffers = new List<string>(); }
+                else current.PendingOffers = rules.Offers(current.Seed, current.Picks.Count + 1, current.Hero, current.Deck).ToList();
             }
         });
     }
@@ -90,7 +98,25 @@ public sealed class ArenaService : IArenaService
         return Change(next => next.ArenaRun = null);
     }
 
-    public bool StartMatch(out string error) { error = "not implemented"; return false; }
+    // Ready only. The plugin binds MatchStarter (LocalLadder.StartArenaMatch): it builds the drafted deck, picks the Arena NPC and
+    // stages the native match. Builds without the plugin (unit tests) have none, so the start is refused with a reason.
+    public bool StartMatch(out string error)
+    {
+        var run = profile.ArenaRun;
+        if (run == null || run.Phase != ArenaPhase.Ready) { error = "No Ready Arena run."; return false; }
+        if (profile.Pending != null) { error = "A match is pending."; return false; }
+        if (profile.HasPendingRewardPresentation || profile.PackRevealPending) { error = "A reward presentation is pending."; return false; }
+        var starter = ArenaMatchHook.MatchStarter;
+        if (starter == null) { error = "Arena matches are not available here."; return false; }
+        return starter(run, out error);
+    }
+}
+
+internal delegate bool ArenaMatchStarter(ArenaRun run, out string error);
+
+internal static class ArenaMatchHook
+{
+    internal static ArenaMatchStarter MatchStarter;   // set by the plugin when a save is bound
 }
 
 public sealed partial class LocalProfile

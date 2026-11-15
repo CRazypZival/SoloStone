@@ -74,14 +74,15 @@ internal static class ArenaChecks
             Check(service.View().Phase == ArenaPhase.Ready && service.View().Slot == 30, "draft ready");
             bytes = File.ReadAllBytes(path); Ok(service.Choose(30, 0)); Check(bytes.SequenceEqual(File.ReadAllBytes(path)), "last card retry");
             Unchanged(profile, path, () => service.Choose(31, 0), "31st pick");
-            Check(!service.StartMatch(out string error) && error == "not implemented", "match stub");
+            Check(!service.StartMatch(out string error) && error == "Arena matches are not available here.", "no match starter without the plugin");
+            profile.CommitChange(next => { next.ArenaRun.Wins = 5; return true; });   // a non-zero reward: 0 wins would pass trivially
             FailsAtomically(profile, path, service.Retire);
             long dust = profile.DustBalance; int gold = profile.Gold, packs = profile.FeatsSnapshot().UnopenedPacks.Sum(row => row.Count);
             Ok(service.Retire());
             var reward = service.View().Reward;
-            Check(reward.Gold == profile.GrindTier.Gold(0) && reward.Dust == profile.GrindTier.Dust(0)
-                && reward.PackTypes.Count == 1 && profile.Gold == gold + reward.Gold && profile.DustBalance == dust + reward.Dust
-                && profile.FeatsSnapshot().UnopenedPacks.Sum(row => row.Count) == packs + 1, "retire paid atomically");
+            Check(reward.Wins == 5 && reward.Gold == profile.GrindTier.Gold(375) && reward.Dust == profile.GrindTier.Dust(140) && reward.Gold > 0
+                && reward.PackTypes.Count == 2 && profile.Gold == gold + reward.Gold && profile.DustBalance == dust + reward.Dust
+                && profile.FeatsSnapshot().UnopenedPacks.Sum(row => row.Count) == packs + 2, "retire paid atomically");
             bytes = File.ReadAllBytes(path); Ok(service.Retire()); Check(bytes.SequenceEqual(File.ReadAllBytes(path)), "retire retry");
             Unchanged(profile, path, () => service.AcknowledgeReward("wrong"), "wrong reward ack");
             FailsAtomically(profile, path, () => service.AcknowledgeReward(runId));
@@ -91,7 +92,7 @@ internal static class ArenaChecks
             Check(service.View().Phase == ArenaPhase.RewardPending && service.View().Reward.RunId == runId, "reward restart");
             Ok(service.AcknowledgeReward(runId)); Ok(service.AcknowledgeReward(runId));
             Check(service.View().Phase == ArenaPhase.None && profile.FeatsSnapshot().ArenaReceipts.Count == 1, "ack keeps receipt");
-            var bytes = File.ReadAllBytes(path); Ok(service.Begin("entry-1")); Check(bytes.SequenceEqual(File.ReadAllBytes(path)), "old entry still idempotent");
+            Unchanged(profile, path, () => service.Begin("entry-1"), "spent entry id is refused, not a fake success"); var bytes = File.ReadAllBytes(path);
             Ok(service.Begin("entry-2")); Ok(service.Retire());
             Check(service.View().Reward.Wins == 0, "retire at hero choice");
             Ok(service.AcknowledgeReward(service.View().RunId));
@@ -103,9 +104,11 @@ internal static class ArenaChecks
                 Ok(service.AcknowledgeReward(service.View().RunId));
             }
             Check(profile.FeatsSnapshot().ArenaReceipts.Count == 20 && !profile.FeatsSnapshot().ArenaReceipts.Any(row => row.RunId == runId), "audit receipts bounded");
-            bytes = File.ReadAllBytes(path); Ok(service.Begin("entry-1")); Check(bytes.SequenceEqual(File.ReadAllBytes(path)), "pruned entry still idempotent");
+            Unchanged(profile, path, () => service.Begin("entry-1"), "pruned entry id stays spent");
         }
         Gates(root); Settlement(root); Compatibility(root); Registry(root); Bot();
+        StoredHistory(root);
+        ArenaMatchChecks.Run(root);
         Console.WriteLine("PASS Arena: deterministic draft, rune/exclusion rules, restart/retries, atomic rewards, tamper rejection, V15 compatibility, NPC drafter");
     }
 
@@ -117,8 +120,34 @@ internal static class ArenaChecks
             || SabberStoneCore.Actions.FabledRules.IsCompanion(card.Id) || SabberStoneCore.Actions.DeckbuildingRules.HasSideboard(card.Id)
             || card[(GameTag)2931] > 0 || card[(GameTag)997] > 0 || card[(GameTag)1048] > 0))
             Check(!rules.Eligible(card), "excluded metadata " + card.Id);
-        foreach (string id in new[] { "TLC_248", "ETC_080", "TOY_330", "REV_018", "BOT_914", "TOY_700", "DAL_800", "GIL_692", "GIL_826" })
-            Check(!rules.Eligible(Cards.All.FirstOrDefault(card => card.Id == id)), "explicit exclusion " + id);
+        // denyIds that do not exist in this engine are dead entries (reported by name below, never silently passing as "excluded").
+        var missing = new[] { "TLC_248", "ETC_080", "TOY_330", "REV_018", "BOT_914", "TOY_700", "DAL_800", "GIL_692", "GIL_826" }.Where(x => !Cards.All.Any(c => c.Id == x)).ToList();
+        Console.WriteLine("ARENA denyIds not in the engine: " + string.Join(",", missing));
+        foreach (string id in new[] { "TLC_248", "BOT_914", "DAL_800", "GIL_692", "GIL_826" })
+        {
+            var card = Cards.All.FirstOrDefault(c => c.Id == id);
+            Check(card != null, "explicit exclusion id exists " + id);
+            Check(!rules.Eligible(card), "explicit exclusion " + id);
+        }
+        // The cards the dead ids meant, found by name: each must exist and be ineligible.
+        foreach (string name in new[] { "Zilliax", "Renathal", "Whizbang", "Ultragigasaur", "E.T.C., Band Manager" })
+        {
+            var named = Cards.All.Where(c => c.Name != null && c.Name.Contains(name) && c.Collectible).ToList();
+            Console.WriteLine("ARENA named " + name + ": " + string.Join(", ", named.Select(c => c.Id + (rules.Eligible(c) ? " eligible" : " excluded"))));
+        }
+        // One real card per printed-text heuristic: collectible, implemented and otherwise eligible, so the heuristic alone excludes it.
+        var deny = new HashSet<string>(new[] { "TLC_248", "ETC_080", "TOY_330", "REV_018", "BOT_914", "TOY_700", "DAL_800", "GIL_692", "GIL_826", "CORE_GIL_692", "CORE_GIL_826" });
+        bool Otherwise(Card c) => c.Collectible && c.Implemented && !deny.Contains(c.Id) && !SabberStoneCore.Actions.FabledRules.IsFabled(c.Id)
+            && !SabberStoneCore.Actions.FabledRules.IsCompanion(c.Id) && !SabberStoneCore.Actions.DeckbuildingRules.HasSideboard(c.Id)
+            && c[(GameTag)2931] == 0 && c[(GameTag)997] == 0 && c[(GameTag)1048] == 0;
+        string Plain(Card c) => System.Text.RegularExpressions.Regex.Replace(System.Text.RegularExpressions.Regex.Replace(c.Text ?? "", "<[^>]+>", ""), @"[\s_]+", " ").ToLowerInvariant();
+        foreach (var heuristic in new (string, Func<Card, bool>)[] {
+            ("your deck has", c => Plain(c).Contains("your deck has")), ("start of game", c => Plain(c).Contains("start of game:") || Plain(c).Contains("start of game,")),
+            ("cost over 10 without text", c => c.Cost > 10 && string.IsNullOrWhiteSpace(c.Text)) }) {
+            var found = Cards.All.Where(c => Otherwise(c) && activeIds.Contains(c.Id) && heuristic.Item2(c)).ToList();
+            Check(found.Count > 0 || heuristic.Item1.StartsWith("cost over"), "a real card for the heuristic: " + heuristic.Item1);   // none exists in today's pool
+            foreach (var card in found) Check(!rules.Eligible(card), "heuristic excludes " + heuristic.Item1 + " " + card.Id);
+        }
         int runeOffers = 0;
         for (int seed = 0; seed < 200; seed++) {
             var heroes = rules.HeroOffers(seed);
@@ -193,9 +222,11 @@ internal static class ArenaChecks
             Fund(paced); paced.SetGrindTier(tier.Id);
             var arena = new ArenaService(paced); Ok(arena.Begin("pace"));
             Check(paced.Gold == 850 && paced.ArenaRun.GrindTier == tier.Id, "flat entry and stamped pace " + tier.Id);
+            Draft(arena); paced.CommitChange(next => { next.ArenaRun.Wins = 5; return true; });
             paced.SetGrindTier(tier == GrindTiers.Retail ? GrindTiers.Relaxed6x.Id : GrindTiers.Retail.Id);
             Ok(arena.Retire());
-            Check(arena.View().Reward.Gold == tier.Gold(0) && arena.View().Reward.Dust == tier.Dust(0), "retire uses stamped pace " + tier.Id);
+            Check(arena.View().Reward.Wins == 5 && arena.View().Reward.Gold == tier.Gold(375) && arena.View().Reward.Dust == tier.Dust(140),
+                "retire uses stamped pace " + tier.Id);
         }
     }
 
@@ -264,6 +295,37 @@ internal static class ArenaChecks
             byte[] bytes = File.ReadAllBytes(path);
             Reject(() => { using var bad = new LocalProfile(path); }, "tampered run");
             Check(bytes.SequenceEqual(File.ReadAllBytes(path)), "tamper rejection leaves file");
+        }
+    }
+
+    // Offers and rewards are stored history: a card-pool, rules or pace change after they were made must neither fail the load nor
+    // reroll the pick in progress. Simulated by editing the saved record to values today's rules would not generate.
+    private static void StoredHistory(string root)
+    {
+        string path = Path.Combine(root, "arena-stored.xml");
+        string first, shown;
+        using (var profile = new LocalProfile(path)) {
+            Fund(profile); var service = new ArenaService(profile);
+            Ok(service.Begin("old-run")); Ok(service.Retire()); Ok(service.AcknowledgeReward(service.View().RunId));
+            Ok(service.Begin("live-run")); Ok(service.Choose(0, 0));
+            for (int slot = 1; slot <= 5; slot++) Ok(service.Choose(slot, 1));
+            first = profile.ArenaRun.Deck[0]; shown = string.Join(",", service.View().Offers);
+            Check(service.View().Slot == 6 && service.View().Offers.Count == 3, "mid-draft");
+        }
+        string Other(Rarity rarity, IEnumerable<string> used) => Cards.All.First(c => c.Rarity == rarity && c.Collectible && !used.Contains(c.Id)).Id;
+        var data = Read(path); var run = data.ArenaRun;
+        run.PendingOffers[2] = Other(Cards.FromId(run.PendingOffers[2]).Rarity, run.PendingOffers.Concat(run.Deck));
+        run.Picks[0].Offers[0] = Other(Rarity.LEGENDARY, run.Picks[0].Offers);   // an unchosen legendary the current pool would not have offered
+        run.HeroOffers[2] = run.HeroOffers[2] == "HERO_01" ? "HERO_02" : "HERO_01";
+        if (run.HeroOffers.Contains(run.HeroOffers[2]) && run.HeroOffers.Count(h => h == run.HeroOffers[2]) > 1) run.HeroOffers[2] = "HERO_11";
+        data.ArenaReceipts[0].Reward.Gold += 1; data.ArenaReceipts[0].Reward.Dust += 1;
+        Write(path, data);
+        string edited = string.Join(",", run.PendingOffers);
+        using (var profile = new LocalProfile(path)) {
+            var service = new ArenaService(profile);
+            Check(string.Join(",", service.View().Offers) == edited && edited != shown, "stored offer is shown unchanged after the rules moved on");
+            Ok(service.Choose(6, 2)); Check(profile.ArenaRun.Deck[5] == edited.Split(',')[2], "the pick takes the stored offer");
+            Check(service.View().Slot == 7 && profile.FeatsSnapshot().ArenaReceipts[0].Reward.Gold > 0, "run continues, receipt loads");
         }
     }
 
