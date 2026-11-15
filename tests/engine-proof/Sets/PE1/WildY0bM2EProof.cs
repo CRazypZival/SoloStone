@@ -367,7 +367,7 @@ internal static class WildY0bM2EProof
             KillSettle(f, s);
             Check(f.Player1.BoardZone.Count == 1 && f.Player2.BoardZone.Count == 0, "exactly one minion appears");
             var m = f.Player1.BoardZone[0];
-            Check(m.Card.Cost == 4 && m.Card.Type == CardType.MINION && m.Card.Collectible, "a collectible 4-cost minion: " + m.Card.Id);
+            Check(m.Card.Cost == 4 && m.Card.Type == CardType.MINION && (m.Card.Collectible || m.Card.Id == "LOOT_526d"), "a collectible 4-cost minion (The Darkness candle may already show as LOOT_526d): " + m.Card.Id);
             seen.Add(m.Card.Id);
         }
         Check(seen.Count >= 8, "a wide pool of 4-cost minions: " + seen.Count);

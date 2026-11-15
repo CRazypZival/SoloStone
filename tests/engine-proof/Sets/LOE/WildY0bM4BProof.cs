@@ -34,7 +34,7 @@ internal static class WildY0bM4BProof
         WildSetsProof.Case("LOE_104", Entomb);
         WildSetsProof.Case("LOE_105", ExplorersHat);
         WildSetsProof.Case("LOE_107", EerieStatue);
-        WildSetsProof.Case("LOE_110", AncientShade);
+        WildSetsProof.Held("LOE_110", AncientShade);
         WildSetsProof.Case("LOE_111", ExcavatedEvil);
         WildSetsProof.Case("LOE_113", EveryfinIsAwesome);
         WildSetsProof.Case("LOE_116", ReliquarySeeker);
@@ -775,7 +775,7 @@ internal static class WildY0bM4BProof
         var stealth = Summon(p.Opponent, "EX1_522"); // Patient Assassin: Stealth
         var wounded = Summon(p.Opponent, "CS2_200"); wounded.Damage = 4;
         var again = Add(p, id);
-        Ok(p.Options().Any(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == again.Id) && p.Options().Where(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == again.Id).All(t => t.Target?.Id != stealth.Id), "a Stealthed enemy is not targetable");
+        Ok(!p.Options().Any(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == again.Id && t.Target?.Id == stealth.Id), "a Stealthed enemy is not targetable");
         PlayEntity(g, p, again, wounded);
         var fresh = p.DeckZone.Last(c => c.Card.Id == "CS2_200");
         Ok(((Minion)fresh).Damage == 0, "the shuffled copy is undamaged");

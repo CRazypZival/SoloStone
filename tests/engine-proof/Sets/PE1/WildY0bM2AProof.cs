@@ -166,7 +166,9 @@ internal static class WildY0bM2AProof
         // The Standard Core Water Elemental shares the Minion.Freeze rule: silenced, it does not Freeze (also run in SilenceCantAttackProof).
         Park(p); Park(p.Opponent);
         var water = Summon(p, "CS2_033"); var silencedWater = Summon(p, "CS2_033"); silencedWater.Silence(); g.DeathProcessingAndAuraUpdate();
+        End(g); // back to my turn (the Snowchugger case above ended it)
         var w1 = Summon(p.Opponent, "CS2_182"); var w2 = Summon(p.Opponent, "CS2_182");
+        water.IsExhausted = false; silencedWater.IsExhausted = false;
         Attack(g, water, w1); Attack(g, silencedWater, w2);
         Check(w1.IsFrozen && !w2.IsFrozen, "Water Elemental Freezes; a silenced one does not");
     }

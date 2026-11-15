@@ -28,7 +28,7 @@ internal static class WildY0bM1CProof
     [GroupProof("wild-y0b-m1c-cards", ProofKind.WildCards)]
     internal static void Run()
     {
-        WildSetsProof.Case("FP1_013", (g, p, id) => {
+        WildSetsProof.Held("FP1_013", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 8 && card.ATK == 6 && card.Health == 8 && card.IsRace(Race.UNDEAD) && card.Rarity == Rarity.LEGENDARY, "Kel'Thuzad is an 8-mana 6/8 Undead Legendary");
             var kt = Summon(p, id);
@@ -77,7 +77,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(Describe(opp) == id + ":6/8,CS2_182:4/5" && p.BoardZone.Count == 0, "the opponent's Kel'Thuzad returns only the opponent's minions at my turn's end: " + Describe(opp) + " | " + Describe(p));
             End(g);
         });
-        WildSetsProof.Case("FP1_014", (g, p, id) => {
+        WildSetsProof.Held("FP1_014", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 5 && card.ATK == 7 && card.Health == 4 && card.IsRace(Race.UNDEAD) && card.Rarity == Rarity.LEGENDARY, "Stalagg is a 5-mana 7/4 Undead Legendary");
             Resume(g, next => { // Feugen died first, then Stalagg.
@@ -113,7 +113,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(p.BoardZone.Count == 7 && p.BoardZone.Count(m => m.Card.Id == "FP1_014t") == 1, "a board with a free slot after Stalagg's death gets Thaddius: " + Describe(p));
             End(g);
         });
-        WildSetsProof.Case("FP1_015", (g, p, id) => {
+        WildSetsProof.Held("FP1_015", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 5 && card.ATK == 4 && card.Health == 7 && card.IsRace(Race.UNDEAD) && card.Rarity == Rarity.LEGENDARY, "Feugen is a 5-mana 4/7 Undead Legendary");
             Resume(g, next => { // Stalagg died first, then Feugen.
@@ -147,7 +147,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(p.BoardZone.Count == 7 && p.BoardZone.Count(m => m.Card.Id == "FP1_014t") == 1, "the free slot of the dead Feugen takes Thaddius: " + Describe(p));
             End(g);
         });
-        WildSetsProof.Case("FP1_016", (g, p, id) => {
+        WildSetsProof.Held("FP1_016", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 4 && card.ATK == 3 && card.Health == 5 && card.IsRace(Race.UNDEAD), "Wailing Soul is a 4-mana 3/5 Undead");
             var kings = Summon(p, "CS2_182"); Play(g, p, "CS2_092", kings);
@@ -171,7 +171,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(enemy.AttackDamage == 4 && enemyTaunt.HasTaunt == false && held.AttackDamage == 8, "the opponent's Soul silences the opponent's minions only");
             End(g);
         });
-        WildSetsProof.Case("FP1_017", (g, p, id) => {
+        WildSetsProof.Held("FP1_017", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 2 && card.ATK == 1 && card.Health == 4 && card.IsRace(Race.UNDEAD), "Nerub'ar Weblord is a 2-mana 1/4 Undead");
             var bc = Add(p, "CS2_188"); var plain = Add(p, "CS2_182"); var spell = Add(p, "CS2_029"); var oppBc = Add(opp, "CS2_188");
@@ -412,7 +412,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(ally.Health == 8 && p.BoardZone.All(m => m.Health == m.Card.Health), "the opponent's Cultist buffs the opponent's minions");
             End(g);
         });
-        WildSetsProof.Case("FP1_024", (g, p, id) => {
+        WildSetsProof.Held("FP1_024", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 2 && card.ATK == 1 && card.Health == 3 && card.IsRace(Race.UNDEAD), "Unstable Ghoul is a 2-mana 1/3 Undead");
             var ghoul = Summon(p, id); Core2026Proof.Check(ghoul.HasTaunt, "Unstable Ghoul has Taunt");
@@ -480,7 +480,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(opp.BoardZone.Count == 1 && opp.BoardZone[0].Id != t.Id, "the opponent's cast works the same way");
             End(g);
         });
-        WildSetsProof.Case("FP1_026", (g, p, id) => {
+        WildSetsProof.Held("FP1_026", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 4 && card.ATK == 5 && card.Health == 5 && card.IsRace(Race.UNDEAD) && card.Class == CardClass.ROGUE, "Anub'ar Ambusher is a 4-mana 5/5 Undead Rogue");
             var a = Summon(p, "CS2_182"); var b = Summon(p, "CS2_168"); var c = Summon(p, "CS2_179"); var amb = Summon(p, id);
@@ -518,7 +518,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(opp.HandZone.Count == 1 && opp.HandZone.Single().Id == mate.Id && p.HandZone.Count == 10, "the opponent's Ambusher returns the opponent's minion");
             End(g);
         });
-        WildSetsProof.Case("FP1_027", (g, p, id) => {
+        WildSetsProof.Held("FP1_027", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 3 && card.ATK == 1 && card.Health == 4 && card.IsRace(Race.UNDEAD), "Stoneskin Gargoyle is a 3-mana 1/4 Undead");
             var garg = Summon(p, id); garg.Damage = 3;
@@ -544,7 +544,7 @@ internal static class WildY0bM1CProof
             End(g);
             Core2026Proof.Check(theirs.Damage == 2 && garg.Damage == 0, "and not at mine; mine heals at mine");
         });
-        WildSetsProof.Case("FP1_028", (g, p, id) => {
+        WildSetsProof.Held("FP1_028", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 1 && card.ATK == 1 && card.Health == 2 && card.IsRace(Race.UNDEAD), "Undertaker is a 1-mana 1/2 Undead");
             var under = Summon(p, id);
@@ -580,7 +580,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(ut.AttackDamage == 2 && ut.Health == 3, "but gains for its own side");
             End(g);
         });
-        WildSetsProof.Case("FP1_029", (g, p, id) => {
+        WildSetsProof.Held("FP1_029", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 3 && card.ATK == 4 && card.Health == 4, "Dancing Swords is a 3-mana 4/4");
             var swords = Summon(p, id);
@@ -609,7 +609,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(p.HandZone.Count == mine + 1, "the opponent's Swords make me draw");
             End(g);
         });
-        WildSetsProof.Case("FP1_030", (g, p, id) => {
+        WildSetsProof.Held("FP1_030", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 5 && card.ATK == 5 && card.Health == 5 && card.IsRace(Race.UNDEAD) && card.Rarity == Rarity.LEGENDARY, "Loatheb is a 5-mana 5/5 Undead Legendary");
             var oppSpell = Add(opp, "CS2_029"); var oppMinion = Add(opp, "CS2_182"); var mySpell = Add(p, "CS2_029");
@@ -657,7 +657,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(mySpell.Cost == 9, "still raised on my turn");
             End(g); Core2026Proof.Check(mySpell.Cost == 4, "and gone after");
         });
-        WildSetsProof.Case("FP1_031", (g, p, id) => {
+        WildSetsProof.Held("FP1_031", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 4 && card.ATK == 1 && card.Health == 7 && card.IsRace(Race.UNDEAD) && card.Rarity == Rarity.LEGENDARY, "Baron Rivendare is a 4-mana 1/7 Undead Legendary");
             var baron = Summon(p, id); var swords = Summon(p, "FP1_029"); var egg = Summon(p, "FP1_007");

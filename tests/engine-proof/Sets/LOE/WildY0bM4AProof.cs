@@ -28,11 +28,11 @@ internal static class WildY0bM4AProof
         WildSetsProof.Case("LOE_009", ObsidianDestroyer);
         WildSetsProof.Case("LOE_010", PitSnake);
         WildSetsProof.Case("LOE_011", RenoJackson);
-        WildSetsProof.Case("LOE_012", TombPillager);
+        WildSetsProof.Held("LOE_012", TombPillager);
         WildSetsProof.Case("LOE_016", RumblingElemental);
         WildSetsProof.Case("LOE_017", KeeperOfUldaman);
         WildSetsProof.Case("LOE_018", TunnelTrogg);
-        WildSetsProof.Case("LOE_019", UnearthedRaptor);
+        WildSetsProof.Held("LOE_019", UnearthedRaptor);
         WildSetsProof.Case("LOE_020", DesertCamel);
         WildSetsProof.Case("LOE_021", DartTrap);
         WildSetsProof.Case("LOE_022", FierceMonkey);

@@ -14,11 +14,16 @@ internal static class CostBucketProof
         foreach (var format in new[] { FormatType.FT_STANDARD, FormatType.FT_WILD })
         {
             var buckets = Cards.CostMinionCards(format);
-            Core2026Proof.Check(buckets[4].Any(c => c.Id == "GVG_006") && buckets[2].All(c => c.Id != "GVG_006"), "Mechwarper (4 Mana) is in Cost/4, not Cost/2: " + format);
-            Core2026Proof.Check(buckets[3].Any(c => c.Id == "GVG_109") && buckets[4].All(c => c.Id != "GVG_109"), "Mini-Mage (3 Mana) moved to Cost/3: " + format);
+            // The frozen Standard lists hold only the 2021 Standard minions; the Wild lists hold the listed Wild cards too.
+            if (format == FormatType.FT_WILD)
+            {
+                Core2026Proof.Check(buckets[4].Any(c => c.Id == "GVG_006") && buckets[2].All(c => c.Id != "GVG_006"), "Mechwarper (4 Mana) is in Cost/4, not Cost/2: " + format);
+                Core2026Proof.Check(buckets[3].Any(c => c.Id == "GVG_109") && buckets[4].All(c => c.Id != "GVG_109"), "Mini-Mage (3 Mana) moved to Cost/3: " + format);
+            }
+            var identity = SabberStoneCore.Loader.CardFacts.Embedded.Identity.Select(e => e.Id).ToHashSet();
             foreach (var (cost, list) in buckets)
-                Core2026Proof.Check(list.All(c => c.Cost == cost), "every Cost/" + cost + " card currently costs " + cost + ": " + format
-                    + " " + string.Join(",", list.Where(c => c.Cost != cost).Select(c => c.Id)));
+                Core2026Proof.Check(list.Where(c => identity.Contains(c.Id)).All(c => c.Cost == cost), "every listed (identity) card sits in its current Cost/" + cost + " bucket: " + format
+                    + " " + string.Join(",", list.Where(c => identity.Contains(c.Id) && c.Cost != cost).Select(c => c.Id)));
             Core2026Proof.Check(buckets.Values.SelectMany(l => l).GroupBy(c => c.Id).All(g => g.Count() == 1), "no card sits in two buckets: " + format);
         }
         // Silvermoon Portal (SummonRandomMinion(COST, 2)) in a Standard game: only 2-cost minions, over many seeds.

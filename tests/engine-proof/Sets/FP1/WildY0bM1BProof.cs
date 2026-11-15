@@ -102,7 +102,7 @@ internal static class WildY0bM1BNaxxProof
             End(g); End(g);
             Core2026Proof.Check(opp.BoardZone.Count == 2 && p.BoardZone.Count == 1, "and only once");
         });
-        WildSetsProof.Case("FP1_004", (g, p, id) => {
+        WildSetsProof.Held("FP1_004", (g, p, id) => {
             var opp = p.Opponent;
             var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 2 && card.ATK == 2 && card.Health == 2, "Mad Scientist is a 2-mana 2/2");
@@ -199,7 +199,7 @@ internal static class WildY0bM1BNaxxProof
             Core2026Proof.Check(opp.BoardZone.Count == 1 && opp.BoardZone.Single().Card.Id == "FP1_007t", "the opponent's Egg hatches on the opponent's side");
             End(g); // a real action boundary (see FP1_002)
         });
-        WildSetsProof.Case("FP1_009", (g, p, id) => {
+        WildSetsProof.Held("FP1_009", (g, p, id) => {
             var opp = p.Opponent;
             var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 3 && card.ATK == 2 && card.Health == 8 && card.Tags.GetValueOrDefault(GameTag.TAUNT) == 1, "Deathlord is a 3-mana 2/8 Taunt");
@@ -302,7 +302,7 @@ internal static class WildY0bM1BNaxxProof
             Core2026Proof.Check(p.Hero.Damage == 7 && opp.Hero.Damage == 9, "the opponent's Chow heals MY hero");
             End(g);
         });
-        WildSetsProof.Case("FP1_005", (g, p, id) => {
+        WildSetsProof.Held("FP1_005", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 3 && card.ATK == 2 && card.Health == 2 && card.Tags.GetValueOrDefault(GameTag.STEALTH) == 1, "Shade of Naxxramas is a 3-mana 2/2 Stealth");
             var shade = Summon(p, id);
@@ -329,7 +329,7 @@ internal static class WildY0bM1BNaxxProof
             End(g);
             Core2026Proof.Check(theirs.AttackDamage == 3, "not at mine");
         });
-        WildSetsProof.Case("FP1_008", (g, p, id) => {
+        WildSetsProof.Held("FP1_008", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 5 && card.ATK == 4 && card.Health == 6, "Spectral Knight is a 5-mana 4/6");
             var knight = Summon(opp, id); var own = Summon(p, id);

@@ -56,7 +56,7 @@ internal static class ClassHeroesProof
         // patches 17.0 and 25.0; its note on a 2023 Twist fix is format-specific), without the class of the Hero Power the player holds.
         var discover = NewGame(CardClass.MAGE);
         var expectedPowers = new[] { "CS2_102", "CS2_049", "CS2_083b", "CS2_101", "DS1h_292", "CS2_017", "CS2_056", "CS1h_001" }
-            .Select(id => Cards.FromId(id).AssetId).Concat(new[] { 60224, 78164 }) // Demon Claws, Ghoul Charge
+            .Select(id => Cards.FromId(id).AssetId).Concat(new[] { 60224, 78162 }) // Demon Claws, Ghoul Charge
             .ToArray();
         new DiscoverTask(DiscoverType.BASIC_HEROPOWERS, 100).Process(discover, discover.Player1, discover.Player1.Hero, null);
         var offeredPowers = discover.Player1.Choice.Choices.Select(id => discover.IdEntityDic[id].Card.AssetId);

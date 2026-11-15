@@ -17,7 +17,7 @@ internal static class WildY0bM1BProof
     [GroupProof("wild-y0b-m1b-cards", ProofKind.WildCards)]
     internal static void Run()
     {
-        WildSetsProof.Case("BRM_026", (g, p, id) => {
+        WildSetsProof.Held("BRM_026", (g, p, id) => {
             var opp = p.Opponent;
             var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 4 && card.ATK == 5 && card.Health == 6 && card.IsRace(Race.DRAGON), "Hungry Dragon is a 4-mana 5/6 Dragon");

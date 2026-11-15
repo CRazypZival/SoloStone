@@ -290,7 +290,7 @@ internal static class WildY0bM3BProof
             Check(p.Hero.Weapon.AttackDamage == 5, "a stolen Buccaneer buffs its new controller's weapon too: " + p.Hero.Weapon.AttackDamage);
         });
 
-        WildSetsProof.Case("AT_030", (g, p, id) => {
+        WildSetsProof.Held("AT_030", (g, p, id) => {
             var enemy = Summon(p.Opponent, Yeti); var friend = Summon(p, Yeti); var wisp = Summon(p.Opponent, Wisp);
             var stealthy = Summon(p.Opponent, Yeti); stealthy.HasStealth = true;
             var noCombo = Add(p, id);
@@ -326,7 +326,7 @@ internal static class WildY0bM3BProof
             Check(friend.Damage == 2, "the opponent's Combo hits my minion");
         });
 
-        WildSetsProof.Case("AT_031", (g, p, id) => {
+        WildSetsProof.Held("AT_031", (g, p, id) => {
             var cut = Summon(p, id); var wall = Summon(p.Opponent, Wisp);
             Check(cut.AttackDamage == 2 && cut.Health == 2, "Cutpurse is 2/2");
             int coins = p.HandZone.Count(c => c.Card.Id == Coin);
@@ -480,7 +480,7 @@ internal static class WildY0bM3BProof
             Check(theirs.AttackDamage == 2 && again.AttackDamage == 3, "each side's Hero Power affects its own Blade only");
         });
 
-        WildSetsProof.Case("AT_035", (g, p, id) => {
+        WildSetsProof.Held("AT_035", (g, p, id) => {
             var seen = new HashSet<int>();
             for (int round = 0; round < 6; round++)
             {

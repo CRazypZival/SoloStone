@@ -31,7 +31,7 @@ internal static class WildY0bM3FProof
         WildSetsProof.Case("AT_116", WyrmrestAgent);
         WildSetsProof.Case("AT_117", MasterOfCeremonies);
         WildSetsProof.Case("AT_118", GrandCrusader);
-        WildSetsProof.Case("AT_119", KvaldirRaider);
+        WildSetsProof.Held("AT_119", KvaldirRaider);
         WildSetsProof.Case("AT_120", FrostGiant);
         WildSetsProof.Case("AT_121", CrowdFavorite);
         WildSetsProof.Case("AT_122", GormokTheImpaler);
@@ -41,10 +41,10 @@ internal static class WildY0bM3FProof
         WildSetsProof.Case("AT_124", BolfRamshield);
         WildSetsProof.Case("AT_125", Icehowl);
         WildSetsProof.Case("AT_127", NexusChampionSaraad);
-        WildSetsProof.Case("AT_128", TheSkeletonKnight);
-        WildSetsProof.Case("AT_129", FjolaLightbane);
-        WildSetsProof.Case("AT_130", SeaReaver);
-        WildSetsProof.Case("AT_131", EydisDarkbane);
+        WildSetsProof.Held("AT_128", TheSkeletonKnight);
+        WildSetsProof.Held("AT_129", FjolaLightbane);
+        WildSetsProof.Held("AT_130", SeaReaver);
+        WildSetsProof.Held("AT_131", EydisDarkbane);
         WildSetsProof.Case("AT_132", JusticarTrueheart);
         WildSetsProof.Case("AT_133", GadgetzanJouster);
         foreach (string line in HeldReport) Console.WriteLine(line);

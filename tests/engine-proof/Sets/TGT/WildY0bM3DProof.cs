@@ -649,7 +649,7 @@ internal static class WildY0bM3DProof
             FillBoard(me2);
             Ok(me2.BoardZone.IsFull, "board full");
             me2.Hero.HeroPower.IsExhausted = false;
-            Ok(g2.Process(HeroPowerTask.Any(me2)), "full-board power is accepted and does not stall");
+            Ok(!g2.Process(HeroPowerTask.Any(me2)), "a hero power that needs a free slot is refused on a full board and does not stall");
             Ok(me2.BoardZone.Count == 7 && me2.Choice == null, "no summon on a full board");
             // Clone: pending behaviour continues.
             Resume(g, next =>

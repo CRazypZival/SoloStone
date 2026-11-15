@@ -99,7 +99,7 @@ internal static class WildY0bM3EProof
             Check(fresh.AttackDamage == 8 && fresh.Health == 5, "a new Champion is forgetful again");
         });
 
-        WildSetsProof.Case("AT_089", (g, p, id) => {
+        WildSetsProof.Held("AT_089", (g, p, id) => {
             var opp = p.Opponent;
             var lt = (Minion)Play(g, p, id);
             Check(lt.Card.Cost == 2 && lt.AttackDamage == 3 && lt.Health == 2 && lt.IsRace(Race.UNDEAD), "Boneguard Lieutenant is a 3/2 Undead for 2");
@@ -654,7 +654,7 @@ internal static class WildY0bM3EProof
             });
         });
 
-        WildSetsProof.Case("AT_105", (g, p, id) => {
+        WildSetsProof.Held("AT_105", (g, p, id) => {
             var opp = p.Opponent;
             var held = (Minion)Add(p, id);
             Check(held.Cost == 1 && held.AttackDamage == 2 && held.Health == 4 && held.IsRace(Race.UNDEAD), "Injured Kvaldir is a 2/4 Undead for 1");

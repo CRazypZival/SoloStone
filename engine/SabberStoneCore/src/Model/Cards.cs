@@ -133,7 +133,7 @@ namespace SabberStoneCore.Model
             foreach (string name in LegacyGenerationV1.Names.Where(n => n.StartsWith("Wild/Class/", StringComparison.Ordinal)))
                 Wild.Add((CardClass)Enum.Parse(typeof(CardClass), name.Substring("Wild/Class/".Length)), LegacyGenerationV1.Get(name));
             // #141 replaces these pools with a format-aware accessor; until then the frozen cost buckets keep their membership and
-            // are regrouped by each card's CURRENT cost (a Wild identity row can change it: Mechwarper 2 -> 4), so a random-by-cost
+            // are regrouped by each card's CURRENT cost when a Wild identity row changed it (Mechwarper 2 -> 4), so a random-by-cost
             // effect never returns a card of another cost. Original relative order stays; moved cards are appended to their new
             // bucket in frozen-list order (buckets ascending).
             StandardCostMinionCards = RegroupByCurrentCost(LegacyGenerationV1.Names.Where(n => n.StartsWith("Standard/Cost/", StringComparison.Ordinal))
@@ -173,18 +173,22 @@ namespace SabberStoneCore.Model
 			Data.Cards.Remove("HERO_01c"); // HERO Deathwing
 		}
 
+		// Only cards whose Cost a Wild identity row changed move (other frozen mismatches are historical quirks the golden games pin).
 		private static Dictionary<int, List<Card>> RegroupByCurrentCost(Dictionary<int, List<Card>> frozen)
 		{
+			var identity = new HashSet<string>(CardFacts.Embedded.Identity.Where(e => e.Id != null).Select(e => e.Id), StringComparer.Ordinal);
+			bool Moves(Card card, int bucket) => card.Cost != bucket && identity.Contains(card.Id);
 			var regrouped = frozen.Keys.ToDictionary(k => k, k => new List<Card>());
 			foreach (int bucket in frozen.Keys.OrderBy(k => k))
 				foreach (Card card in frozen[bucket])
-				{
-					if (!regrouped.ContainsKey(card.Cost)) regrouped[card.Cost] = new List<Card>();
-					if (card.Cost == bucket) regrouped[bucket].Add(card);
-				}
+					if (!Moves(card, bucket)) regrouped[bucket].Add(card);
 			foreach (int bucket in frozen.Keys.OrderBy(k => k))
 				foreach (Card card in frozen[bucket])
-					if (card.Cost != bucket) regrouped[card.Cost].Add(card);
+					if (Moves(card, bucket))
+					{
+						if (!regrouped.ContainsKey(card.Cost)) regrouped[card.Cost] = new List<Card>();
+						regrouped[card.Cost].Add(card);
+					}
 			return regrouped;
 		}
 

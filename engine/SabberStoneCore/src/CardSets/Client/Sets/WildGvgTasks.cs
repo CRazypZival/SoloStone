@@ -31,9 +31,12 @@ namespace SabberStoneCore.CardSets.Client.Sets
 				}
 			});
 
-		/// <summary>The minion list for a Cost. Cards.cs already regroups the frozen cost buckets by current Cost (#141), so no re-check is needed.</summary>
+		/// <summary>The minion list for a Cost: Cards.cs regroups the frozen buckets for identity-row cost changes (#141), and this still drops the
+		/// frozen quirks (a card whose own Cost or type differs from its bucket), so only minions that cost exactly that now are drawn. Not redundant.</summary>
 		internal static List<Card> MinionsCosting(FormatType format, int cost) =>
-			Cards.CostMinionCards(format).TryGetValue(cost, out List<Card> pool) ? pool : new List<Card>();
+			Cards.CostMinionCards(format).TryGetValue(cost, out List<Card> pool)
+				? pool.Where(card => card.Cost == cost && card.Type == CardType.MINION && card.Collectible).ToList()
+				: new List<Card>();
 
 		/// <summary>Summon one random minion of this Cost where the Deathrattle owner stood; nothing when no minion costs that much.</summary>
 		public static ISimpleTask SummonRandomMinionCosting(int cost) =>

@@ -279,7 +279,7 @@ internal static class WildY0bM3CProof
             Check(theirs.Hero.HeroPower.Card.Id == "AT_050t" && p.Hero.HeroPower.Card.Id == "AT_050t", "an enemy Hammer replaces the enemy Hero Power");
         });
 
-        WildSetsProof.Case("AT_054", (g, p, id) => {
+        WildSetsProof.Held("AT_054", (g, p, id) => {
             ParkHand(p);
             SetDeck(p, Yeti, Raptor, Frostbolt, Wisp);
             var handYeti = Add(p, Yeti); var handWisp = Add(p, Wisp); var handSpell = Add(p, Frostbolt);

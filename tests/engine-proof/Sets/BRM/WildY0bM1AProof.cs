@@ -312,7 +312,7 @@ internal static class WildY0bM1AProof
             Core2026Proof.Check(p.Opponent.BoardZone.Count == 1 && (p.Opponent.BoardZone.Single().Card.Id == "CS2_179" || p.Opponent.BoardZone.Single().Card.Id == "CS1_042")
                 && p.BoardZone.Count == mine, "opponent Resurrect returns only its own dead minions");
         });
-        WildSetsProof.Case("BRM_018", (g, p, id) => {
+        WildSetsProof.Held("BRM_018", (g, p, id) => {
             var drake = Add(p, "BRM_024"); var yeti = Add(p, "CS2_182"); var theirs = Add(p.Opponent, "BRM_024");
             Core2026Proof.Check(drake.Cost == 6, "Dragon costs 6 before Consort");
             var consort = (Minion)Play(g, p, id);
@@ -344,7 +344,7 @@ internal static class WildY0bM1AProof
             var drake2 = Add(p.Opponent, "BRM_024"); g.DeathProcessingAndAuraUpdate();
             Core2026Proof.Check(drake2.Cost == 4 && mine.Cost == 6, "opponent Consort discounts the opponent's Dragons only");
         });
-        WildSetsProof.Case("BRM_020", (g, p, id) => {
+        WildSetsProof.Held("BRM_020", (g, p, id) => {
             int Max(Minion m) => m.Health + m.Damage;
             var sorc = (Minion)Play(g, p, id);
             Core2026Proof.Check(sorc.AttackDamage == 3 && Max(sorc) == 5 && sorc.Card.IsRace(Race.DRAGON), "Dragonkin Sorcerer is a 3/5 Dragon");
