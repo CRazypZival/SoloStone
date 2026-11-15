@@ -10,6 +10,7 @@ if (args.Contains("--pinned-replays-only")) { PinnedReplayEngineProof.Run(); ret
 if (args.Contains("--canonical-policy-only")) { CanonicalPolicyChecks.Run(); return; }
 if (args.Contains("--shadow-trial-only")) { ShadowTrialProof.Run(); return; }
 if (args.Contains("--card-facts-only")) { CardFactsProof.Run(); return; }
+if (args.Length == 2 && args[0] == "--identity-file") { CardFactsProof.IdentityFile(args[1]); return; }
 if (args.Contains("--attack-trigger-cards-only")) { AttackTriggerSweepProof.PositiveControls(); return; }
 if (args.Contains("--attack-trigger-inventory-only")) { AttackTriggerSweepProof.Inventory(); return; }
 if (args.Contains("--core-card-proofs-only")) { Core2026Proof.CardProofs(); return; }

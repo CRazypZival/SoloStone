@@ -40,7 +40,13 @@ internal static class WildSetsProof
                 Core2026Proof.Check(card.Health == data.GetProperty("health").GetInt32(), "pinned health");
                 Core2026Proof.Check(card.Text == data.GetProperty("text").GetString(), "pinned text");
                 foreach (var tag in data.GetProperty("tags").EnumerateObject())
-                    Core2026Proof.Check(card.Tags.GetValueOrDefault((GameTag)int.Parse(tag.Name)) == tag.Value.GetInt32(), "pinned tag " + tag.Name);
+                {
+                    var gameTag = (GameTag)int.Parse(tag.Name);
+                    // The client stores Spell Damage and Overload as a flag (1); the engine's value is the amount the text states.
+                    int? amount = CardFactsProof.TextAmount(gameTag, data.GetProperty("text").GetString());
+                    Core2026Proof.Check(card.Tags.GetValueOrDefault(gameTag) == (CardFactsProof.AmountTags.Contains(gameTag) ? amount : tag.Value.GetInt32()),
+                        "pinned tag " + tag.Name);
+                }
             }
             else ClientExport.Skip("Wild card identity, stats, text and tags against the client export");
             for (int seed = 1; seed <= 3; seed++)
