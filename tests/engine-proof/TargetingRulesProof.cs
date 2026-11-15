@@ -14,7 +14,9 @@ internal static class TargetingRulesProof
     {
         var failures = new List<string>();
         var cases = new (string, Action)[] {
+            ("#121 mass transform skips Untouchable", MassTransformSkipsUntouchable),
             ("#138 transform resets stats", TransformResetsStats),
+            ("#121 Untouchable sweep", UntouchableSweep),
             ("#139 Slime 'em! empty boards", SlimeEmEmptyBoards) };
         foreach (var (name, proof) in cases)
         {
@@ -23,6 +25,19 @@ internal static class TargetingRulesProof
         }
         if (failures.Count != 0) throw new Exception(string.Join("\n", failures));
         Console.WriteLine("PASS targeting rules: " + cases.Length + " proof groups");
+    }
+
+    // #121: Archmage Rafaam transforms every non-Rafaam minion except an Untouchable one.
+    private static void MassTransformSkipsUntouchable()
+    {
+        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+        var portal = Summon(p, "UNG_829t2"); var mine = Summon(p, "CS2_182"); var theirs = Summon(p.Opponent, "CS2_231");
+        var theirPortal = Summon(p.Opponent, "UNG_829t2");
+        Verify(portal.Untouchable && theirPortal.Untouchable, "the Nether Portal is Untouchable");
+        Play(g, p, "TIME_005t9");
+        Verify(mine.Card.Id == "TIME_005t9t" && theirs.Card.Id == "TIME_005t9t", "ordinary minions become sheep");
+        Verify(portal.Card.Id == "UNG_829t2" && theirPortal.Card.Id == "UNG_829t2", "Untouchable portals are not transformed");
+        Verify(p.BoardZone.Contains(portal) && p.Opponent.BoardZone.Contains(theirPortal), "portals stay on their boards");
     }
 
     // #138: a transformed minion shows only the new card's stats, whatever buffed or printed value it had.
@@ -90,6 +105,56 @@ internal static class TargetingRulesProof
         var source = Add(p, id);
         var card = Cards.FromId(id);
         card.Power.PowerTask.Process(g, p, source, target, null);
+    }
+
+    // #121 sweep: every effect that takes minions from the raw board leaves an Untouchable minion (Nether Portal) alone.
+    private static void UntouchableSweep()
+    {
+        var failures = new List<string>();
+        Minion Portal(Controller side) { var m = Summon(side, "UNG_829t2"); Verify(m.Untouchable, "portal is Untouchable"); return m; }
+        void Stays(Minion portal, string what) => Verify(portal.Zone.Type == Zone.PLAY && portal.Card.Id == "UNG_829t2" && !portal.IsDead && portal.Damage == 0, what + ": the portal is untouched");
+
+        Parts(failures, "Medivh the Hallowed", () => {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+            var mine = Portal(p); var theirs = Portal(p.Opponent); var a = Summon(p, "CS2_182"); var b = Summon(p.Opponent, "CS2_182");
+            Play(g, p, "TIME_890");
+            Verify(a.Zone.Type == Zone.GRAVEYARD && b.Zone.Type == Zone.GRAVEYARD, "Medivh destroys ordinary minions");
+            Stays(mine, "Medivh own"); Stays(theirs, "Medivh enemy");
+        });
+        Parts(failures, "Disciple of Demise", () => {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+            var portal = Portal(p.Opponent);
+            Cast(g, p, "TIME_EVENT_301");
+            Stays(portal, "Disciple of Demise");
+        });
+        Parts(failures, "Frame Job", () => {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+            var portal = Portal(p.Opponent); var a = Summon(p.Opponent, "CS2_182"); var b = Summon(p.Opponent, "CS2_182");
+            Play(g, p, "CAP_403");
+            Verify(a.Zone.Type == Zone.GRAVEYARD && b.Zone.Type == Zone.GRAVEYARD, "Frame Job destroys the two ordinary minions");
+            Stays(portal, "Frame Job");
+        });
+        Parts(failures, "Tome Translator missiles", () => {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+            var portal = Portal(p.Opponent);
+            Cast(g, p, "BE_327t2");
+            Stays(portal, "Tome Translator missiles");
+        });
+        for (int seed = 1; seed <= 20; seed++)
+        Parts(failures, "Titanographer Osk seed " + seed, () => { // ability 22: 4 damage to a random enemy
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(seed);
+            var portal = Portal(p.Opponent);
+            Cast(g, p, "TLC_452t22");
+            Stays(portal, "Osk random damage seed " + seed);
+            Verify(p.Opponent.Hero.Damage == 4, "Osk random damage lands on the hero");
+        });
+        Parts(failures, "Desperate Bribe", () => {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+            var portal = Portal(p);
+            Play(g, p, "JAIL_EVENT_102");
+            Verify(portal.Card.Id == "UNG_829t2", "Desperate Bribe leaves the portal as it is");
+        });
+        if (failures.Count != 0) throw new Exception(string.Join("; ", failures));
     }
 
     // #139: Slime 'em! text has no condition; both players get the spell even with no minions anywhere.

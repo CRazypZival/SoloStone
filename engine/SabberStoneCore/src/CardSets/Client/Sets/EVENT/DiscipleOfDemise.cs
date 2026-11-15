@@ -24,7 +24,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
                 for (int i = 0; i < attempts; i++)
                 {
                     var victims = c.BoardZone.Concat(c.Opponent.BoardZone)
-                        .Where(m => m.Id != s.Id && !m.IsDormant && !m.ToBeDestroyed).ToArray();
+                        .Where(m => m.Id != s.Id && !m.Untouchable && !m.ToBeDestroyed).ToArray();
                     if (victims.Length == 0) break;
                     new DestroyTask(EntityType.TARGET, true).Process(g, c, s, victims[g.Random.Next(victims.Length)], stack);
                 }
