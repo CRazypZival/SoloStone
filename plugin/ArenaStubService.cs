@@ -38,8 +38,9 @@ internal sealed class ArenaStubService : IArenaService
         }
         else current.Deck.Add(current.Offers[index]);
         lastSlot = slot; lastIndex = index;
-        current.Slot++;
         current.Phase = current.Deck.Count == 30 ? ArenaPhase.Ready : ArenaPhase.Drafting;
+        // Same numbering as ArenaService: the slot of the pending choice (hero 0, cards 1..30), and 30 once the deck is complete.
+        current.Slot = current.Phase == ArenaPhase.Ready ? 30 : current.Slot + 1;
         current.Offers = current.Phase == ArenaPhase.Ready ? new List<string>()
             : Enumerable.Range(0, 3).Select(i => cards[((current.Slot - 1) * 3 + i) % cards.Length]).ToList();
         return Copy();

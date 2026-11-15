@@ -25,6 +25,8 @@ internal static partial class NativeArena
     private sealed class Reply
     {
         internal int Id, Frame;
+        internal float Born;
+        internal bool Consumed;
         internal string Accessor;
         internal object Payload;
         internal IArenaService Service;
@@ -35,10 +37,30 @@ internal static partial class NativeArena
     private static Reply delivering;
     private static ManualLogSource log;
     private static DraftManager loggedIn;
-    private static string lastError;
-    private static bool mutationPending, startingMatch;
-    internal static bool MatchActive { get; private set; }
-    private static bool Offline => NativeUIProbe.Active;
+    // Packet ids come from the client's own enums so a client update cannot silently desync them.
+    private const int SessionResponseId = (int)ArenaSessionResponse.PacketID.ID, BeginId = (int)DraftBeginning.PacketID.ID,
+        RetiredId = (int)DraftRetired.PacketID.ID, ContentsId = (int)DraftChoicesAndContents.PacketID.ID,
+        ChosenId = (int)DraftChosen.PacketID.ID, ErrorId = (int)DraftError.PacketID.ID, AckId = (int)DraftRewardsAcked.PacketID.ID,
+        PremiumsId = (int)DraftRemovePremiumsResponse.PacketID.ID, SaveId = (int)SaveArenaDeckResponse.PacketID.ID,
+        RatingId = (int)ArenaRatingInfoResponse.PacketID.ID;
+    private const float ReplyTimeoutSeconds = 30f;
+    // lastError is sticky until a mutation succeeds; errorSeq counts every Fail so a driver can tell its own failure from an old one.
+    // Informational notices (Underground, Disclaimer, no store, match not started) go to lastNotice and never touch the error state.
+    private static string lastError, lastNotice;
+    private static int errorSeq;
+    private static bool mutationPending, startingMatch, disabled, arenaMatch;
+    // One owner for "the current match is an Arena match". The follow-up match task derives it from the pending match's mode.
+    internal static bool MatchActive => arenaMatch;
+    internal static void SetMatchContext(bool arena) { arenaMatch = arena; }
+    private static bool Offline => NativeUIProbe.Active && !disabled;
+    // A failure anywhere in Arena disables Arena only. Every patch is gated on Offline, so the rest of the game is untouched.
+    internal static void Disable(string reason, Exception error = null)
+    {
+        if (disabled) return;
+        disabled = true; arenaMatch = false;
+        log?.LogError("NATIVE_ARENA disabled: " + reason + (error == null ? "" : " " + error.GetBaseException().Message));
+    }
+    internal static void Unavailable() => Notice("Arena is unavailable in this session.");
     private static bool InDraft => Offline && SceneMgr.IsInitialized() && SceneMgr.Get().GetMode() == SceneMgr.Mode.DRAFT;
 
     internal static void Initialize(Harmony harmony, ManualLogSource logger)
@@ -94,6 +116,13 @@ internal static partial class NativeArena
     private static void Patch(Harmony harmony, Type owner, string name, string prefix, params Type[] args) =>
         harmony.Patch(Required(owner, name, args.Length == 0 && name != "GetMaxWins" && name != "GetMaxLosses" ? null : args), prefix: new HarmonyMethod(typeof(NativeArena), prefix));
 
+    // Called from the home bootstrap: never throws. A missing DraftManager is not an error here (it is not waited for);
+    // entering Arena bootstraps again and disables Arena if it is still missing.
+    internal static void TryBootstrap()
+    {
+        try { if (disabled || DraftManager.Get() == null) return; Bootstrap(); }
+        catch (Exception error) { Disable("bootstrap failed", error); }
+    }
     internal static void Bootstrap()
     {
         var manager = DraftManager.Get() ?? throw new InvalidOperationException("DraftManager service missing.");
@@ -101,10 +130,14 @@ internal static partial class NativeArena
         SeedSession(manager);
     }
     private static void LoggedIn(DraftManager __instance) { loggedIn = __instance; }
-    internal static void PrepareScene()
+    // False when Arena cannot open: the caller must not navigate (a native notice is already shown).
+    internal static bool PrepareScene()
     {
-        Bootstrap();
-        MatchActive = false;
+        if (disabled) { Unavailable(); return false; }
+        try { Bootstrap(); }
+        catch (Exception error) { Disable("scene bootstrap failed", error); Unavailable(); return false; }
+        arenaMatch = false;
+        return true;
     }
     private static void BeforeScene() { if (Offline) PrepareScene(); }
     private static void SeedSession(DraftManager manager)
@@ -116,14 +149,16 @@ internal static partial class NativeArena
     private static IArenaService Service() => ArenaServiceRegistry.Current ?? throw new InvalidOperationException("Arena service unavailable.");
     private static bool HomeButton(Box __instance)
     {
-        if (!Offline) return true;
+        if (!NativeUIProbe.Active) return true;
+        if (disabled) { Unavailable(); return false; }
         if (!NativeRewardUI.BlocksHome && !NativeAchievements.Active && !NativeProfileSelector.BlocksHome)
             __instance.FireButtonPressEvent(Box.ButtonType.ARENA);
         return false;
     }
     private static bool HomeArena()
     {
-        if (!Offline) return true;
+        if (!NativeUIProbe.Active) return true;
+        if (disabled) { Unavailable(); return false; }
         NativeUIProbe.Navigate(SceneMgr.Mode.DRAFT);
         return false;
     }
@@ -131,7 +166,8 @@ internal static partial class NativeArena
     internal static void Update()
     {
         if (!Offline) return;
-        UpdatePresentation();
+        try { UpdatePresentation(); }
+        catch (Exception error) { Disable("presentation failed", error); return; }
         int count = replies.Count;
         for (int i = 0; i < count; i++)
         {
@@ -139,31 +175,35 @@ internal static partial class NativeArena
             if (!ReferenceEquals(reply.Service, ArenaServiceRegistry.Current)) { if (reply.Mutating) mutationPending = false; continue; }
             if (reply.Frame >= Time.frameCount || reply.Display && DraftDisplay.Get() == null)
             {
-                if (Time.frameCount - reply.Frame < 1800) replies.Enqueue(reply);
-                else { if (reply.Mutating) mutationPending = false; Notice("Arena screen did not register its reply handlers."); }
+                if (Time.realtimeSinceStartup - reply.Born < ReplyTimeoutSeconds) replies.Enqueue(reply);
+                else { if (reply.Mutating) mutationPending = false; Fail("Arena screen did not register its reply handlers.", InDraft); }
                 continue;
             }
             try
             {
                 delivering = reply;
-                if (!Network.Get().FakeHandleType(reply.Id)) throw new InvalidOperationException("Unhandled Arena reply " + reply.Id);
+                Network.Get().FakeHandleType(reply.Id);
+                // FakeHandleType reports success even with no handler; a handler that took the reply read its accessor.
+                if (!reply.Consumed) log.LogWarning("NATIVE_ARENA reply=" + reply.Id + " was not read by any handler");
                 lastReplies.Add(reply.Id);
                 if (lastReplies.Count > 20) lastReplies.RemoveAt(0);
                 log.LogInfo("NATIVE_ARENA reply=" + reply.Id + " phase=" + Read().Phase);
             }
-            catch (Exception error) { Notice("Arena display failed: " + error.GetBaseException().Message); }
+            catch (Exception error) { Fail("Arena display failed: " + error.GetBaseException().Message); }
             finally { delivering = null; if (reply.Mutating) mutationPending = false; }
         }
     }
     private static void Queue(int id, string accessor, object payload, bool display = true)
     {
-        replies.Enqueue(new Reply { Id = id, Accessor = accessor, Payload = payload, Frame = Time.frameCount,
-            Service = ArenaServiceRegistry.Current, Display = display, Mutating = mutationPending && (id == 246 || id == 249 || id == 247 || id == 288) });
+        replies.Enqueue(new Reply { Id = id, Accessor = accessor, Payload = payload, Frame = Time.frameCount, Born = Time.realtimeSinceStartup,
+            Service = ArenaServiceRegistry.Current, Display = display,
+            Mutating = mutationPending && (id == BeginId || id == ChosenId || id == RetiredId || id == AckId) });
     }
     private static bool Result<T>(string accessor, ref T result)
     {
         if (!Offline || delivering?.Accessor != accessor) return true;
         result = (T)delivering.Payload;
+        delivering.Consumed = true;
         return false;
     }
     private static bool SessionReply(ref ArenaSessionResponse __result) => Result("GetArenaSessionResponse", ref __result);
@@ -177,17 +217,29 @@ internal static partial class NativeArena
     private static bool SaveReply(ref SaveArenaDeckResponse __result) => Result("GetSaveArenaDeckResponse", ref __result);
     private static bool ErrorReply(ref DraftError __result) => Result("GetDraftError", ref __result);
 
-    private static void Notice(string message)
+    // Informational: explains a feature that is not there. Never an error.
+    private static void Notice(string message, bool popup = true)
     {
-        lastError = message;
+        lastNotice = message;
+        Show(message, popup);
+    }
+    // A failed action: sticky error plus a sequence number.
+    private static void Fail(string message, bool popup = true)
+    {
+        lastError = message; errorSeq++;
+        Show(message, popup);
+    }
+    private static void Show(string message, bool popup)
+    {
         log?.LogWarning("NATIVE_ARENA " + message);
-        DialogManager.Get()?.ShowPopup(new AlertPopup.PopupInfo { m_id = "solostone.arena.notice", m_headerText = "Arena",
+        if (popup) DialogManager.Get()?.ShowPopup(new AlertPopup.PopupInfo { m_id = "solostone.arena.notice", m_headerText = "Arena",
             m_text = message, m_responseDisplay = AlertPopup.ResponseDisplay.OK });
     }
     private static void Refuse(string message)
     {
-        Notice(message);
-        Queue(251, "GetDraftError", new DraftError { ErrorCode_ = DraftError.ErrorCode.DE_UNKNOWN });
+        Fail(message);
+        // DE_NO_LICENSE only logs a warning in DraftManager.OnError; every other code logs an error or changes the screen.
+        Queue(ErrorId, "GetDraftError", new DraftError { ErrorCode_ = DraftError.ErrorCode.DE_NO_LICENSE });
         QueueContents(Read());
     }
     private static ArenaView Mutate(Func<IArenaService, ArenaView> action)
@@ -206,14 +258,14 @@ internal static partial class NativeArena
     private static bool SessionRequest()
     {
         if (!Offline) return true;
-        Queue(351, "GetArenaSessionResponse", BuildSession(Read()), false);
+        Queue(SessionResponseId, "GetArenaSessionResponse", BuildSession(Read()), false);
         return false;
     }
     private static void QueueContents(ArenaView view)
     {
         if (view.Phase == ArenaPhase.None)
-            Queue(251, "GetDraftError", new DraftError { ErrorCode_ = DraftError.ErrorCode.DE_NOT_IN_DRAFT });
-        else Queue(248, "GetDraftChoicesAndContents", BuildContents(view));
+            Queue(ErrorId, "GetDraftError", new DraftError { ErrorCode_ = DraftError.ErrorCode.DE_NOT_IN_DRAFT });
+        else Queue(ContentsId, "GetDraftChoicesAndContents", BuildContents(view));
     }
     private static bool ContentsRequest(bool __0)
     {
@@ -232,7 +284,7 @@ internal static partial class NativeArena
         var begin = new Network.BeginDraft { DeckID = DeckIdFor(view), Wins = view.Wins, MaxSlot = view.MaxSlot,
             SlotType = DraftSlotType.DRAFT_SLOT_HERO, UniqueSlotTypesForDraft = SlotTypes(), Session = BuildRunSession(view) };
         begin.Heroes.AddRange(view.HeroOffers.Select(Card));
-        Queue(246, "GetBeginDraft", begin);
+        Queue(BeginId, "GetBeginDraft", begin);
         return view;
     }
     private static bool BeginRequest(bool __0)
@@ -262,7 +314,7 @@ internal static partial class NativeArena
         string chosen = offers[__2 - 1];
         ArenaView view = Mutate(service => service.Choose(before.Slot, __2 - 1));
         if (view != null)
-            Queue(249, "GetDraftChosen", new Network.DraftChosen { ChosenCard = new Network.CardChoice { CardDef = Card(chosen) },
+            Queue(ChosenId, "GetDraftChosen", new Network.DraftChosen { ChosenCard = new Network.CardChoice { CardDef = Card(chosen) },
                 SlotType = SlotType(view), NextChoices = Choices(view) });
         return false;
     }
@@ -271,7 +323,7 @@ internal static partial class NativeArena
         if (!Offline) return true;
         if (__0 != DeckId || __3) { Refuse("Arena run is stale."); return false; }
         ArenaView view = Mutate(service => service.Retire());
-        if (view != null) Queue(247, "GetRetiredDraft", new Network.DraftRetired { Deck = DeckId, Chest = Chest(view.Reward) });
+        if (view != null) Queue(RetiredId, "GetRetiredDraft", new Network.DraftRetired { Deck = DeckId, Chest = Chest(view.Reward) });
         return false;
     }
     private static bool AckRequest(long __0, int __1, bool __2)
@@ -280,22 +332,22 @@ internal static partial class NativeArena
         if (__0 != DeckId || __2) { Refuse("Arena reward is stale."); return false; }
         ArenaView before = Read();
         ArenaView view = Mutate(service => service.AcknowledgeReward(before.RunId));
-        if (view != null) Queue(288, "GetRewardsAckDraftID", DeckIdFor(before), false);
+        if (view != null) Queue(AckId, "GetRewardsAckDraftID", DeckIdFor(before), false);
         return false;
     }
     private static bool PremiumsRequest()
     {
         if (!Offline) return true;
-        Queue(355, "GetDraftRemovePremiumsResponse", BuildContents(Read()));
+        Queue(PremiumsId, "GetDraftRemovePremiumsResponse", BuildContents(Read()));
         return false;
     }
     private static bool RatingRequest()
     {
         if (!Offline) return true;
         var view = Read();
-        Queue(719, "GetArenaRatingInfoResponse", new ArenaRatingInfoResponse { PlayerInfo = new ArenaPlayerInfo {
-            NormalWins = view.Wins, NormalLosses = view.Losses, NormalMaxWins = 12, NormalMaxLosses = 3,
-            UndergroundMaxWins = 12, UndergroundMaxLosses = 3 } }, false);
+        Queue(RatingId, "GetArenaRatingInfoResponse", new ArenaRatingInfoResponse { PlayerInfo = new ArenaPlayerInfo {
+            NormalWins = view.Wins, NormalLosses = view.Losses, NormalMaxWins = view.MaxWins, NormalMaxLosses = view.MaxLosses,
+            UndergroundMaxWins = view.MaxWins, UndergroundMaxLosses = view.MaxLosses } }, false);
         return false;
     }
     private static bool ArenaDeckChanges(CollectionDeck __instance, CollectionDeck.ChangeSource __0)
@@ -314,7 +366,7 @@ internal static partial class NativeArena
         var deck = new PegasusUtil.DeckContents { DeckId = DeckId };
         foreach (var group in Read().Deck.GroupBy(id => id))
             deck.Cards.Add(new DeckCardData { Def = new PegasusShared.CardDef { Asset = GameUtils.TranslateCardIdToDbId(group.Key), Premium = 0 }, Qty = group.Count() });
-        Queue(716, "GetSaveArenaDeckResponse", new SaveArenaDeckResponse { Decks = deck });
+        Queue(SaveId, "GetSaveArenaDeckResponse", new SaveArenaDeckResponse { Decks = deck });
         return false;
     }
     private static bool RedraftRequest() { if (!Offline) return true; Refuse("Redraft is unavailable in this Arena mode."); return false; }
@@ -327,9 +379,9 @@ internal static partial class NativeArena
         try
         {
             if (!Service().StartMatch(out string error)) Notice(error ?? "Arena match could not start.");
-            else MatchActive = true;
+            else arenaMatch = true;
         }
-        catch (Exception error) { Notice(error.GetBaseException().Message); }
+        catch (Exception error) { Fail(error.GetBaseException().Message); }
         finally { startingMatch = false; }
         return false;
     }
@@ -337,13 +389,13 @@ internal static partial class NativeArena
     internal static SceneMgr.Mode NavigationTarget(SceneMgr.Mode mode) => Offline && MatchActive && mode == SceneMgr.Mode.TOURNAMENT ? SceneMgr.Mode.DRAFT : mode;
     private static void ReturnToDraft(ref SceneMgr.Mode __result) { if (Offline && MatchActive) __result = SceneMgr.Mode.DRAFT; }
     private static bool Underground() { if (!Offline) return true; Notice("Underground coming later."); return false; }
-    private static bool Disclaimer() { if (!Offline) return true; Notice("Arena: 12 wins or 3 losses. Entry costs " + Read().EntryCost + " gold. Underground coming later."); return false; }
+    private static bool Disclaimer() { if (!Offline) return true; Notice("Arena: " + Read().MaxWins + " wins or " + Read().MaxLosses + " losses. Entry costs " + Read().EntryCost + " gold. Underground coming later."); return false; }
     private static void NormalMode(ref bool __0) { if (Offline) __0 = false; }
     private static bool NormalPremium(ref TAG_PREMIUM __result) { if (!Offline) return true; __result = TAG_PREMIUM.NORMAL; return false; }
     private static bool DraftHeroPremium(ref TAG_PREMIUM __result) { if (!InDraft) return true; __result = TAG_PREMIUM.NORMAL; return false; }
     private static bool Tickets(ref int __result) { if (!Offline) return true; __result = 1; return false; }
-    private static bool MaxWins(ref int __result) { if (!Offline) return true; __result = 12; return false; }
-    private static bool MaxLosses(ref int __result) { if (!Offline) return true; __result = 3; return false; }
+    private static bool MaxWins(ref int __result) { if (!Offline) return true; __result = Read().MaxWins; return false; }
+    private static bool MaxLosses(ref int __result) { if (!Offline) return true; __result = Read().MaxLosses; return false; }
     private static bool NoPresence() => !Offline || !InDraft && !MatchActive;
     private static bool AchievementsReady(ref bool __result) { if (!InDraft) return true; __result = true; return false; }
     private static bool NoStore() { if (!InDraft) return true; Notice("Entry costs " + Read().EntryCost + " gold. Use Enter Arena."); return false; }
@@ -371,7 +423,7 @@ internal static partial class NativeArena
     internal static Network.DraftChoicesAndContents BuildContents(ArenaView view)
     {
         var contents = new Network.DraftChoicesAndContents { Slot = NativeSlot(view), RedraftSlot = -1, MaxSlot = view.MaxSlot,
-            MaxWins = 12, MaxLosses = 3, Wins = view.Wins, Losses = view.Losses,
+            MaxWins = view.MaxWins, MaxLosses = view.MaxLosses, Wins = view.Wins, Losses = view.Losses,
             SlotType = SlotType(view), Session = BuildRunSession(view), Chest = Chest(view.Reward) };
         contents.DeckInfo.Deck = DeckIdFor(view);
         contents.Hero.Name = view.HeroCardId ?? string.Empty;

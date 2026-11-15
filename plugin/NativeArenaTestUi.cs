@@ -35,13 +35,14 @@ internal static partial class NativeArena
             var view = Read();
             return new JsonNode { { "scene", SceneMgr.IsInitialized() ? SceneMgr.Get().GetMode().ToString() : null },
                 { "phase", view.Phase.ToString() }, { "slot", view.Slot }, { "nativeSlot", NativeSlot(view) }, { "wins", view.Wins }, { "losses", view.Losses },
-                { "maxWins", 12 }, { "maxLosses", 3 }, { "hero", view.HeroCardId }, { "runId", view.RunId },
+                { "maxWins", view.MaxWins }, { "maxLosses", view.MaxLosses }, { "hero", view.HeroCardId }, { "runId", view.RunId },
                 { "offers", TestControlProtocol.List((view.Phase == ArenaPhase.ChoosingHero ? view.HeroOffers : view.Offers).Cast<object>()) },
                 { "deckCount", view.Deck.Count }, { "entryCost", view.EntryCost }, { "gold", view.GoldBalance },
-                { "service", ArenaServiceRegistry.Current?.GetType().Name }, { "stub", ArenaServiceRegistry.Current is ArenaStubService },
+                { "service", ArenaServiceRegistry.Current == null ? null : ArenaServiceRegistry.Current is ArenaStubService ? "stub" : "real" },
+                { "serviceType", ArenaServiceRegistry.Current?.GetType().Name }, { "stub", ArenaServiceRegistry.Current is ArenaStubService }, { "available", !disabled },
                 { "phoneUI", (bool)UniversalInputManager.UsePhoneUI }, { "matchActive", MatchActive },
                 { "pendingReplies", TestControlProtocol.List(replies.Select(reply => (object)reply.Id)) },
-                { "lastReplyIds", TestControlProtocol.List(lastReplies.Cast<object>()) }, { "error", lastError ?? view.Error } };
+                { "lastReplyIds", TestControlProtocol.List(lastReplies.Cast<object>()) }, { "error", lastError ?? view.Error }, { "errorSeq", errorSeq }, { "notice", lastNotice } };
         }
         catch (Exception error) { return new JsonNode { { "error", error.GetBaseException().Message } }; }
     }

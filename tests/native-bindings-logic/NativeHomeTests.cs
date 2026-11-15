@@ -40,8 +40,13 @@ internal static class NativeHomeTests
         NativeHomeUI.ApplyModePolicy(gated, null, id => id == "home.battlegrounds");
         Check(gated.m_BattleGroundsButton.GetText() == "Fan-made modes" && gated.m_ArenaButton.transform.localPosition == campaignSlot,
             "Arena enabled: Fan-made modes relabelled and Arena stays above it");
-        NativeHomeUI.ApplyModePolicy(gated, null, id => id == "home.arena");
-        Check(gated.m_ArenaButton.transform.localPosition == campaignSlot, "Fan-made modes enabled: existing slots stay");
+        var arenaOnly = new Box();
+        arenaOnly.m_BattleGroundsButton.transform.localPosition = campaignSlot;
+        arenaOnly.m_ArenaButton.transform.localPosition = arenaSlotPos;
+        arenaOnly.m_BattleGroundsButton.SetText("Battlegrounds");
+        NativeHomeUI.ApplyModePolicy(arenaOnly, null, id => id == "home.arena");
+        Check(arenaOnly.m_ArenaButton.transform.localPosition == arenaSlotPos && arenaOnly.m_BattleGroundsButton.transform.localPosition == campaignSlot
+            && arenaOnly.m_BattleGroundsButton.GetText() == "Battlegrounds", "Fan-made modes entry inactive: slots and label untouched");
         NativeHomeUI.ApplyModePolicy(gated, null, id => true);
         Check(gated.m_ArenaButton.transform.localPosition == campaignSlot, "both entries active: swap");
 

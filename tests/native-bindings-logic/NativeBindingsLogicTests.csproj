@@ -6,6 +6,7 @@
     <Compile Include="../shared/RepoRoot.cs" Link="RepoRoot.cs" />
     <Compile Include="../../plugin/ArenaContract.cs" />
     <Compile Include="../../plugin/ArenaStubService.cs" />
+    <Compile Include="../shared/NativeArenaBoundaryMocks.cs" Link="NativeArenaBoundaryMocks.cs" />
     <Compile Include="../../plugin/NativeHomeUI.cs" Link="NativeHomeUI.cs" />
     <Compile Include="../../plugin/NativeStrings.cs" Link="NativeStrings.cs" />
     <Compile Include="../../plugin/StatusRoutine.cs" Link="StatusRoutine.cs" />

@@ -287,7 +287,8 @@ internal static partial class NativeUIProbe
         Hook(harmony, typeof(CollectionDeckTray), "CompleteMyDeckButtonPress", nameof(BlockPersonalDeckCompletion), Type.EmptyTypes);
         foreach (string name in new[] { "DeleteDeck", "RenameDeck" }) Hook(harmony, typeof(Network), name, nameof(ReadOnly));
         NativeCrafting.Initialize(harmony, logger, Publish);
-        NativeArena.Initialize(harmony, logger);
+        try { NativeArena.Initialize(harmony, logger); }
+        catch (Exception error) { NativeArena.Disable("patching failed", error); }
         NativeCollectionStatus.Initialize(harmony, logger);
         foreach (string name in new[] { "DeleteDeck", "RenameDeck" }) Hook(harmony, typeof(OfflineDataCache), name, nameof(ReadOnly));
         NativeRewardUI.Initialize(harmony, logger);
@@ -367,7 +368,7 @@ internal static partial class NativeUIProbe
             if (!active) { active = true; began = Time.realtimeSinceStartup; State("WaitingServices"); }
             if (!attempted)
             {
-                var required = new[] { "NetCache", "LoginManager", "Options", "Box", "AssetLoader", "EventTimingManager", "TrialCardManager", "CardBackManager", "CosmeticCoinManager", "GameSaveDataManager", "DraftManager" };
+                var required = new[] { "NetCache", "LoginManager", "Options", "Box", "AssetLoader", "EventTimingManager", "TrialCardManager", "CardBackManager", "CosmeticCoinManager", "GameSaveDataManager" }; // DraftManager is Arena-only: never block startup on it
                 missing = string.Join(",", required.Where(name => Service(name) == null));
                 if (missing.Length != 0)
                 {
@@ -549,7 +550,7 @@ internal static partial class NativeUIProbe
         }
         Publish(headers);
         EnsurePreference(GameSaveKeyId.COLLECTION_MANAGER); EnsurePreference(GameSaveKeyId.PLAYER_FLAGS);
-        NativeArena.Bootstrap();
+        NativeArena.TryBootstrap();
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_UNLOCKED_ARENA, 1L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_UNLOCKED_WILD, 1L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_SEEN_MASS_PACK_OPENING_TOOLTIP, Profile.SeenMassPackTooltip ? 1L : 0L));
@@ -1488,6 +1489,7 @@ internal static partial class NativeUIProbe
         scene.NotifySceneLoaded();
         target = SceneMgr.Mode.HUB; sceneBegan = Time.realtimeSinceStartup; sceneWaiting = scene.IsTransitioning();
         if (!sceneWaiting) State("SceneLoaded:HUB");
+        NativeArena.SetMatchContext(false);
         NativeHomeUI.BeginHub();
         ConfigureHomeButtons(box, true);
         return false;
@@ -1562,7 +1564,7 @@ internal static partial class NativeUIProbe
             if (!NativeResultsUI.CanNavigate(mode == SceneMgr.Mode.HUB)) return;
             if (mode != SceneMgr.Mode.HUB && mode != SceneMgr.Mode.PACKOPENING && mode != SceneMgr.Mode.COLLECTIONMANAGER && mode != SceneMgr.Mode.TOURNAMENT && mode != SceneMgr.Mode.DRAFT)
                 throw new ArgumentException("Unsupported native UI target");
-            if (mode == SceneMgr.Mode.DRAFT) NativeArena.PrepareScene();
+            if (mode == SceneMgr.Mode.DRAFT && !NativeArena.PrepareScene()) return;
             if (mode == SceneMgr.Mode.PACKOPENING)
             {
                 if (Profile.PackRevealPending) RememberPendingReceipt();

@@ -249,6 +249,7 @@ internal static class LocalLadder
             try {
             profile.BeginLaunch(selected, opponent.Id, seed, encounter, achievementContext, casual ? CasualRules.Mode : null, record => {
                 // Stage first: a refusal throws before any displayed state (a previous result, the active id) changes.
+                NativeArena.SetMatchContext(false); // a ranked/casual start is never an Arena match
                 ClientBridge.StartLocalMatch(record, prepared, queued, nativeMatchmaking, scenario);
                 active = record;
                 result = null;

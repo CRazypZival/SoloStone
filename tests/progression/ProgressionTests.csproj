@@ -61,5 +61,10 @@
     <Compile Include="../../plugin/ArenaRun.cs" />
     <Compile Include="../../plugin/ArenaService.cs" />
     <EmbeddedResource Include="../../data/arena/arena-rules-v1.json" LogicalName="SoloStone.Arena.arena-rules-v1.json" />
+    <Compile Include="../shared/NativeArenaBoundaryMocks.cs" Link="NativeArenaBoundaryMocks.cs" />
   </ItemGroup>
+  <Target Name="ExtractArenaTransport" BeforeTargets="CoreCompile">
+    <Exec Command="python3 &quot;$(MSBuildProjectDirectory)/../native-bindings-logic/extract_arena.py&quot; &quot;$(IntermediateOutputPath)Arena.g.cs&quot;" />
+    <ItemGroup><Compile Include="$(IntermediateOutputPath)Arena.g.cs" /></ItemGroup>
+  </Target>
 </Project>
