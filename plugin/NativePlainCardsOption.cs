@@ -37,22 +37,24 @@ internal static class NativePlainCardsOption
     internal static void Sync() { try { if (Checkbox != null) Checkbox.SetChecked(Enabled); } catch (Exception error) { log?.LogWarning("PLAIN_CARDS_OPTION sync: " + error.Message); } }
 
 #if !SOLOSTONE_RELEASE
-    // Test control (state.plainCards): the setting, what the current match runs with, the checkbox, and in a match what the client's
-    // actors render: every active Actor in the scene by premium (`actors`), the GameState cards by zone and premium (`zones`, entity tag
-    // and bound actor), and the history tiles and big card (`history`). `nonNormal` lists the first premium actors found.
-    internal static JsonNode State()
+    // Test control (state.plainCards): the setting, what the current match runs with, the checkbox.
+    internal static JsonNode State() => new JsonNode { { "enabledNextMatch", Enabled }, { "thisMatch", ClientBridge.PlainCardsThisMatch },
+        { "checkbox", NativeOptionsPanels.RowState(Checkbox) } };
+
+    // Test control `plain-cards-render` (read-only, on request only: it walks the scene): in a match, what the client's actors render.
+    // Every active Actor in the scene by premium (`actors`), the GameState cards by side:zone (`zones`: the entity's PREMIUM tag and the
+    // bound actor), the history tiles and big card (`history`), and `nonNormal`, the first premium actors found.
+    internal static JsonNode Render()
     {
-        var state = new JsonNode { { "enabledNextMatch", Enabled }, { "thisMatch", ClientBridge.PlainCardsThisMatch },
-            { "checkbox", NativeOptionsPanels.RowState(Checkbox) } };
-        try { if (GameState.Get() != null) state["render"] = Render(); }
-        catch (Exception error) { state["renderError"] = error.GetType().Name + ": " + error.Message; }
-        return state;
+        if (GameState.Get() == null) return new JsonNode { { "inMatch", false } };
+        try { return Walk(); }
+        catch (Exception error) { return new JsonNode { { "inMatch", true }, { "error", error.GetType().Name + ": " + error.Message } }; }
     }
 
     private static readonly System.Reflection.FieldInfo HistoryTiles = AccessTools.Field(typeof(HistoryManager), "m_historyTiles");
     private static readonly System.Reflection.FieldInfo CurrentBigCard = AccessTools.Field(typeof(HistoryManager), "m_currentBigCard");
 
-    private static JsonNode Render()
+    private static JsonNode Walk()
     {
         var nonNormal = new List<object>();
         void Note(string where, Actor actor)
@@ -100,6 +102,7 @@ internal static class NativePlainCardsOption
         foreach (var actor in historyActors) Note("history", actor);
 
         return new JsonNode {
+            { "inMatch", true },
             { "actors", Count(actors.Select(actor => actor.GetPremium())) },
             { "zones", zones },
             { "history", new JsonNode { { "tiles", manager == null || !(HistoryTiles?.GetValue(manager) is ICollection list) ? 0 : list.Count },
