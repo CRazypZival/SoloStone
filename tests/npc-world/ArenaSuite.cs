@@ -129,6 +129,10 @@ internal static class ArenaSuite
             NpcWorldRuntime.InferredReplyPrior = () => true;
             NpcWorldRuntime.Begin(arenaEncounter);
             Program.Require(NpcWorldRuntime.Active.Profile.Budget.Brain.ReplyPrior == ReplyPrior.Arena, "an Arena match keeps the Arena table when the inference option is on");
+            NpcWorldHooks.ArenaPopulation = () => new[] { new PopulationDeck("arena-bad", SabberStoneCore.Enums.CardClass.MAGE, new[] { "NOT_A_CARD_ID" }) };
+            var badTable = ArenaReplyTable.For(SabberStoneCore.Enums.CardClass.MAGE);   // must not throw
+            Program.Require(badTable.Count > 0 && badTable.All(f => f.CardId != "NOT_A_CARD_ID"),
+                "an unreadable Arena population falls back to the class prior instead of throwing in search");
             NpcWorldHooks.ArenaPopulation = null;
             NpcWorldRuntime.InferredReplyPrior = null;
             NpcWorldRuntime.Begin(arenaEncounter);

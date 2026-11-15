@@ -27,7 +27,11 @@ public static class ArenaReplyTable
         lock (Gate) {
             var source = NpcWorldHooks.ArenaPopulation;
             if (source == null) return CardFrequencies.ForOrEmpty(heroClass);
-            if (tables == null || source != cachedSource) { tables = Build(source); cachedSource = source; }
+            if (tables == null || source != cachedSource) {
+                // A population the table cannot read (an unknown card id) leaves the class prior in place, once, instead of throwing in search.
+                try { tables = Build(source); } catch (Exception) { tables = new Dictionary<CardClass, IReadOnlyList<CardFrequency>>(); }
+                cachedSource = source;
+            }
             IReadOnlyList<CardFrequency> table;
             return tables.TryGetValue(heroClass, out table) ? table : CardFrequencies.ForOrEmpty(heroClass);
         }

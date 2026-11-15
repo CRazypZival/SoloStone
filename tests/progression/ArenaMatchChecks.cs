@@ -218,6 +218,10 @@ internal static class ArenaMatchChecks
         var mine = distinct.Take(Math.Max(1, distinct.Count / 3)).ToList();
         profile.CommitChange(next => { foreach (string id in mine) if (next.Collection.All(row => row.Id != id)) next.Collection.Add(new LocalCardCount { Id = id, Count = 1, Acquired = 1 }); return true; });
         var ownedNow = new HashSet<string>(profile.StoredCollection.Where(row => row.Value > 0).Select(row => LocalCardCatalog.CopyGroup(row.Key)));
+        // A card owned only as a golden copy is owned too.
+        string goldOnly = distinct.First(id => !ownedNow.Contains(LocalCardCatalog.CopyGroup(id)));
+        profile.CommitChange(next => { next.PremiumCollection.Add(new LocalCardCount { Id = goldOnly, Premium = 1, Count = 1, Acquired = 1 }); return true; });
+        ownedNow.Add(LocalCardCatalog.CopyGroup(goldOnly));
         var unowned = distinct.Where(id => !ownedNow.Contains(LocalCardCatalog.CopyGroup(id))).ToList();
         Check(unowned.Count > 0 && mine.All(id => ownedNow.Contains(LocalCardCatalog.CopyGroup(id))), "test deck mixes owned and unowned cards");
         var pending = Start(profile);
@@ -228,6 +232,7 @@ internal static class ArenaMatchChecks
         Check(LocalCardMastery.EligibleWin(done) && !LocalProfile.XpWin(done), "mastery counts the win, win portraits do not");
         var counts = LocalCardMastery.WinCounts(profile.History);
         Check(distinct.Where(id => ownedNow.Contains(LocalCardCatalog.CopyGroup(id))).All(id => counts.TryGetValue(id, out int wins) && wins == 1), "owned drafted cards earn the mastery win");
+        Check(counts.TryGetValue(goldOnly, out int goldWins) && goldWins == 1, "a golden-only owned card earns the mastery win");
         Check(unowned.All(id => !counts.ContainsKey(id)), "unowned drafted cards earn nothing");
         // Many wins: an unowned card never reaches a threshold, so no premium copy of it is ever granted; an owned one does.
         string copyPath = path + "-mastery.xml"; File.Copy(path, copyPath, true);

@@ -31,13 +31,11 @@ public sealed partial class LocalProfile
         var owned = new HashSet<string>(RealOwnedCollection(data).Where(row => row.Value > 0)
             .Select(row => LocalCardCatalog.CopyGroup(row.Key)), StringComparer.Ordinal);
         var main = AchievementCards(deck.CardIds, premiumEntries);
-        // Arena (owner 2026-11-15, owned cards only): the frozen deck lists only cards the player owned as normal copies of the real
-        // collection (no loaners) when the match started, so mastery never counts a drafted card the player does not own. Earlier Arena
-        // records froze the whole deck and stay valid (shape only).
-        if (ownedCardsOnly) {
-            var normal = new HashSet<string>(data.Collection.Where(row => row.Count > 0).Select(row => LocalCardCatalog.CopyGroup(row.Id)), StringComparer.Ordinal);
-            main = main.Where(row => normal.Contains(LocalCardCatalog.CopyGroup(row.BaseCardId))).ToList();
-        }
+        // Arena (owner 2026-11-15, owned cards only): the frozen deck lists only cards the player owned in the real collection (normal or
+        // premium copies, no loaners) when the match started, so mastery never counts a drafted card the player does not own. Arena records
+        // feed mastery only (no achievement reads this list for Arena). Earlier Arena records froze the whole deck and stay valid (shape only).
+        if (ownedCardsOnly)
+            main = main.Where(row => owned.Contains(LocalCardCatalog.CopyGroup(row.BaseCardId))).ToList();
         return new LocalAchievementPendingContext {
             EligibleWorldMatch = true,
             PersonalDeck = personal,
