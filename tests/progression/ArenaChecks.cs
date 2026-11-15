@@ -120,6 +120,14 @@ internal static class ArenaChecks
     {
         var rules = DraftRules.Arena();
         var activeIds = new HashSet<string>(LocalCardCatalog.ActivePoolIds(), StringComparer.Ordinal);
+        // Arena uses the Ranked pool: every card it can offer is one a player may put in a current Standard deck.
+        Console.WriteLine("ARENA pool size " + rules.Pool.Count + " (ActivePoolIds " + activeIds.Count + ")");
+        Check(rules.Pool.Count > 0 && rules.Pool.All(LocalCardCatalog.IsStandardLegal), "pool is only Standard-legal cards");
+        Check(!rules.Pool.Any(card => card.Id == "GIL_213" || card.Id == "CFM_305"), "Wild pack-pool cards are not in the pool");
+        foreach (string hero in rules.Heroes)
+            for (int seed = 0; seed < 60; seed++)
+                foreach (string id in rules.Offers(seed * 7919L + 13, 1, hero, new string[0]))
+                    Check(LocalCardCatalog.IsStandardLegal(Cards.FromId(id)) && id != "GIL_213" && id != "CFM_305", "offered card outside the Ranked pool: " + id);
         foreach (var card in Cards.All.Where(card => SabberStoneCore.Actions.FabledRules.IsFabled(card.Id)
             || SabberStoneCore.Actions.FabledRules.IsCompanion(card.Id) || SabberStoneCore.Actions.DeckbuildingRules.HasSideboard(card.Id)
             || card[(GameTag)2931] > 0 || card[(GameTag)997] > 0 || card[(GameTag)1048] > 0))

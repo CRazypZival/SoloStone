@@ -52,7 +52,7 @@ public sealed class DraftRules
             || rarities.Length == 0 || rarities.Any(row => row.Value <= 0 || row.Key == Rarity.LEGENDARY)
             || rewards.Length != MaxWins + 1 || rewards.Any(row => row.Any(value => value < 0)))
             throw new InvalidOperationException("Invalid Arena rules.");
-        pool = new Lazy<EngineCard[]>(() => LocalCardCatalog.ActivePoolIds().Select(Cards.FromId).Where(Eligible)
+        pool = new Lazy<EngineCard[]>(() => LocalCardCatalog.ActivePoolIds().Select(Cards.FromId).Where(LocalCardCatalog.IsStandardLegal).Where(Eligible)
             .OrderBy(card => card.Id, StringComparer.Ordinal).ToArray());
     }
 
@@ -77,6 +77,7 @@ public sealed class DraftRules
         return card.Cost <= 10 || !string.IsNullOrWhiteSpace(text);
     }
 
+    internal IReadOnlyList<EngineCard> Pool => pool.Value;
     public IReadOnlyList<string> Heroes => heroes;
     public IReadOnlyList<string> HeroOffers(long seed) => Draw(heroes.ToList(), seed, 0);
 

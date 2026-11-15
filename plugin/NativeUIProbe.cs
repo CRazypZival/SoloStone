@@ -512,6 +512,8 @@ internal static partial class NativeUIProbe
             DuelsCardDenylist = new List<int>(), TavernBrawlCardDenylist = new List<int>(), ArenaCardDenylist = new List<int>(),
             VFXDenylist = new List<string>(), PetSkinsDenylist = new List<int>(), PetEventDenylist = new List<int>(),
             PetSkinsHSEnabled = true,
+            // Retail's packet default is on: Arena's header (choose your hero / card) and phase messages. The popups are marked seen (NativeArena).
+            EnableArenaPhaseMessages = true, EnableArenaPhaseMessageFTUXTracking = true,
             // Retail inferred 2 (medium confidence, docs/design/pet-xp.md). NativeMatch answers packets 68/67 and enforces the cap.
             MaxPetTreatsAllowedPerGame = NativeMatch.MaxPetTreatsPerGame
         };

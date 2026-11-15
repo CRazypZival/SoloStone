@@ -94,6 +94,7 @@ internal static partial class NativeArena
         Patch(harmony, typeof(DraftDisplay), "PlayButtonPress", nameof(FindGame));
         Patch(harmony, typeof(DraftManager), "SetUndergroundState", nameof(NormalMode));
         Patch(harmony, typeof(DraftManager), "GetDraftPremium", nameof(NormalPremium));
+        Patch(harmony, typeof(DraftManager), "HasAlreadySeenPhaseMessage", nameof(PhaseSeen));
         Patch(harmony, typeof(CollectionManager), "GetHeroPremium", nameof(DraftHeroPremium), typeof(TAG_CLASS));
         Patch(harmony, typeof(DraftManager), "GetNumTicketsOwned", nameof(Tickets));
         harmony.Patch(Required(typeof(CollectionDeck), "SendChanges"),
@@ -408,6 +409,8 @@ internal static partial class NativeArena
         + "You can retire at any time and keep the reward you have earned so far.";
     internal static string GoldCostText(int cost) => cost + " Gold";
     private static void NormalMode(ref bool __0) { if (Offline) __0 = false; }
+    // The phase header still shows; only the one-time phase popup (first visit) is treated as already seen, like the tutorial slides.
+    private static bool PhaseSeen(ref bool __result) { if (!Offline) return true; __result = true; return false; }
     private static bool NormalPremium(ref TAG_PREMIUM __result) { if (!Offline) return true; __result = TAG_PREMIUM.NORMAL; return false; }
     private static bool DraftHeroPremium(ref TAG_PREMIUM __result) { if (!InDraft) return true; __result = TAG_PREMIUM.NORMAL; return false; }
     private static bool Tickets(ref int __result) { if (!Offline) return true; __result = 1; return false; }

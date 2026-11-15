@@ -47,10 +47,29 @@ internal static partial class NativeArena
                 { "loadFailure", loadFailure }, { "firstWait", firstWait }, { "usable", ScreenUsable(out string unusable) ? null : unusable },
                 // waits/changing are the last snapshot (taken every second while DRAFT is not usable, and once when it became
                 // usable); waitsAge says how old it is. routines is live.
+                { "clickBlockers", ClickBlockers() },
                 { "waits", Waits() }, { "waitsAge", waitsReadAt < 0 ? (object)null : Math.Round(Time.realtimeSinceStartup - waitsReadAt, 1) },
                 { "changing", TestControlProtocol.List(changingRows.Cast<object>()) }, { "routines", RoutineSummary() } };
         }
         catch (Exception error) { return new JsonNode { { "error", error.GetBaseException().Message } }; }
+    }
+
+    // Active StandardClickblocker elements under the draft screen (retail's own widget states raise them; one covering the tray Back refuses
+    // arena.back): path and whether the element accepts input, so a live run can tie it to the draft phase.
+    private static JsonNode ClickBlockers()
+    {
+        var node = new JsonNode();
+        try
+        {
+            var display = DraftDisplay.Get();
+            int index = 0;
+            if (display != null)
+                foreach (var element in display.GetComponentsInChildren<PegUIElement>(false))
+                    if (element != null && element.name.IndexOf("Clickblocker", StringComparison.OrdinalIgnoreCase) >= 0 && index < 8)
+                        node["b" + index++] = element.transform.name + " enabled=" + element.IsEnabled() + " path=" + PathOf(element.transform, null, 10);
+        }
+        catch (Exception error) { node["error"] = error.GetType().Name; }
+        return node;
     }
 
     // The last DRAFT load's wait conditions (NativeArenaLoad.ReadWaits), in the client's order.
@@ -98,12 +117,15 @@ internal static partial class NativeArena
         NameRoot(Field(landing, "m_infoButtonWidget"), "arena.info");
         var page = landing?.GetArenaLandingPage();
         NameRoot(Field(page, "m_playButtonNoActiveRun"), "arena.enter");
-        NameRoot(Field(page, "m_playButtonActiveRun"), "arena.play");
+        NameRoot(Field(page, "m_playButtonActiveRun"), "arena.continue");
         // Landing page controls that no client field points at: found by their place in the page.
         foreach (var element in elements.Where(element => element != null).Distinct().ToList())
         {
             if (element is UIBButton && HasAncestorNamed(element.transform, "ArenaLandingPage_BottomBar")) name(element, "arena.back");
             else if (element.name == "rewardsChest") name(element, "arena.rewards.preview");
+            // The draft screen's tray Back (retail lets a player leave mid-draft; DraftDisplay's navigate-back exits to Home).
+            else if ((element is UIBButton || element.GetComponent<Clickable>() != null) && HasAncestorNamed(element.transform, "DraftTrayContainer")
+                && HasAncestorNamed(element.transform, "Button_Framed_Simple")) name(element, "arena.back");
         }
         if (Field(display, "m_choices") is IEnumerable choices)
         {

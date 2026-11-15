@@ -1260,7 +1260,7 @@ internal sealed partial class NativeTestControl
         catch (Exception error)
         {
             snapshot = new UiSnapshot { Scene = "unknown", Screen = LocalLadder.Screen };
-            snapshot.Busy.Add("readError:" + error.GetType().Name + ": " + error.Message);
+            snapshot.Busy.Add("readError:" + error.GetType().Name + ": " + error.Message + " @ " + (error.StackTrace ?? "").Split('\n').FirstOrDefault()?.Trim());
             UiRules.Finish(snapshot);
         }
         // Tree read plus hit tests runs every frame while UI work is pending; keep its cost visible.
