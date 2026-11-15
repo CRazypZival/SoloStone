@@ -3414,7 +3414,7 @@
 "GVG_088":["e9dfca8c","<b>Furtività</b>. Probabilità del 50% di attaccare il nemico sbagliato."],
 "GVG_089":["9262ce8b","[x]Se controlli un <b>Segreto</b> alla\nfine del tuo turno, rigenera\n#4 Salute al tuo eroe."],
 "GVG_090":["f068370e","<b>Grido di Battaglia:</b> infligge 6 danni suddivisi casualmente tra TUTTI gli altri personaggi."],
-"GVG_091":["3366381b","<b>Provocazione</b>. Non può essere il bersaglio di Magie o Poteri Eroe."],
+"GVG_091":["741b5daa","<b>Provocazione</b>. <b>Elusività</b>."],
 "GVG_092":["696010e1","<b>Grido di Battaglia:</b> pesca una carta. Se è un servitore, lo trasforma in una Gallina."],
 "GVG_093":["a04c09fc","<b>Provocazione</b>"],
 "GVG_094":["b96d9d55","Alla fine del turno di ogni giocatore, questo pesca finché non ha 3 carte."],

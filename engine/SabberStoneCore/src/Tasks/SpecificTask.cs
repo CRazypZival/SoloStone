@@ -239,6 +239,25 @@ namespace SabberStoneCore.Tasks
 				g.CurrentEventData.EventTarget = next;
 			});
 
+		/// <summary>Steady Shot and its upgrades: damage the enemy hero, or the chosen target when an effect (Steamwheedle Sniper) made the hero power targeted.</summary>
+		public static ISimpleTask SteadyShot(int amount) =>
+			new CustomTask((g, c, s, t, stack) =>
+				new DamageTask(amount, t == null ? EntityType.OP_HERO : EntityType.TARGET).Process(in g, in c, in s, in t, stack));
+
+		/// <summary>Jeeves: at the end of each player's turn, that player (the one whose turn ends, not the owner) draws until they hold 3 cards.
+		/// The number of draws is fixed when the effect starts, so an empty deck costs Fatigue per missing card and cannot loop.</summary>
+		public static ISimpleTask Jeeves =>
+			new CustomTask((g, c, s, t, stack) =>
+			{
+				var player = g.CurrentPlayer;
+				int missing = 3 - player.HandZone.Count;
+				for (int i = 0; i < missing; i++)
+				{
+					Generic.Draw(player);
+					if (g.State == State.COMPLETE) break;
+				}
+			});
+
 		/// <summary>Kezan Mystic: take control of a random enemy Secret that the controller does not already hold (no duplicate Secrets)
 		/// while the Secret area has room. The Secret's trigger is re-armed for the new controller.</summary>
 		public static ISimpleTask KezanMystic =>

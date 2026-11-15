@@ -343,9 +343,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_087", new CardDef(new Power
 			{
-				// TODO [GVG_087] Steamwheedle Sniper && Test: Steamwheedle Sniper_GVG_087
-				//PowerTask = null,
-				//Trigger = null,
+				Aura = new Aura(AuraType.CONTROLLER, new Effect(GameTag.STEADY_SHOT_CAN_TARGET, EffectOperator.SET, 1))
 			}));
 
 			// ----------------------------------------- SPELL - HUNTER
@@ -1033,9 +1031,11 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_088", new CardDef(new Power
 			{
-				// TODO [GVG_088] Ogre Ninja && Test: Ogre Ninja_GVG_088
-				//PowerTask = null,
-				//Trigger = null,
+				Trigger = new Trigger(TriggerType.TARGET)
+				{
+					TriggerSource = TriggerSource.SELF,
+					SingleTask = SpecificTask.Forgetful
+				}
 			}));
 
 			// ------------------------------------------ SPELL - ROGUE
@@ -1356,9 +1356,12 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_077", new CardDef(new Power
 			{
-				// TODO [GVG_077] Anima Golem && Test: Anima Golem_GVG_077
-				//PowerTask = null,
-				//Trigger = null,
+				Trigger = new Trigger(TriggerType.TURN_END)
+				{
+					EitherTurn = true,
+					Condition = SelfCondition.IsBoardCount(1),
+					SingleTask = new DestroyTask(EntityType.SOURCE)
+				}
 			}));
 
 			// --------------------------------------- MINION - WARLOCK
@@ -1891,7 +1894,8 @@ namespace SabberStoneCore.CardSets
 			{
 				DeathrattleTask = ComplexTask.Create(
 					ComplexTask.GetRandomEntourageCardToHand(),
-					ComplexTask.GetRandomEntourageCardToHand(true))
+					new RandomEntourageTask(1, true),
+					new AddStackTo(EntityType.OP_HAND))
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -2018,9 +2022,10 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_092", new CardDef(new Power
 			{
-				// TODO [GVG_092] Gnomish Experimenter && Test: Gnomish Experimenter_GVG_092
-				//PowerTask = null,
-				//Trigger = null,
+				PowerTask = ComplexTask.Create(
+					new DrawTask(true),
+					new FilterStackTask(SelfCondition.IsMinion, SelfCondition.IsInZone(Zone.HAND)),
+					new ChangeEntityTask("GVG_092t", EntityType.STACK, true))
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -2042,14 +2047,11 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_094", new CardDef(new Power
 			{
-				PowerTask = ComplexTask.Create(
-					new FuncNumberTask(p =>
-					{
-						Controller controller = p.Controller;
-						int diffHands = 3 - controller.HandZone.Count;
-						return diffHands > 0 ? diffHands : 0;
-					}),
-					new EnqueueNumberTask(new DrawTask())),
+				Trigger = new Trigger(TriggerType.TURN_END)
+				{
+					EitherTurn = true,
+					SingleTask = SpecificTask.Jeeves
+				}
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -2098,12 +2100,11 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("GVG_097", new CardDef(new Power
 			{
-				// TODO [GVG_097] Lil' Exorcist && Test: Lil' Exorcist_GVG_097
-				//PowerTask = ComplexTask.Create(
-				//	new IncludeTask(EntityType.OP_MINIONS),
-				//	new FilterStackTask(SelfCondition.IsDeathrattleMinion),
-				//	new CountTask(EntityType.STACK),
-				//	new AddEnchantmentTask("???", EntityType.SOURCE, true))
+				PowerTask = ComplexTask.Create(
+					new IncludeTask(EntityType.OP_MINIONS),
+					new FilterStackTask(SelfCondition.IsDeathrattleMinion),
+					new CountTask(EntityType.STACK),
+					new EnqueueNumberTask(new AddEnchantmentTask("GVG_102e", EntityType.SOURCE)))
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL

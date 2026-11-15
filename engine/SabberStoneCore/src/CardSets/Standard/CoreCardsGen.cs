@@ -249,7 +249,7 @@ namespace SabberStoneCore.CardSets.Standard
 			// --------------------------------------------------------
 			cards.Add("DS1h_292", new CardDef(new Dictionary<PlayReq, int>() { { PlayReq.REQ_STEADY_SHOT, 0 }, { PlayReq.REQ_MINION_OR_ENEMY_HERO, 0 } }, new Power
 			{
-				PowerTask = new DamageTask(2, EntityType.OP_HERO)
+				PowerTask = SpecificTask.SteadyShot(2)
 			}));
 		}
 

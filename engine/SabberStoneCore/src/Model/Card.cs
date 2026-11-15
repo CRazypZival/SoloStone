@@ -330,6 +330,13 @@ namespace SabberStoneCore.Model
 						needsTarget = true;
 						TargetingAvailabilityPredicate += TargetingPredicates.ReqHeroHasAttack;
 						break;
+					case PlayReq.REQ_STEADY_SHOT:
+						needsTarget = true;
+						TargetingAvailabilityPredicate += TargetingPredicates.ReqSteadyShotCanTarget;
+						break;
+					case PlayReq.REQ_MINION_OR_ENEMY_HERO:
+						SourceTargetingPredicate = TargetingPredicates.ReqMinionOrEnemyHero;
+						break;
 					case PlayReq.REQ_NUM_MINION_SLOTS:
 						PlayAvailabilityPredicate += TargetingPredicates.ReqNumMinionSlots;
 						break;
@@ -539,6 +546,13 @@ namespace SabberStoneCore.Model
 				case PlayReq.REQ_TARGET_IF_AVAILABLE_AND_HERO_HAS_ATTACK:
 					needsTarget = true;
 					TargetingAvailabilityPredicate += TargetingPredicates.ReqHeroHasAttack;
+					break;
+				case PlayReq.REQ_STEADY_SHOT:
+					needsTarget = true;
+					TargetingAvailabilityPredicate += TargetingPredicates.ReqSteadyShotCanTarget;
+					break;
+				case PlayReq.REQ_MINION_OR_ENEMY_HERO:
+					SourceTargetingPredicate = TargetingPredicates.ReqMinionOrEnemyHero;
 					break;
 				case PlayReq.REQ_NUM_MINION_SLOTS:
 					PlayAvailabilityPredicate += TargetingPredicates.ReqNumMinionSlots;

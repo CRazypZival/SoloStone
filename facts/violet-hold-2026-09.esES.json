@@ -3413,7 +3413,7 @@
 "GVG_088":["e9dfca8c","<b>Sigilo</b>\n50% de probabilidad de atacar al enemigo que no es."],
 "GVG_089":["9262ce8b","[x]Si controlas un <b>secreto</b>,\nal final de tu turno,\nrestaura #4 p. de salud\na tu héroe."],
 "GVG_090":["f068370e","<b>Grito de batalla:</b> Inflige 6 p. de daño que se dividen aleatoriamente entre todos los demás personajes."],
-"GVG_091":["3366381b","[x]<b>Provocar</b>.\nNo puede ser objetivo\nde hechizos ni de\npoderes de héroe."],
+"GVG_091":["741b5daa","<b>Provocar</b>\n<b>Esquivo</b>"],
 "GVG_092":["696010e1","<b>Grito de batalla:</b> Roba una carta. Si es un esbirro, lo convierte en un pollo."],
 "GVG_093":["a04c09fc","<b>Provocar</b>"],
 "GVG_094":["b96d9d55","Al final del turno de cada jugador, el jugador en cuestión roba cartas hasta tener 3."],

@@ -544,6 +544,8 @@ namespace SabberStoneCore.Enchants
 						return _extraBattlecryAndCombo > 0 ? 1 : 0;
 					case GameTag.SPELLPOWER:
 						return _spellPower;
+					case GameTag.STEADY_SHOT_CAN_TARGET:
+						return AuraEffects.SetValue(_setEffects, t);
 					default:
 						return 0;
 				}

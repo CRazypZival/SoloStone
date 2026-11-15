@@ -80,7 +80,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_132_HUNTER", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_STEADY_SHOT,0},{PlayReq.REQ_MINION_OR_ENEMY_HERO,0}}, new Power
 			{
-				PowerTask = new DamageTask(3, EntityType.OP_HERO)
+				PowerTask = SpecificTask.SteadyShot(3)
 			}));
 
 			// -------------------------------------- HERO_POWER - MAGE

@@ -3414,7 +3414,7 @@
 "GVG_088":["e9dfca8c","<b>Camouflage</b>\n50% de chance d’attaquer le mauvais adversaire."],
 "GVG_089":["9262ce8b","Si vous contrôlez un <b>Secret</b> à la fin de votre tour, rend #4_PV à votre héros."],
 "GVG_090":["f068370e","<b>Cri de guerre :</b> inflige 6 points de dégâts répartis de façon aléatoire entre tous les autres personnages."],
-"GVG_091":["3366381b","<b>Provocation</b>\nNe peut pas être la cible de sorts ou de pouvoirs héroïques."],
+"GVG_091":["741b5daa","<b>Provocation</b>\n<b>Insaisissable</b>"],
 "GVG_092":["696010e1","<b>Cri de guerre :</b> vous piochez une carte. Si c’est un serviteur, le transforme en poulet."],
 "GVG_093":["a04c09fc","<b>Provocation</b>"],
 "GVG_094":["b96d9d55","À la fin du tour d’un joueur, ce dernier pioche jusqu’à avoir 3 cartes."],
