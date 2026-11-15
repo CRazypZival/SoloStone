@@ -10732,5 +10732,10 @@
 {"id":"CS2_063","dbf":982,"name":"Corruption","text":"Choose an enemy minion. At the start of your turn, destroy it.","textHash":"13cdf3afb448cc11","tags":[[48,1],[183,1635],[199,9],[201,3],[202,5],[203,2],[251,1],[321,1],[1635,6]]},
 {"id":"CS2_073","dbf":268,"name":"Cold Blood","text":"Give a minion +2 Attack. <b>Combo:</b> +4 Attack instead.","textHash":"119fce31bc59e882","tags":[[48,1],[183,3],[199,7],[201,3],[202,5],[203,1],[220,1],[251,1],[268,2],[321,1]]},
 {"id":"CS2_075","dbf":710,"name":"Sinister Strike","text":"Deal $3 damage to the_enemy hero.","textHash":"2a84c5764f8dfaac","tags":[[48,1],[183,1635],[199,7],[201,3],[202,5],[203,2],[251,6],[268,2],[321,1]]},
-{"id":"CS2_077","dbf":630,"name":"Sprint","text":"Draw 4 cards.","textHash":"70e69782a5c9dbf2","tags":[[48,5],[183,1635],[199,7],[201,3],[202,5],[203,2],[251,1],[268,2],[321,1]]}
+{"id":"CS2_077","dbf":630,"name":"Sprint","text":"Draw 4 cards.","textHash":"70e69782a5c9dbf2","tags":[[48,5],[183,1635],[199,7],[201,3],[202,5],[203,2],[251,1],[268,2],[321,1]]},
+{"id":"CS2_181","dbf":1109,"name":"Injured Blademaster","text":"<b>Battlecry:</b> Deal 4 damage to HIMSELF.","textHash":"6e513e43c9de9dfe","tags":[[45,7],[47,4],[48,3],[183,3],[199,12],[201,1],[202,4],[203,3],[218,1],[251,6],[321,1]]},
+{"id":"CS2_227","dbf":1122,"name":"Venture Co. Mercenary","text":"Your minions cost (3) more.","textHash":"dec25b0df52adce8","tags":[[45,6],[47,7],[48,5],[183,3],[199,12],[201,1],[202,4],[203,1],[251,1],[321,1],[362,1]]},
+{"id":"EX1_004","dbf":1634,"name":"Young Priestess","text":"At the end of your turn, give another random friendly minion +1 Health.","textHash":"efa4f5ff9eb51c3b","tags":[[32,1],[45,1],[47,2],[48,1],[183,3],[199,12],[202,4],[203,3],[321,1]]},
+{"id":"EX1_006","dbf":1658,"name":"Alarm-o-Bot","text":"[x]At the start of your turn,\nswap this minion with a\n   random one in your hand.  ","textHash":"77a49611e912df3c","tags":[[32,1],[45,3],[48,3],[183,3],[199,12],[200,17],[202,4],[203,3],[321,1]]},
+{"id":"EX1_009","dbf":1688,"name":"Angry Chicken","text":"Has +5 Attack while damaged.","textHash":"77d6c82ea21deb1a","tags":[[45,1],[47,1],[48,1],[183,3],[199,12],[200,20],[202,4],[203,3],[212,1],[321,1]]}
 ]}
