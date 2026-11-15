@@ -684,7 +684,7 @@ internal static class WildY0bM1CProof
             StandardSetsProof.ParkBoard(p);
             var b2 = Summon(p, id); var s2 = Summon(p, "FP1_029");
             b2.ToBeDestroyed = true; s2.ToBeDestroyed = true; g.DeathProcessingAndAuraUpdate();
-            Core2026Proof.Check(opp.HandZone.Count == oh + 9, "Baron dying together with the minion still doubles it");
+            Core2026Proof.Check(opp.HandZone.Count == oh + 8, "Baron dying in the same death phase as the minion: the Deathrattle triggers once (retail 34104_subspell.power.log; deathrattle-doubler-simultaneous-death record)");
             var b3 = Summon(p, id); var w = Summon(p, "FP1_024"); var vic = Summon(p, "CS2_182"); Kill(g, w);
             Core2026Proof.Check(vic.Damage == 2, "Unstable Ghoul deals 2 with Baron");
             Kill(g, b3);

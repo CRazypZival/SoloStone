@@ -573,7 +573,7 @@ namespace SabberStoneCore.Auras
         // Read active source auras rather than adding fields to the closed snapshot schema.
         internal int DeathrattleValue(Controller controller, GameTag tag)
         {
-            if (!On || Owner is Minion minion && (minion.Zone != minion.Controller.BoardZone || minion.IsDead && !Game.DeadMinions.Contains(minion))
+            if (!On || Owner is Minion minion && (minion.Zone != minion.Controller.BoardZone || minion.IsDead)
                 || !(Type == AuraType.CONTROLLERS || Type == AuraType.CONTROLLER && Owner.Controller == controller
                     || Type == AuraType.OPPONENT && Owner.Controller.Opponent == controller)) return 0;
             return Effects.OfType<Effect>().Where(e => e.Tag == tag).Sum(e => e.Operator == EffectOperator.SUB ? -e.Value : e.Value);
