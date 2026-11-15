@@ -22,6 +22,7 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 		private readonly Card _heroCard;
 		private readonly Card _powerCard;
 		private readonly Card _weaponCard;
+		private readonly bool _removeSource = true;
 
 		public ReplaceHeroTask(Card cardHero, Card cardWeapon, Card cardPower)
 		{
@@ -30,10 +31,11 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 			_powerCard = cardPower;
 		}
 
-		public ReplaceHeroTask(string cardIdHero, string cardIdPower)
+		public ReplaceHeroTask(string cardIdHero, string cardIdPower, bool removeSource = true)
 		{
 			_heroCard = Cards.FromId(cardIdHero);
 			_powerCard = Cards.FromId(cardIdPower);
+			_removeSource = removeSource;
 		}
 
 		public ReplaceHeroTask(string cardIdHero, string cardIdWeapon, string cardIdPower)
@@ -50,7 +52,10 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 			var playable = source as IPlayable;
 			if (playable == null || controller == null) return TaskState.STOP;
 
-			playable.Controller.SetasideZone.Add(playable.Zone.Remove(playable));
+			// The source is the played Jaraxxus, which leaves play. A Deathrattle source (Majordomo Executus) stays where it is: dead in the
+			// graveyard, or alive when its Deathrattle is triggered.
+			if (_removeSource)
+				playable.Controller.SetasideZone.Add(playable.Zone.Remove(playable));
 			// Same inheritance as PlayCard.PlayHeroCore: a Neutral hero (Ragnaros) keeps the player's class for class-bound rules (Imbue).
 			var inherit = _heroCard.Class == CardClass.NEUTRAL || _heroCard.Class == CardClass.INVALID
 				? new System.Collections.Generic.Dictionary<GameTag, int> { [GameTag.CLASS] = (int)controller.HeroClass } : null;

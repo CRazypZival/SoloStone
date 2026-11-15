@@ -592,7 +592,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("BRM_027", new CardDef(new Power
 			{
-				PowerTask = new ReplaceHeroTask("BRM_027h", "BRM_027p"),
+				DeathrattleTask = new ReplaceHeroTask("BRM_027h", "BRM_027p", removeSource: false),
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -645,7 +645,7 @@ namespace SabberStoneCore.CardSets
 			cards.Add("BRM_030", new CardDef(new Power
 			{
 				PowerTask = new EnqueueTask(2, ComplexTask.Create(
-					new RandomCardTask(EntityType.OP_HERO),
+					new RandomCardTask(EntityType.OP_HERO, cardType: CardType.SPELL),
 					new AddStackTo(EntityType.HAND))),
 			}));
 
@@ -699,7 +699,7 @@ namespace SabberStoneCore.CardSets
 			{
 				PowerTask = ComplexTask.Create(
 					new ConditionTask(EntityType.SOURCE, SelfCondition.IsDragonInHand),
-					new FlagTask(true, new DamageTask(3, EntityType.TARGET)))
+					new FlagTask(true, new DamageTask(5, EntityType.TARGET)))
 			}));
 
 		}

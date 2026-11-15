@@ -676,7 +676,7 @@ namespace SabberStoneCore.CardSets
 			// [FP1_002t] Spectral Spider (*) - COST:1 [ATK:1/HP:1]
 			// - Set: naxx,
 			// --------------------------------------------------------
-			cards.Add("FP1_002t", new CardDef());
+			cards.Add("FP1_002t", new CardDef { Configure = card => card.SetPrintedRaces(Race.UNDEAD, Race.BEAST) });
 
 			// --------------------------------------- MINION - NEUTRAL
 			// [FP1_006] Deathcharger (*) - COST:1 [ATK:2/HP:3]
@@ -697,7 +697,7 @@ namespace SabberStoneCore.CardSets
 			// [FP1_007t] Nerubian (*) - COST:4 [ATK:4/HP:4]
 			// - Set: naxx,
 			// --------------------------------------------------------
-			cards.Add("FP1_007t", new CardDef());
+			cards.Add("FP1_007t", new CardDef { Configure = card => card.SetPrintedRaces(Race.UNDEAD) });
 
 			// --------------------------------------- MINION - NEUTRAL
 			// [FP1_012t] Slime (*) - COST:1 [ATK:1/HP:2]
