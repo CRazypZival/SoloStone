@@ -2674,12 +2674,11 @@ namespace SabberStoneCore.CardSets
 			// PlayReq:
 			// - REQ_MINION_TARGET = 0
 			// --------------------------------------------------------
-			cards.Add("AT_115", new CardDef(new Dictionary<PlayReq, int>() {{PlayReq.REQ_MINION_TARGET,0}}, new Power
+			cards.Add("AT_115", new CardDef(new Power
 			{
-				// TODO [AT_115] Fencing Coach && Test: Fencing Coach_AT_115
+				// 37.0: a Battlecry with no target; the discount is an enchantment on the Hero Power, spent by its next use.
 				InfoCardId = "AT_115e",
-				//PowerTask = null,
-				//Trigger = null,
+				PowerTask = new AddEnchantmentTask("AT_115e", EntityType.HERO_POWER)
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -2755,6 +2754,7 @@ namespace SabberStoneCore.CardSets
 					.Type(TriggerType.PLAY_CARD)
 					.SetTask(new AddEnchantmentTask("AT_121e", EntityType.SOURCE))
 					.SetCondition(SelfCondition.IsBattleCryCard)
+					.SetSource(TriggerSource.FRIENDLY)
 			}));
 
 			// --------------------------------------- MINION - NEUTRAL
@@ -3204,9 +3204,9 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_115e", new CardDef(new Power
 			{
-				// TODO [AT_115e] Fencing Practice && Test: Fencing Practice_AT_115e
-				//PowerTask = null,
-				//Trigger = null,
+				Enchant = new Enchant(Effects.ReduceCost(2)),
+				Trigger = TriggerBuilder.Type(TriggerType.INSPIRE)
+					.SetTask(RemoveEnchantmentTask.Task)
 			}));
 
 			// ---------------------------------- ENCHANTMENT - NEUTRAL
