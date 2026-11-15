@@ -28,6 +28,11 @@ internal static class WildBatchChecks
         // The shared Standard loader is deliberately nonrecursive: Wild manifests cannot affect its frozen registry.
         Check(StandardBatchData.Load("tests/progression/batches").Values.SelectMany(batch => batch).All(id => !ids.Contains(id)),
             "Wild manifests overlap Standard batches");
+        // Until Classic leaves Standard (#87), no Wild identity row may touch an id Standard uses today.
+        CheckNotUsedByStandard(ids, StandardSources());
+        Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/LocalCardCatalog.cs", "private const string X = \"CS1_112 CS2_029 CS2_032\";") }));
+        Reject(() => CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("data/pools/x.json", "{\"cards\":[\"CS2_029\"]}") }));
+        CheckNotUsedByStandard(new[] { "CS2_029" }, new[] { ("plugin/LocalDecks.cs", "// CS2_029 only in a comment\nvar other = \"CS2_0290 XCS2_029\";") });
         Reject(() => ValidateCases(new[] { "CS2_028" }, Array.Empty<string>()));
         Reject(() => ValidateCases(Array.Empty<string>(), new[] { "CS2_028" }));
         Reject(() => ValidateCases(new[] { "CS2_028" }, new[] { "CS2_028", "CS2_028" }));
@@ -40,6 +45,36 @@ internal static class WildBatchChecks
         Check(ReadCases(new[] { "// WildSetsProof.Case(\"COMMENT\", Scenario);\nWildSetsProof.Case(\"CS2_028\", Scenario);" })
             .SequenceEqual(new[] { "CS2_028" }), "commented cases do not count");
         Console.WriteLine($"PASS Wild batches: groups={files.Length}; cards={ids.Length}; exactly one case per manifest identity; no Standard overlap");
+    }
+
+    // The sources that name card ids Standard uses: the catalog manifests, deck recipes, the native match and NPC tables
+    // (their string literals, comments stripped) and every data file except the pinned client data and FX censuses.
+    private static IEnumerable<(string Source, string Text)> StandardSources()
+    {
+        var files = new List<string> { "plugin/LocalCardCatalog.cs", "plugin/LocalDecks.cs", "plugin/NativeMatch.cs" };
+        files.AddRange(Directory.GetFiles("plugin/Npc", "*.cs", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.Ordinal));
+        files.AddRange(Directory.GetFiles("data", "*.json", SearchOption.AllDirectories)
+            .Where(path => !path.Replace('\\', '/').StartsWith("data/carddb/") && !path.Replace('\\', '/').StartsWith("data/fx/"))
+            .OrderBy(path => path, StringComparer.Ordinal));
+        return files.Select(path => (path.Replace('\\', '/'), File.ReadAllText(path)));
+    }
+
+    internal static void CheckNotUsedByStandard(string[] ids, IEnumerable<(string Source, string Text)> sources)
+    {
+        var used = new List<string>();
+        foreach (var (source, text) in sources)
+        {
+            string body = text;
+            if (source.EndsWith(".cs", StringComparison.Ordinal))
+            {
+                string code = Regex.Replace(text, "//[^\r\n]*|/\\*[\\s\\S]*?\\*/|\"(?:\\\\.|[^\"\\\\\r\n])*\"",
+                    match => match.Value.StartsWith("\"") ? match.Value : "");
+                body = string.Join("\n", Regex.Matches(code, "\"(?:\\\\.|[^\"\\\\\r\n])*\"").Select(match => match.Value));
+            }
+            var tokens = new HashSet<string>(Regex.Split(body, "[^A-Za-z0-9_]+"), StringComparer.Ordinal);
+            used.AddRange(ids.Where(tokens.Contains).Select(id => id + " (" + source + ")"));
+        }
+        Check(used.Count == 0, "Wild manifest id used by Standard (held until #87): " + string.Join(", ", used));
     }
 
     // LocalCardCatalog's NewBasicIds must stay Set CORE and Rarity FREE: an identity row for one keeps its base CARD_SET
