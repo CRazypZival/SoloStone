@@ -1447,6 +1447,11 @@ internal static partial class Program
             // The human owner already knows the card, so nothing re-shows it. The opponent's hidden hand card is revealed
             // once, before the block, as for any played opponent card; that SHOW cannot undo a prediction (the human did not drop it).
             if (!bot) Check(!play.Any(e => e.HasShowEntity && e.ShowEntity.Entity == sigil.Id), label + " no SHOW of the owner's own card");
+            else
+            {
+                var reveals = Enumerable.Range(0, play.Count).Where(i => play[i].HasShowEntity && play[i].ShowEntity.Entity == sigil.Id).ToArray();
+                Check(reveals.Length == 1 && reveals[0] < begin, label + " opponent Sigil revealed exactly once, before its PLAY block");
+            }
             // Own turn ends, the opponent's ends, and the Sigil fires at the start of the owner's next turn.
             InvokeProcess(match, owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.END_TURN));
             FlushFieldHistory(match); cursor = capture.Packets.Count;
