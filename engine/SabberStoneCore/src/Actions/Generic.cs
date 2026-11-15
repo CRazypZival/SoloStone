@@ -502,6 +502,8 @@ namespace SabberStoneCore.Actions
 
 					c.Game.Facts.AdmitDefinition(newCard);
 					p.Card = newCard;
+					// Detaching the old auras above read Attack and Health, which cached the old card's printed values.
+					if (removeEnchantments && p is Minion fresh) fresh.DropCachedStats();
 					Playable pp = (Playable)p;
 					if (pp._costManager != null)
 						pp._modifiedCost = pp._costManager.EntityChanged(newCard.Cost);

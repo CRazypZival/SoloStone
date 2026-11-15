@@ -376,6 +376,13 @@ namespace SabberStoneCore.Model.Entities
 
         }
 
+		/// <summary>Forgets cached Attack and Health so the next read takes them from the current card.</summary>
+		internal void DropCachedStats()
+		{
+			_modifiedATK = null;
+			_modifiedHealth = null;
+		}
+
 		internal void ResetAttributes()
 		{
             Actions.DeathContextRules.ClearTransient(this);

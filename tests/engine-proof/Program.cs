@@ -109,6 +109,7 @@ if (args.Contains("--b13-forced-cards-only")) { StandardSetsProof.Run(selectedPr
 if (args.Contains("--enemy-board-copy-only")) { EnemyBoardCopyProof.Run(); return; }
 if (args.Contains("--forced-attack-only")) { ForcedAttackBudgetProof.Run(); return; }
 if (args.Contains("--poisonous-only")) { PoisonousDamageProof.Run(); return; }
+if (args.Contains("--targeting-only")) { TargetingRulesProof.Run(); return; }
 if (args.Contains("--floop-taunt-only")) { FloopTauntProof.Run(); return; }
 if (args.Contains("--weapon-keywords-only")) { WeaponKeywordProof.Run(); return; }
 if (args.Contains("--weapon-damage-only")) { DamageWeaponTaskProof.Run(); return; }
@@ -596,6 +597,7 @@ for (int i = 0; i < parallel.Length; i++)
 Console.WriteLine("PASS parallel seeded game isolation");
 DeathAuraTimingProof.Run();
 PoisonousDamageProof.Run();
+TargetingRulesProof.Run();
 DamageWeaponTaskProof.Run();
 WeaponKeywordProof.Run();
 MultiAuraCleanupProof.Run();
