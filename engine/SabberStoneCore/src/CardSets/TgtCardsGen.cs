@@ -2593,9 +2593,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_109", new CardDef(new Power
 			{
-				// 37.0 prints no CANT_ATTACK tag on the card; the restriction is a removable effect (Silence ends it) that
-				// Inspire (AT_109e, a one-turn CANT_ATTACK 0) lifts until the end of the turn.
-				Aura = new AdaptiveEffect(new SelfCondition(me => !System.Linq.Enumerable.Any(me.Game.OneTurnEffects, e => e.entityId == me.Id && e.effect.Tag == GameTag.CANT_ATTACK)), GameTag.CANT_ATTACK),
+				// CANT_ATTACK comes from the identity row (generator rule for lost tags); Inspire (AT_109e) lifts it for the turn.
 				Trigger = new Trigger(TriggerType.INSPIRE)
 				{
 					SingleTask = new AddEnchantmentTask("AT_109e", EntityType.SOURCE)
