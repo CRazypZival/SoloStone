@@ -136,7 +136,7 @@ others change at once.
 - **FPS Counter** shows the frame rate in the top-right corner.
 - **NPC Deck Guess (Experimental)** lets NPCs guess your deck from the cards you have played.
 - **Show Plain Cards** shows golden, diamond and signature cards in their normal version in matches, yours and the
-  NPC's. Your collection, decks and packs keep them as they are.
+  NPC's, and a golden hero portrait in its normal version too. Your collection, decks and packs keep them as they are.
 - **Pace: <tier>** opens the Pace page, and its **Back** returns to this window. The button is hidden during a match.
 - **Language: <name>** is covered under "Game language" below.
 - **Restore Starter Decks** appears only while you have a starter deck hidden.
