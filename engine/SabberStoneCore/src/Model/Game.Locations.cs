@@ -35,6 +35,7 @@ namespace SabberStoneCore.Model
                 if (location.Zone == location.Controller.BoardZone) location.LastBoardPosition = location.ZonePosition;
             if (History) PowerHistory.Add(PowerHistoryBuilder.BlockStart(BlockType.DEATHS, 1, "", 0, 0));
             var deathCosts = DeadMinions.ToDictionary(m => m.Id, m => m.Cost);
+            Actions.DeathrattleRules.CaptureBatch(this);
             foreach (IPlayable entity in dead)
             {
                 if (entity is BoardObject location) { RetireBoardObject(location); continue; }
@@ -52,6 +53,7 @@ namespace SabberStoneCore.Model
                 if (reborn) _rebornMinions.Add(minion);
                 DeadMinions.Remove(minion);
             }
+            DeathrattleBatch = null;
             if (History) PowerHistory.Add(PowerHistoryBuilder.BlockEnd());
         }
     }

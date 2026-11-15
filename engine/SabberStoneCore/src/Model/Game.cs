@@ -1343,6 +1343,8 @@ namespace SabberStoneCore.Model
 		#endregion
 
 		internal List<int> ClearWeapons;
+		/// <summary>Deathrattle repeats of the minions of the death phase being resolved, read before any of them left the board.</summary>
+		internal Dictionary<int, int> DeathrattleBatch;
 		private static readonly Func<Minion, int> GetOrderOfPlay = m => m.OrderOfPlay;
 		private readonly List<Minion> _rebornMinions = new List<Minion>();
         // Only populated inside the existing non-snapshotable death/Reborn transaction.
@@ -1378,6 +1380,7 @@ namespace SabberStoneCore.Model
 					PowerHistory.Add(PowerHistoryBuilder.BlockStart(BlockType.DEATHS, 1, "", 0, 0));
 
 				DeadMinions.InsertionSort(GetOrderOfPlay);
+				Actions.DeathrattleRules.CaptureBatch(this);
 				foreach (Minion minion in DeadMinions)
 					minion.LastBoardPosition = minion.ZonePosition;
 				var deathCosts = DeadMinions.ToDictionary(m => m.Id, m => m.Cost);
@@ -1412,6 +1415,7 @@ namespace SabberStoneCore.Model
 					PowerHistory.Add(PowerHistoryBuilder.BlockEnd());
 
 				DeadMinions.Clear();
+				DeathrattleBatch = null;
 			}
 
             Actions.CorpseRules.ResurrectHeroes(this);
