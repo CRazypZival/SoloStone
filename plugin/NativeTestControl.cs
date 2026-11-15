@@ -486,6 +486,7 @@ internal sealed partial class NativeTestControl
                     case "ui": case "wait-ui": QueueUi(envelope); return;
                     case "state":
                         view.State["grindTier"] = LocalLadder.Profile?.GrindTier.Id;
+                        view.State["npcDifficulty"] = DifficultyState(SampleUi());
                         view.State["playMode"] = LocalLadder.Profile == null ? null : LocalLadder.Profile.PrefersCasual ? "casual" : "ranked";
                         view.State["fpsCounter"] = NativeFpsCounter.State();
                         view.State["brandLabel"] = NativeBrandLabel.State();
@@ -1254,7 +1255,13 @@ internal sealed partial class NativeTestControl
         if (uiSampleFrame == Time.frameCount) return uiSample;
         UiSnapshot snapshot;
         var began = System.Diagnostics.Stopwatch.StartNew();
-        try { snapshot = NativeUiTree.Read(); NativeResultsUI.FilterTestUi(snapshot); }
+        try
+        {
+            snapshot = NativeUiTree.Read(); NativeResultsUI.FilterTestUi(snapshot);
+            foreach (var row in snapshot.Elements.Where(row => DifficultyRow(row.Id)))
+                if (NpcDifficultyIds.IsLocked(row.Id.Substring(row.Id.LastIndexOf(':') + 1)))
+                { row.Enabled = false; row.Hit = false; row.HitBy = "locked"; row.Denied = "locked"; }
+        }
         catch (Exception error)
         {
             snapshot = new UiSnapshot { Scene = "unknown", Screen = LocalLadder.Screen };
@@ -1340,11 +1347,45 @@ internal sealed partial class NativeTestControl
         data["premiumRewardPresentation"] = NativeResultsUI.PremiumRewards?.State;
         data["rewardPresentation"] = NativeRewardUI.Diagnostics;
         data["packRevealPending"] = LocalLadder.Profile?.PackRevealPending ?? false;
+        data["npcDifficulty"] = DifficultyState(snapshot);
         if (all) data["shopSubTabs"] = NativeShop.SubTabDiagnostics(); // Which object draws each sub-tab plate.
         if (all) data["shopRecipePrices"] = NativeShopTilePrices.Diagnostics(); // Deck tiles' recipe price plates.
         if (all) data["shopScroll"] = NativeShop.ScrollDiagnostics(); // Browser scroll height inputs.
         if (!all) data["elements"] = TestControlProtocol.List(snapshot.Elements.Where(element => element.OnScreen || element.Pack != null).Select(element => (object)element.ToJson()));
+        // Explicit UI reads reuse the picker cache, never construct or lock profiles.
+        foreach (JsonNode element in (JsonList)data["elements"])
+        {
+            string id = element["id"] as string;
+            if (id != null && id.StartsWith("save.slot:", StringComparison.Ordinal))
+                element["difficulty"] = NativeProfileSelector.SlotDifficulty(id.Substring("save.slot:".Length));
+            if (DifficultyRow(id)) element["locked"] = NpcDifficultyIds.IsLocked(id.Substring(id.LastIndexOf(':') + 1));
+        }
         return data;
+    }
+
+    private static bool DifficultyRow(string id) => id != null && (id.StartsWith("save.difficulty:", StringComparison.Ordinal)
+        || id.StartsWith("save.difficulty.set:", StringComparison.Ordinal));
+
+    private static JsonNode DifficultyState(UiSnapshot snapshot)
+    {
+        var encounter = NpcWorldRuntime.Active;
+        var rows = new JsonList();
+        foreach (var row in snapshot.Elements.Where(row => row.OnScreen && DifficultyRow(row.Id)))
+        {
+            var node = row.ToJson();
+            node["selected"] = row.Selected;
+            node["locked"] = NpcDifficultyIds.IsLocked(row.Id.Substring(row.Id.LastIndexOf(':') + 1));
+            node["hittable"] = row.Enabled && !row.PressDisabled && row.Hit && row.Denied == null;
+            node["blocker"] = row.Denied ?? (row.PressDisabled ? "pressDisabled" : !row.Enabled ? "disabled" : !row.Hit ? row.HitBy : null);
+            rows.Add(node);
+        }
+        return new JsonNode {
+            { "saved", LocalLadder.Profile?.NpcDifficulty }, { "next", LocalLadder.Profile?.NpcDifficulty },
+            { "thisMatch", encounter == null ? null : encounter.Difficulty ?? NpcDifficultyIds.Hard },
+            { "position", encounter?.DifficultyPosition }, { "coreDeck", encounter == null ? (object)null : NpcDifficultyShaper.IsCoreDeck(encounter.Deck) },
+            { "skill", encounter?.Skill?.Id }, { "planNodes", encounter?.Profile?.Budget.PlanNodes },
+            { "option", NativeOptionsDifficulty.State() }, { "rows", rows }
+        };
     }
     // Screen and element conditions combine; with neither, the whole UI must be idle.
     private static string UiWaitBlocker(UiSnapshot snapshot, List<string> busy, ControlRequest request)
@@ -1418,7 +1459,11 @@ internal sealed partial class NativeTestControl
         }
         string id = request.Text("element");
         string blocker = UiRules.PermanentBlocker(snapshot, id, request.Has("snapshot") ? request.Text("snapshot") : null);
-        if (blocker != null) { RejectPress(blocker); return; }
+        if (blocker != null)
+        {
+            if (DifficultyRow(id) && snapshot.Find(id)?.Denied == "locked") NativeProfileSelector.Log("NPC_DIFFICULTY locked id=extreme");
+            RejectPress(blocker); return;
+        }
         blocker = UiRules.TransientBlocker(snapshot, id);
         // A local shop product below the fold: scroll the shop's own browser to it (scroll position only), then the
         // usual actionability checks decide once it is laid out, visible, hit and stable.
