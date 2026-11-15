@@ -92,7 +92,7 @@ internal static partial class NativeArena
         Check(!ArenaDeckChanges(new CollectionDeck { ID = DeckId, Type = DeckType.DRAFT_DECK }, CollectionDeck.ChangeSource.Arena), "Arena editor save bypasses constructed validation and login gate");
         Tick(); Check(received.Last().Id == 716, "Arena editor save gets authoritative reply");
         RedraftRequest(); Tick(); Check(stub.View().Phase == ArenaPhase.Ready, "redraft refused");
-        Underground(); Check(DialogManager.Last.m_text.Contains("coming later") && stub.View().Phase == ArenaPhase.Ready, "Underground explains and never switches");
+        Underground(); Check(DialogManager.Last.m_text.Contains("coming in a later SoloStone update") && stub.View().Phase == ArenaPhase.Ready, "Underground explains and never switches");
         bool underground = true; NormalMode(ref underground); Check(!underground, "retail preference cannot enable Underground");
         int errorsBefore = errorSeq; FindGame();
         Check(lastNotice == "stub" && errorSeq == errorsBefore && !MatchActive, "stub never launches a match; the notice is not an error");
@@ -114,6 +114,10 @@ internal static partial class NativeArena
         // Informational notices never touch the error state; failures bump errorSeq.
         errorsBefore = errorSeq; Underground(); Disclaimer(); NoStore();
         Check(errorSeq == errorsBefore && lastNotice != null, "notices are not errors");
+        Underground(); Check(lastNotice == "This Arena mode is coming in a later SoloStone update.", "Underground notice text");
+        Disclaimer(); string rules = DialogManager.Last.m_text;
+        Check(rules.Contains("12 wins or 3 losses") && rules.Contains("NPC opponents") && rules.Contains("150 gold") && rules.Contains("Rewards grow")
+            && rules.Contains("retire at any time") && !rules.Contains("Underground") && GoldCostText(150) == "150 Gold", "rules popup text");
         ChoiceRequest(DeckId, 7, 1, 1, false, false, new List<int>()); Check(errorSeq == errorsBefore + 1, "a refusal bumps errorSeq");
         // A disabled Arena is inert: every send keeps retail behavior and the unavailable notice is informational.
         Disable("test");

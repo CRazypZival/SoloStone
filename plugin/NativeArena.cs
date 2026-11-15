@@ -87,6 +87,7 @@ internal static partial class NativeArena
         Patch(harmony, typeof(ArenaLandingPageManager), "SpendTicket", nameof(Enter));
         Patch(harmony, typeof(ArenaLandingPageManager), "ToggleUndergroundState", nameof(Underground));
         Patch(harmony, typeof(ArenaLandingPageManager), "ShowArenaDisclaimer", nameof(Disclaimer));
+        Patch(harmony, typeof(ArenaLandingPageManager), "CheckForFTUXPopup", nameof(NoFtue));
         Patch(harmony, typeof(ArenaLandingPageManager), "UpdateArenaRatingValues", nameof(NoRating));
         Patch(harmony, typeof(ArenaLandingPageManager), "StartMatchmaking", nameof(FindGame));
         Patch(harmony, typeof(DraftManager), "FindGame", nameof(FindGame));
@@ -279,7 +280,7 @@ internal static partial class NativeArena
     private static bool ContentsRequest(bool __0)
     {
         if (!Offline) return true;
-        if (__0) { Notice("Underground coming later."); return false; }
+        if (__0) { Notice(UndergroundNotice); return false; }
         QueueContents(Read());
         return false;
     }
@@ -299,7 +300,7 @@ internal static partial class NativeArena
     private static bool BeginRequest(bool __0)
     {
         if (!Offline) return true;
-        if (__0) Notice("Underground coming later."); else BeginRun();
+        if (__0) Notice(UndergroundNotice); else BeginRun();
         return false;
     }
     private static bool Enter(ArenaLandingPageManager __instance)
@@ -396,8 +397,16 @@ internal static partial class NativeArena
     // Keep GT_VS_AI transport/presentation. Only post-game routing changes; retail's OnGameOver must not count a second result.
     internal static SceneMgr.Mode NavigationTarget(SceneMgr.Mode mode) => Offline && MatchActive && mode == SceneMgr.Mode.TOURNAMENT ? SceneMgr.Mode.DRAFT : mode;
     private static void ReturnToDraft(ref SceneMgr.Mode __result) { if (Offline && MatchActive) __result = SceneMgr.Mode.DRAFT; }
-    private static bool Underground() { if (!Offline) return true; Notice("Underground coming later."); return false; }
-    private static bool Disclaimer() { if (!Offline) return true; Notice("Arena: " + Read().MaxWins + " wins or " + Read().MaxLosses + " losses. Entry costs " + Read().EntryCost + " gold. Underground coming later."); return false; }
+    private static bool Underground() { if (!Offline) return true; Notice(UndergroundNotice); return false; }
+    private static bool Disclaimer() { if (!Offline) return true; Notice(RulesText(Read())); return false; }
+    internal const string UndergroundNotice = "This Arena mode is coming in a later SoloStone update.";
+    // The "?" button: our own rules, not retail's first-visit slides (5 wins, other players).
+    internal static string RulesText(ArenaView view) =>
+        "Draft a deck of " + 30 + " cards, then play NPC opponents who drafted decks of their own. "
+        + "Your run ends at " + view.MaxWins + " wins or " + view.MaxLosses + " losses. "
+        + "Entry costs " + view.EntryCost + " gold. Rewards grow with every win. "
+        + "You can retire at any time and keep the reward you have earned so far.";
+    internal static string GoldCostText(int cost) => cost + " Gold";
     private static void NormalMode(ref bool __0) { if (Offline) __0 = false; }
     private static bool NormalPremium(ref TAG_PREMIUM __result) { if (!Offline) return true; __result = TAG_PREMIUM.NORMAL; return false; }
     private static bool DraftHeroPremium(ref TAG_PREMIUM __result) { if (!InDraft) return true; __result = TAG_PREMIUM.NORMAL; return false; }
@@ -406,7 +415,7 @@ internal static partial class NativeArena
     private static bool MaxLosses(ref int __result) { if (!Offline) return true; __result = Read().MaxLosses; return false; }
     private static bool NoPresence() => !Offline || !InDraft && !MatchActive;
     private static bool AchievementsReady(ref bool __result) { if (!InDraft) return true; __result = true; return false; }
-    private static bool NoStore() { if (!InDraft) return true; Notice("Entry costs " + Read().EntryCost + " gold. Use Enter Arena."); return false; }
+    private static bool NoStore() { if (!InDraft) return true; Notice("Entry costs " + Read().EntryCost + " gold. Use the play button."); return false; }
     private static bool ToggleStartingState(ArenaModeToggleButton __instance)
     {
         if (!Offline) return true;

@@ -92,6 +92,8 @@ foreach (var contract in new[] {
     ("DraftManager", "FindGame", Array.Empty<string>(), "Void"),
     ("ArenaLandingPageManager", "SpendTicket", Array.Empty<string>(), "Void"),
     ("ArenaLandingPageManager", "StartMatchmaking", Array.Empty<string>(), "Void"),
+    ("ArenaLandingPageManager", "ShowArenaDisclaimer", Array.Empty<string>(), "Void"),
+    ("ArenaLandingPageManager", "CheckForFTUXPopup", Array.Empty<string>(), "IEnumerator"),
     ("ArenaLandingPageManager", "UpdateArenaRatingValues", new[] { "Int32", "Int32" }, "Void"),
     ("GameMgr", "GetPostGameSceneMode", Array.Empty<string>(), "Mode"),
     ("BnetPresenceMgr", "SetGameFieldBlob", new[] { "UInt32", "IProtoBuf" }, "Boolean"),
@@ -105,7 +107,10 @@ foreach (var (typeName, fieldName, fieldType) in new[] {
     ("DraftDisplay", "m_currentMode", "DraftMode"), ("DraftDisplay", "m_netCacheReady", "Boolean"),
     ("DraftDisplay", "m_arenaLandingPageManagerWidget", "Widget"), ("DraftScene", "m_arenaLandingPageWidget", "WidgetTemplate"),
     ("ArenaLandingPageManager", "m_isNormalWidgetLoaded", "Boolean"), ("ArenaLandingPageManager", "m_isUndergroundWidgetLoaded", "Boolean"),
-    ("ArenaLandingPageManager", "m_isWidgetDoneInitialStateChanging", "Boolean"), ("SceneMgr", "m_scene", "PegasusScene") })
+    ("ArenaLandingPageManager", "m_isWidgetDoneInitialStateChanging", "Boolean"),
+    ("ArenaLandingPageManager", "m_FTUECoroutine", "Coroutine"), ("ArenaLandingPageManager", "m_tavernTicketDisplay", "TavernTicketDisplay"),
+    ("ArenaLandingPage", "m_playButtonNoActiveRun", "GameObject"), ("ArenaLandingPage", "m_playButtonActiveRun", "GameObject"),
+    ("ArenaLandingPage", "m_getMoreTicketsButtonWidget", "WidgetInstance"), ("TavernTicketDisplay", "m_widget", "Widget"), ("SceneMgr", "m_scene", "PegasusScene") })
     if (Field(gameMetadata, typeName, fieldName).DecodeSignature(signatures, (object)null) != fieldType)
         throw new Exception("Arena boot watch field changed: " + typeName + "." + fieldName);
 Console.WriteLine("PASS Arena boot watch reads the pinned client's scene-loaded waits");
@@ -140,6 +145,8 @@ var hooks = new[] {
     ("DraftDisplay", "Awake", "NativeArena", "BeforeScene"),
     ("ArenaLandingPageManager", "SpendTicket", "NativeArena", "Enter"),
     ("ArenaLandingPageManager", "ToggleUndergroundState", "NativeArena", "Underground"),
+    ("ArenaLandingPageManager", "ShowArenaDisclaimer", "NativeArena", "Disclaimer"),
+    ("ArenaLandingPageManager", "CheckForFTUXPopup", "NativeArena", "NoFtue"),
     ("ArenaLandingPageManager", "UpdateArenaRatingValues", "NativeArena", "NoRating"),
     ("ArenaModeToggleButton", "DetermineStartingState", "NativeArena", "ToggleStartingState"),
     ("DraftManager", "FindGame", "NativeArena", "FindGame"),
@@ -420,6 +427,9 @@ foreach (string option in new[] { "HAS_SEEN_MULLIGAN", "HAS_SEEN_THE_COIN", "HAS
     foreach (string owner in new[] { "Option", "ServerOptionFlag" })
         if (TryEnumValue(gameMetadata, owner, option) == null)
             failures.Add(owner + "::" + option + " match onboarding flag missing");
+foreach (string option in new[] { "HAS_SEEN_FORGE", "HAS_SEEN_FORGE_REVAMP", "HAS_SEEN_FORGE_REVAMP_UNDERGROUND" })
+    if (TryEnumValue(gameMetadata, "Option", option) == null)
+        failures.Add("Option::" + option + " missing (Arena first-visit slides are suppressed through it)");
 var finalizer = Method(pluginMetadata, "NativeUIProbe", "FinishLocalReorder");
 var finalizerSignature = finalizer.DecodeSignature(signatures, (object)null);
 var finalizerParameters = Parameters(pluginMetadata, finalizer);

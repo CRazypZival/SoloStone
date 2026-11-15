@@ -61,6 +61,12 @@ internal static partial class NativeArena
         return node;
     }
 
+    internal static bool HasAncestorNamed(Transform node, string name)
+    {
+        for (var at = node; at != null; at = at.parent) if (at.name == name) return true;
+        return false;
+    }
+
     internal static void NameControls(Action<PegUIElement, string> name, List<PegUIElement> elements, List<PegUIElementProxy> proxies)
     {
         if (!InDraft) return;
@@ -93,6 +99,12 @@ internal static partial class NativeArena
         var page = landing?.GetArenaLandingPage();
         NameRoot(Field(page, "m_playButtonNoActiveRun"), "arena.enter");
         NameRoot(Field(page, "m_playButtonActiveRun"), "arena.play");
+        // Landing page controls that no client field points at: found by their place in the page.
+        foreach (var element in elements.Where(element => element != null).Distinct().ToList())
+        {
+            if (element is UIBButton && HasAncestorNamed(element.transform, "ArenaLandingPage_BottomBar")) name(element, "arena.back");
+            else if (element.name == "rewardsChest") name(element, "arena.rewards.preview");
+        }
         if (Field(display, "m_choices") is IEnumerable choices)
         {
             string kind = Read().Phase == ArenaPhase.ChoosingHero ? "hero" : "card";

@@ -39,6 +39,10 @@ internal static class ArenaChecks
     internal static void Run(string root)
     {
         Offers(); Rewards();
+        using (var poor = new LocalProfile(Path.Combine(root, "arena-poor.xml"))) {
+            Fund(poor, 40);
+            Check(new ArenaService(poor).Begin("poor-1").Error == "Arena costs 150 gold. You have 40 gold.", "refusal names the cost and the gold");
+        }
         string path = Path.Combine(root, "arena-run.xml");
         string runId; List<string> offers;
         using (var profile = new LocalProfile(path)) {

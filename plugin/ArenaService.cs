@@ -42,7 +42,7 @@ public sealed class ArenaService : IArenaService
         if (profile.Pending != null) return Error("A match is pending.");
         if (profile.HasPendingRewardPresentation || profile.PackRevealPending) return Error("A reward presentation is pending.");
         var rules = DraftRules.Arena();
-        if (profile.Gold < rules.EntryGold) return Error("Not enough gold.");
+        if (profile.Gold < rules.EntryGold) return Error("Arena costs " + rules.EntryGold + " gold. You have " + profile.Gold + " gold.");
         return Change(next => {
             if (next.ArenaEntryRequestIds.Count >= LocalProfile.MaximumArenaRequests) throw new InvalidOperationException("Arena entry receipt limit reached.");
             string id = Guid.NewGuid().ToString("D");

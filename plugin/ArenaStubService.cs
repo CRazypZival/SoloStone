@@ -16,7 +16,7 @@ internal sealed class ArenaStubService : IArenaService
     {
         if (current.Phase != ArenaPhase.None) return requestId == beginId ? Copy() : Copy("Finish the current run first.");
         if (string.IsNullOrEmpty(requestId)) return Copy("Entry request id required.");
-        if (current.GoldBalance < 150) return Copy("Not enough gold.");
+        if (current.GoldBalance < 150) return Copy("Arena costs 150 gold. You have " + current.GoldBalance + " gold.");
         beginId = requestId;
         current = new ArenaView { Phase = ArenaPhase.ChoosingHero, EntryCost = 150, GoldBalance = current.GoldBalance - 150,
             RunId = "stub-" + requestId, HeroOffers = new List<string> { "HERO_01", "HERO_08", "HERO_06" } };
