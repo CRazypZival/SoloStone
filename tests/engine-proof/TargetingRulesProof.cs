@@ -14,7 +14,8 @@ internal static class TargetingRulesProof
     {
         var failures = new List<string>();
         var cases = new (string, Action)[] {
-            ("#138 transform resets stats", TransformResetsStats), };
+            ("#138 transform resets stats", TransformResetsStats),
+            ("#139 Slime 'em! empty boards", SlimeEmEmptyBoards) };
         foreach (var (name, proof) in cases)
         {
             try { proof(); }
@@ -91,4 +92,13 @@ internal static class TargetingRulesProof
         card.Power.PowerTask.Process(g, p, source, target, null);
     }
 
+    // #139: Slime 'em! text has no condition; both players get the spell even with no minions anywhere.
+    private static void SlimeEmEmptyBoards()
+    {
+        var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+        Verify(p.BoardZone.Count == 0 && p.Opponent.BoardZone.Count == 0, "empty boards");
+        Play(g, p, "CAP_805");
+        Verify(p.HandZone.Count(c => c.Card.Id == "CAP_805t") == 1 && p.Opponent.HandZone.Count(c => c.Card.Id == "CAP_805t") == 1,
+            "both players get an Ectoplasm with no minions (text has no condition)");
+    }
 }
