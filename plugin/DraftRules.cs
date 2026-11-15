@@ -125,6 +125,21 @@ public sealed class DraftRules
         unchecked { ulong hash = 14695981039346656037UL; foreach (char c in value) { hash ^= c; hash *= 1099511628211UL; } return (long)hash; }
     }
 
+    // The reward for every win count at one pace, for the native rewards list (season reward levels). Preview only: the paid
+    // reward is computed at the end of the run with the run's own pack set.
+    public IReadOnlyList<ArenaReward> RewardTable(string tierId, string packType)
+    {
+        string key = tierId + "|" + packType;
+        lock (rewardTables)
+        {
+            if (!rewardTables.TryGetValue(key, out var table))
+                rewardTables[key] = table = Enumerable.Range(0, MaxWins + 1).Select(wins => Reward(null, wins, tierId, packType)).ToList().AsReadOnly();
+            return table;
+        }
+    }
+    private readonly Dictionary<string, IReadOnlyList<ArenaReward>> rewardTables = new Dictionary<string, IReadOnlyList<ArenaReward>>();
+    internal static string PreviewPackType => FairPackRules.PackTypes.Contains(FairPackRules.Standard) ? FairPackRules.Standard : FairPackRules.PackTypes.FirstOrDefault();
+
     public ArenaReward Reward(string runId, int wins, string tierId, string packType)
     {
         if (wins < 0 || wins > MaxWins || !FairPackRules.PackTypes.Contains(packType))

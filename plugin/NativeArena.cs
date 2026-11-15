@@ -415,14 +415,42 @@ internal static partial class NativeArena
     }
 
     internal static ArenaSessionResponse BuildSession(ArenaView view) => new ArenaSessionResponse {
-        ErrorCode = ErrorCode.ERROR_OK, CurrentSeason = Season(), Session = BuildRunSession(view),
-        UndergroundSession = new ArenaSession { State = ArenaSessionState.NO_RUN, IsActive = false, IsUnderground = true, Info = Season() } };
-    private static ArenaSeasonInfo Season() => new ArenaSeasonInfo { CurrentSeasonDisplayId = 1, IsDualClass = false,
-        Season = new ArenaSeasonSpec { GameContentSeason = new GameContentSeasonSpec { SeasonId = 1, EndSecondsFromNow = uint.MaxValue } } };
+        ErrorCode = ErrorCode.ERROR_OK, CurrentSeason = Season(view), Session = BuildRunSession(view),
+        UndergroundSession = new ArenaSession { State = ArenaSessionState.NO_RUN, IsActive = false, IsUnderground = true, Info = Season(view) } };
+    // Retail's season carries the reward levels the landing rewards list and chest icons bind to (ArenaLandingPageManager
+    // .PopulateArenaRewardsDataModel). Offline: one level per win count from the service's own reward table; Underground none.
+    private static ArenaSeasonInfo Season(ArenaView view)
+    {
+        var season = new ArenaSeasonInfo { CurrentSeasonDisplayId = 1, IsDualClass = false,
+            Season = new ArenaSeasonSpec { GameContentSeason = new GameContentSeasonSpec { SeasonId = 1, EndSecondsFromNow = uint.MaxValue } } };
+        foreach (var reward in view.RewardTable) season.NormalRewards.Add(RewardLevel(reward, view));
+        return season;
+    }
+    private static ArenaRewardLevel RewardLevel(ArenaReward reward, ArenaView view)
+    {
+        // A run ends at MaxWins (any losses below the cap) or at MaxLosses: one row per win count, as the run can end there.
+        var level = new ArenaRewardLevel { Wins = reward.Wins, Losses = reward.Wins == view.MaxWins ? view.MaxLosses - 1 : view.MaxLosses };
+        if (reward.Gold > 0) level.Rewards.Add(Currency(ArenaRewardCurrencyType.GOLD, reward.Gold));
+        if (reward.Dust > 0) level.Rewards.Add(Currency(ArenaRewardCurrencyType.DUST, reward.Dust));
+        foreach (var pack in reward.PackTypes.GroupBy(type => type))
+        {
+            var slot = new ArenaRewardSlot();
+            slot.SpecificBoosterRewards.Add(new ArenaRewardSpecificBoosterSlot { BoosterType = FairPackRules.NativeBoosterId(pack.Key),
+                MinBoosterCount = pack.Count(), MaxBoosterCount = pack.Count() });
+            level.Rewards.Add(slot);
+        }
+        return level;
+    }
+    private static ArenaRewardSlot Currency(ArenaRewardCurrencyType type, int amount)
+    {
+        var slot = new ArenaRewardSlot();
+        slot.CurrencyRewards.Add(new ArenaRewardCurrencySlot { CurrencyType = type, MinAmount = amount, MaxAmount = amount });
+        return slot;
+    }
     private static ArenaSession BuildRunSession(ArenaView view) => new ArenaSession { Wins = view.Wins, Losses = view.Losses,
         IsActive = view.Phase != ArenaPhase.None, IsInRewards = view.Phase == ArenaPhase.RewardPending, IsUnderground = false,
         State = view.Phase == ArenaPhase.None ? ArenaSessionState.NO_RUN : view.Phase == ArenaPhase.Ready ? ArenaSessionState.MIDRUN
-            : view.Phase == ArenaPhase.RewardPending ? ArenaSessionState.REWARDS : ArenaSessionState.DRAFTING, Info = Season() };
+            : view.Phase == ArenaPhase.RewardPending ? ArenaSessionState.REWARDS : ArenaSessionState.DRAFTING, Info = Season(view) };
     private static DraftSlotType SlotType(ArenaView view) => view.Phase == ArenaPhase.ChoosingHero ? DraftSlotType.DRAFT_SLOT_HERO : DraftSlotType.DRAFT_SLOT_CARD;
     private static List<DraftSlotType> SlotTypes() => new List<DraftSlotType> { DraftSlotType.DRAFT_SLOT_HERO, DraftSlotType.DRAFT_SLOT_CARD };
     private static NetCache.CardDefinition Card(string id) => new NetCache.CardDefinition { Name = id ?? string.Empty, Premium = TAG_PREMIUM.NORMAL };

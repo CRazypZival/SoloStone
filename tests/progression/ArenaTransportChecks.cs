@@ -32,6 +32,12 @@ internal static partial class NativeArena
             received.Add((id, value));
         };
         void Tick() { Time.frameCount++; Update(); }
+        // Season reward levels come from the real rules table at the save's pace (what the native rewards list shows).
+        var table = service.View().RewardTable;
+        var levels = BuildSession(service.View()).CurrentSeason.NormalRewards;
+        Check(table.Count == 13 && levels.Count == 13 && levels[12].Rewards.SelectMany(slot => slot.SpecificBoosterRewards).Single().MinBoosterCount == 5
+            && levels[12].Rewards.SelectMany(slot => slot.CurrencyRewards).Single(c => c.CurrencyType == ArenaRewardCurrencyType.GOLD).MinAmount == table[12].Gold
+            && table[12].Gold > 0 && table[0].Gold == 0 && table[0].PackTypes.Count == 1, "real season reward levels follow the rules table");
         void Refused(Action send, string message)
         {
             int errors = errorSeq, count = received.Count; var before = service.View();

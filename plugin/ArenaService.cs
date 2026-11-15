@@ -18,7 +18,8 @@ public sealed class ArenaService : IArenaService
             HeroCardId = run?.Hero, HeroOffers = run?.HeroOffers.ToList() ?? new List<string>(),
             Offers = run?.Phase == ArenaPhase.Drafting ? run.PendingOffers.ToList() : new List<string>(),
             Deck = run?.Deck.ToList() ?? new List<string>(), Reward = ArenaRun.CopyReward(run?.Reward),
-            EntryCost = rules.EntryGold, GoldBalance = profile.Gold
+            EntryCost = rules.EntryGold, GoldBalance = profile.Gold,
+            RewardTable = rules.RewardTable(run?.GrindTier ?? profile.GrindTier.Id, DraftRules.PreviewPackType).Select(ArenaRun.CopyReward).ToList()
         };
     }
 

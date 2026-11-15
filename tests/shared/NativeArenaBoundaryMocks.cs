@@ -96,7 +96,12 @@ internal sealed class CardDef { internal int Asset, Premium; }
 namespace NativeArenaBoundary.PegasusUtil
 {
 using PegasusShared;
-internal sealed class ArenaSeasonInfo { internal int CurrentSeasonDisplayId; internal bool IsDualClass; internal ArenaSeasonSpec Season; }
+internal sealed class ArenaSeasonInfo { internal int CurrentSeasonDisplayId; internal bool IsDualClass; internal ArenaSeasonSpec Season; internal List<ArenaRewardLevel> NormalRewards = new(); }
+internal sealed class ArenaRewardLevel { internal int Wins, Losses; internal List<ArenaRewardSlot> Rewards = new(); }
+internal sealed class ArenaRewardSlot { internal List<ArenaRewardCurrencySlot> CurrencyRewards = new(); internal List<ArenaRewardSpecificBoosterSlot> SpecificBoosterRewards = new(); }
+internal enum ArenaRewardCurrencyType { GOLD, DUST, TAVERN_TICKET }
+internal sealed class ArenaRewardCurrencySlot { internal ArenaRewardCurrencyType CurrencyType; internal int MinAmount, MaxAmount; }
+internal sealed class ArenaRewardSpecificBoosterSlot { internal int BoosterType, MinBoosterCount, MaxBoosterCount; }
 internal sealed class ArenaSession { internal int Wins, Losses; internal bool IsActive, IsInRewards, IsUnderground; internal ArenaSessionState State; internal ArenaSeasonInfo Info; }
 internal sealed class ArenaSessionResponse { internal enum PacketID { ID = 351 } internal ErrorCode ErrorCode; internal ArenaSeasonInfo CurrentSeason; internal ArenaSession Session, UndergroundSession; }
 internal sealed class ArenaRatingInfoResponse { internal enum PacketID { ID = 719 } internal ArenaPlayerInfo PlayerInfo; }

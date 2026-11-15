@@ -35,6 +35,7 @@ public sealed class ArenaView
     public List<string> Offers = new List<string>();      // 3 card ids for the current pick while Drafting
     public List<string> Deck = new List<string>();        // drafted card ids in pick order
     public ArenaReward Reward;       // set while RewardPending
+    public List<ArenaReward> RewardTable = new List<ArenaReward>(); // reward per win count 0..MaxWins at the current pace (preview)
     public int EntryCost;            // 150
     public long GoldBalance;
     public string Error;             // null on success; a short reason when the call was refused

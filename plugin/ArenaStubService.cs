@@ -66,6 +66,8 @@ internal sealed class ArenaStubService : IArenaService
     private ArenaView Copy(string error = null) => new ArenaView { Phase = current.Phase, RunId = current.RunId,
         Slot = current.Slot, HeroCardId = current.HeroCardId, Wins = current.Wins, Losses = current.Losses,
         EntryCost = current.EntryCost, GoldBalance = current.GoldBalance, Error = error,
+        RewardTable = Enumerable.Range(0, 13).Select(wins => new ArenaReward { Wins = wins, Gold = 75 * wins, Dust = 28 * wins,
+            PackTypes = Enumerable.Repeat("STANDARD", 1 + wins / 3).ToList() }).ToList(),
         HeroOffers = new List<string>(current.HeroOffers), Offers = new List<string>(current.Offers), Deck = new List<string>(current.Deck),
         Reward = current.Reward == null ? null : new ArenaReward { RunId = current.Reward.RunId, Wins = current.Reward.Wins,
             Gold = current.Reward.Gold, Dust = current.Reward.Dust, PackTypes = new List<string>(current.Reward.PackTypes) } };

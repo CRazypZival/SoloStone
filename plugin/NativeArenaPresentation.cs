@@ -21,21 +21,32 @@ internal static partial class NativeArena
             button.SetSecondaryText(view.EntryCost + " gold");
             button.SetTertiaryText(view.GoldBalance + " gold available");
         }
-        // Never reshape the native hierarchy while the scene is still loading: its widgets are settling their first states, and
-        // SceneMgr waits for that (DraftDisplay.NotifySceneLoadedWhenReady). The box is closed until then, so nothing shows early.
+        // Ticket UI has no offline meaning. Hide only an object of its own: never one that holds the Arena screen itself.
+        // Never during loading either: SceneMgr waits for the first states to settle (DraftDisplay.NotifySceneLoadedWhenReady).
         if (SceneMgr.Get().IsSceneLoaded() && !SceneMgr.Get().IsTransitioning())
         {
-            if (AccessTools.Field(typeof(ArenaLandingPageManager), "m_tavernTicketDisplay").GetValue(landing) is TavernTicketDisplay tickets)
-                tickets.gameObject.SetActive(false);
-            if (AccessTools.Field(typeof(ArenaLandingPage), "m_getMoreTicketsButtonWidget").GetValue(page) is Component moreTickets)
-                moreTickets.gameObject.SetActive(false);
+            var tickets = AccessTools.Field(typeof(ArenaLandingPageManager), "m_tavernTicketDisplay").GetValue(landing) as TavernTicketDisplay;
+            HideOwnPart(tickets, "tickets", landing, page);
+            HideOwnPart(AccessTools.Field(typeof(ArenaLandingPage), "m_getMoreTicketsButtonWidget").GetValue(page) as Component, "moreTickets", landing, page);
         }
         if (AccessTools.Field(typeof(ArenaLandingPageManager), "m_arenaLandingPageDataModel").GetValue(landing) is ArenaLandingPageDataModel model)
         {
             model.isUndergroundUnlocked = true; // Presentation only: its click always explains "coming later".
-
         }
         NoRating(landing);
+    }
+    private static readonly System.Collections.Generic.HashSet<string> partsLogged = new System.Collections.Generic.HashSet<string>();
+    private static void HideOwnPart(Component part, string name, ArenaLandingPageManager landing, ArenaLandingPage page)
+    {
+        if (part == null || !part.gameObject.activeSelf) return;
+        var target = part.gameObject.transform;
+        bool Holds(Component screen) => screen != null && (screen.transform == target || screen.transform.IsChildOf(target));
+        // SetActive(false) on an ancestor of DraftDisplay stops its coroutines (the DRAFT load never finishes) and blanks the screen.
+        bool shared = Holds(landing) || Holds(page) || Holds(DraftDisplay.Get());
+        if (partsLogged.Add(name))
+            log.LogInfo("NATIVE_ARENA_PRESENTATION " + name + " path=" + PathOf(target, null, 12) + " children=" + target.childCount
+                + (shared ? " holds the Arena screen: left active" : " hidden"));
+        if (!shared) part.gameObject.SetActive(false);
     }
     // Set the landing models as Awake builds them, before any widget binds: no data change while the first states settle.
     private static void LandingModels(ArenaLandingPageManager __instance)

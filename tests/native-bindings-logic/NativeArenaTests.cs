@@ -41,6 +41,13 @@ internal static partial class NativeArena
         var sessionReply = (ArenaSessionResponse)received.Last().Payload;
         Check(sessionReply.CurrentSeason.Season.GameContentSeason.EndSecondsFromNow > 0
             && sessionReply.Session.State == ArenaSessionState.NO_RUN && !sessionReply.UndergroundSession.IsActive, "season exists before scene and only one playable mode");
+        var levels = sessionReply.CurrentSeason.NormalRewards;
+        Check(levels.Count == 13 && levels.Select(level => level.Wins).SequenceEqual(Enumerable.Range(0, 13))
+            && levels[12].Losses == 2 && levels[3].Losses == 3
+            && levels[12].Rewards.SelectMany(slot => slot.CurrencyRewards).Single(c => c.CurrencyType == ArenaRewardCurrencyType.GOLD).MinAmount == 900
+            && levels[12].Rewards.SelectMany(slot => slot.SpecificBoosterRewards).Single().MinBoosterCount == 5
+            && levels[0].Rewards.SelectMany(slot => slot.CurrencyRewards).Count() == 0,
+            "season carries one reward level per win count from the service table (retail rewards list data)");
         // Queue a session before Begin: its delivery must not release the mutation lock for the pending Begin.
         SessionRequest(); BeginRequest(false);
         Check(stub.View().GoldBalance == 850 && stub.View().HeroOffers.Count == 3 && mutationPending, "Begin pays once through service");

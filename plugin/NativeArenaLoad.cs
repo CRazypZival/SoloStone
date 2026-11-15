@@ -10,13 +10,16 @@ using UnityEngine;
 // DRAFT boot watch. SceneMgr finishes DRAFT only when a coroutine calls NotifySceneLoaded: DraftDisplay.NotifySceneLoadedWhenReady
 // (confirm button, hero power actor, a draft mode, NetCache forge batch, achievements, the landing widget done changing states)
 // or DraftScene.NotifySceneLoadedWhenReady (landing manager loaded, then DraftDisplay loaded). Every one of those waits is read
-// here, the coroutines' own progress is recorded, and their exceptions are logged, so a stuck load names its condition. A load
-// that never finishes leaves to HUB through the client's own navigation instead of keeping the box closed for good.
+// here, the coroutines' own progress is recorded, and their exceptions are logged, so a stuck load names its condition.
+// The escape is keyed on SceneMgr and the screen, never on this bookkeeping: each DRAFT visit must become usable (SceneMgr
+// loaded and not transitioning, landing manager and DraftDisplay loading complete, the Arena screen root active) within 30 s,
+// or it leaves to HUB through the client's own navigation.
 internal static partial class NativeArena
 {
     private const float WaitReportSeconds = 10f, StuckSeconds = 30f;
-    private static float draftLoadBegan = -1, nextWaitRead;
-    private static bool waitsReported;
+    private static float draftLoadBegan = -1, nextWaitRead, waitsReadAt = -1;
+    private static bool waitsReported, visitUsable;
+    private static float hiddenSince = -1;
     private static readonly List<KeyValuePair<string, string>> waits = new List<KeyValuePair<string, string>>();
     private static string firstWait;
     // The iterator's state is the yield it is parked at: Roslyn numbers the yields 1..n in source order; -1 = finished.
@@ -101,25 +104,30 @@ internal static partial class NativeArena
     {
         try
         {
-            // NativeUIProbe.Active, not Offline: a load stuck after Arena disabled itself must still be left.
-            bool loading = NativeUIProbe.Active && SceneMgr.IsInitialized() && SceneMgr.Get().GetMode() == SceneMgr.Mode.DRAFT && SceneMgr.Get().IsTransitioning();
+            // NativeUIProbe.Active, not Offline: a visit stuck after Arena disabled itself must still be left.
+            bool inDraft = NativeUIProbe.Active && SceneMgr.IsInitialized() && SceneMgr.Get().GetMode() == SceneMgr.Mode.DRAFT;
             float now = Time.realtimeSinceStartup;
-            if (!loading)
+            if (!inDraft)
             {
                 if (draftLoadBegan >= 0)
-                {
-                    bool loaded = SceneMgr.IsInitialized() && SceneMgr.Get().GetMode() == SceneMgr.Mode.DRAFT;
-                    log.LogInfo("NATIVE_ARENA_LOAD " + (loaded ? "finished" : "left") + " t=" + (now - draftLoadBegan).ToString("0.0") + " " + RoutineSummary());
-                    draftLoadBegan = -1;
-                }
+                    log.LogInfo("NATIVE_ARENA_LOAD left t=" + (now - draftLoadBegan).ToString("0.0") + " usable=false " + RoutineSummary());
+                draftLoadBegan = -1; visitUsable = false; hiddenSince = -1;
                 return;
             }
+            if (visitUsable) { WatchScreenStaysActive(now); return; }
             if (draftLoadBegan < 0)
             {
                 draftLoadBegan = now; nextWaitRead = now + 1; waitsReported = false;
-                routines.Clear(); waits.Clear(); firstWait = null;
+                routines.Clear(); waits.Clear(); firstWait = null; waitsReadAt = -1;
             }
             float elapsed = now - draftLoadBegan;
+            if (ScreenUsable(out _))
+            {
+                visitUsable = true; ReadWaits();
+                log.LogInfo("NATIVE_ARENA_LOAD usable t=" + elapsed.ToString("0.0") + " " + RoutineSummary());
+                draftLoadBegan = -1;
+                return;
+            }
             if (now >= nextWaitRead) { nextWaitRead = now + 1; ReadWaits(); }
             if (!waitsReported && elapsed >= WaitReportSeconds) { waitsReported = true; ReadWaits(); ReportWaits(elapsed); }
             if (elapsed >= StuckSeconds && loadFailure == null) LeaveStuckDraft(elapsed);
@@ -131,11 +139,38 @@ internal static partial class NativeArena
         }
     }
 
+    // After the visit was usable: the Arena root going inactive while DRAFT stays loaded blanks the screen for good.
+    private static void WatchScreenStaysActive(float now)
+    {
+        var landing = ArenaLandingPageManager.Get();
+        bool blank = !SceneMgr.Get().IsTransitioning() && Alive(landing) && !landing.gameObject.activeInHierarchy;
+        if (!blank) { hiddenSince = -1; return; }
+        if (hiddenSince < 0) { hiddenSince = now; log.LogWarning("NATIVE_ARENA_WAIT landing root inactive: path=" + PathOf(landing.transform, null, 12)); }
+        if (now - hiddenSince >= 10 && loadFailure == null) LeaveStuckDraft(now - hiddenSince);
+    }
+
+    // SceneMgr's own state first (m_sceneLoaded, and m_transitioning, which only FireSceneLoadedEvent clears on this path), then
+    // the screen: both Arena roots finished loading and the landing root still active (a deactivated ancestor blanks the screen).
+    private static bool ScreenUsable(out string reason)
+    {
+        var scene = SceneMgr.Get();
+        reason = !scene.IsSceneLoaded() ? "scene.loaded=false" : scene.IsTransitioning() ? "scene.transitioning=true" : null;
+        if (reason != null) return false;
+        var landing = ArenaLandingPageManager.Get();
+        var display = DraftDisplay.Get();
+        reason = !Alive(landing) ? "landing.exists=false" : !Alive(display) ? "display.exists=false"
+            : !landing.gameObject.activeInHierarchy ? "landing.active=false" : !landing.IsLoadingComplete() ? "landing.loadingComplete=false"
+            : !display.IsLoadingComplete() ? "display.loadingComplete=false" : null;
+        return reason == null;
+    }
+
     private static void LeaveStuckDraft(float elapsed)
     {
         // Block first: whatever happens next, entry is refused for this session instead of hanging again.
-        loadFailure = "DRAFT did not finish loading in " + elapsed.ToString("0") + "s, waiting on " + (firstWait ?? "unknown");
-        try { ReadWaits(); ReportWaits(elapsed); } catch (Exception) { }
+        try { ReadWaits(); } catch (Exception) { }
+        ScreenUsable(out string reason);
+        loadFailure = "DRAFT was not usable after " + elapsed.ToString("0") + "s (" + reason + "), waiting on " + (firstWait ?? "unknown");
+        try { ReportWaits(elapsed); } catch (Exception) { }
         string refused = NativeUIProbe.LeaveStuckScene(SceneMgr.Mode.DRAFT, SceneMgr.Mode.HUB);
         log.LogError("NATIVE_ARENA_STUCK " + loadFailure + (refused == null ? "; returning to HUB" : "; cannot return to HUB: " + refused));
         Unavailable();
@@ -145,6 +180,7 @@ internal static partial class NativeArena
     {
         string t = "t=" + elapsed.ToString("0.0") + " ";
         foreach (var wait in waits) log.LogWarning("NATIVE_ARENA_WAIT " + t + wait.Key + "=" + wait.Value);
+        foreach (string row in changingRows) log.LogWarning("NATIVE_ARENA_WAIT " + t + "widget " + row);
         log.LogWarning("NATIVE_ARENA_WAIT " + t + "first=" + (firstWait ?? "none") + " " + RoutineSummary());
     }
 
@@ -161,13 +197,14 @@ internal static partial class NativeArena
 
     private static void ReadWaits()
     {
-        waits.Clear(); firstWait = null;
+        waits.Clear(); firstWait = null; changingRows.Clear(); waitsReadAt = Time.realtimeSinceStartup;
         void Add(string name, object value, bool blocking = false)
         {
-            waits.Add(new KeyValuePair<string, string>(name, value is bool flag ? (flag ? "true" : "false") : Bound(value?.ToString() ?? "null", 600)));
+            waits.Add(new KeyValuePair<string, string>(name, value is bool flag ? (flag ? "true" : "false") : value?.ToString() ?? "null"));
             if (blocking && firstWait == null) firstWait = name;
         }
         var scene = SceneMgr.Get();
+        Add("screen.usable", ScreenUsable(out string unusable) ? "true" : "false (" + unusable + ")");
         Add("scene.mode", scene.GetMode()); Add("scene.next", scene.GetNextMode());
         Add("scene.loaded", scene.IsSceneLoaded()); Add("scene.transitioning", scene.IsTransitioning());
         object pegasus = AccessTools.Field(typeof(SceneMgr), "m_scene")?.GetValue(scene);
@@ -196,7 +233,7 @@ internal static partial class NativeArena
             {
                 bool changing = landingWidget.IsChangingStates;
                 Add("display.landingWidgetChangingStates", changing, changing);
-                if (changing) Add("widgets.changing", ChangingStates(landingWidget));
+                if (changing) { ChangingStates(landingWidget); Add("widgets.changing", changingRows.Count); }
             }
             Add("display.loadingComplete", display.IsLoadingComplete());
         }
@@ -208,6 +245,7 @@ internal static partial class NativeArena
         Add("landing.exists", Alive(landing));
         if (Alive(landing))
         {
+            Add("landing.active", landing.gameObject.activeInHierarchy);
             Add("landing.normalWidgetLoaded", Flag(landing, "m_isNormalWidgetLoaded"));
             Add("landing.undergroundWidgetLoaded", Flag(landing, "m_isUndergroundWidgetLoaded"));
             Add("landing.doneInitialStateChanging", Flag(landing, "m_isWidgetDoneInitialStateChanging"));
@@ -239,23 +277,22 @@ internal static partial class NativeArena
         return missing.Count == 0 ? "none (callback not delivered)" : string.Join(",", missing.ToArray());
     }
 
-    // The active leaves still changing state under the landing widget: visual controllers mid-transition and widgets not done.
-    private static string ChangingStates(Widget root)
+    // Every active leaf still changing state under the landing widget, one short row each (no truncation).
+    private static readonly List<string> changingRows = new List<string>();
+    private static void ChangingStates(Widget root)
     {
-        var rows = new List<string>();
         foreach (var controller in root.GetComponentsInChildren<VisualController>(true))
-            if (controller != null && controller.isActiveAndEnabled && controller.IsChangingStates && rows.Count < 8)
-                rows.Add(PathOf(controller.transform, root.transform) + "[" + controller.Label + ":" + controller.State + "->" + controller.RequestedState
+            if (controller != null && controller.isActiveAndEnabled && controller.IsChangingStates)
+                changingRows.Add(PathOf(controller.transform, root.transform) + "[" + controller.Label + ":" + controller.State + "->" + controller.RequestedState
                     + (controller.HasPendingActions ? ",pending" : "") + "]");
         foreach (var widget in root.GetComponentsInChildren<Widget>(true))
-            if (widget != null && widget != root && widget.IsActive && widget.InitState != Widget.InitializationState.Done && rows.Count < 14)
-                rows.Add(PathOf(widget.transform, root.transform) + "[" + widget.GetType().Name + ":" + widget.InitState + "]");
-        return rows.Count == 0 ? "none found" : string.Join(" | ", rows.ToArray());
+            if (widget != null && widget != root && widget.IsActive && widget.InitState != Widget.InitializationState.Done)
+                changingRows.Add(PathOf(widget.transform, root.transform) + "[" + widget.GetType().Name + ":" + widget.InitState + "]");
     }
-    private static string PathOf(Transform node, Transform root)
+    private static string PathOf(Transform node, Transform root, int depth = 4)
     {
         var parts = new List<string>();
-        for (var at = node; at != null && at != root && parts.Count < 4; at = at.parent) parts.Insert(0, at.name);
+        for (var at = node; at != null && at != root && parts.Count < depth; at = at.parent) parts.Insert(0, at.name);
         return string.Join("/", parts.ToArray());
     }
 

@@ -44,7 +44,11 @@ internal static partial class NativeArena
                 { "pendingReplies", TestControlProtocol.List(replies.Select(reply => (object)reply.Id)) },
                 { "lastReplyIds", TestControlProtocol.List(lastReplies.Cast<object>()) }, { "error", lastError ?? view.Error }, { "errorSeq", errorSeq }, { "notice", lastNotice },
                 { "loadSeconds", draftLoadBegan < 0 ? (object)null : Math.Round(Time.realtimeSinceStartup - draftLoadBegan, 1) },
-                { "loadFailure", loadFailure }, { "firstWait", firstWait }, { "waits", Waits() } };
+                { "loadFailure", loadFailure }, { "firstWait", firstWait }, { "usable", ScreenUsable(out string unusable) ? null : unusable },
+                // waits/changing are the last snapshot (taken every second while DRAFT is not usable, and once when it became
+                // usable); waitsAge says how old it is. routines is live.
+                { "waits", Waits() }, { "waitsAge", waitsReadAt < 0 ? (object)null : Math.Round(Time.realtimeSinceStartup - waitsReadAt, 1) },
+                { "changing", TestControlProtocol.List(changingRows.Cast<object>()) }, { "routines", RoutineSummary() } };
         }
         catch (Exception error) { return new JsonNode { { "error", error.GetBaseException().Message } }; }
     }
