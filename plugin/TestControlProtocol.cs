@@ -350,7 +350,9 @@ internal sealed class ControlRequest
                 if (Has("screen")) Text("screen");
                 break;
             case "press":
-                extras = "element snapshot timeoutMs button holdMs"; UiRules.RequireElementId(Text("element"));
+                extras = "element snapshot timeoutMs button holdMs double"; UiRules.RequireElementId(Text("element"));
+                if (Has("double") && (Integer("double", 0, 1) == 1) && (Has("holdMs") || (Has("button") && Text("button") == "right")))
+                    throw new FormatException("double is a plain left double click");
                 // A held left press: mouse-up after holdMs (at most 5 s), e.g. the shop quantity stepper's hold-to-repeat.
                 if (Has("holdMs")) { Integer("holdMs", 0, 5000); if (Has("button") && Text("button") == "right") throw new FormatException("holdMs is for the left button"); }
                 if (Has("snapshot") && !Regex.IsMatch(Text("snapshot"), @"\A[0-9a-f]{12}\z")) throw new FormatException("Invalid snapshot");

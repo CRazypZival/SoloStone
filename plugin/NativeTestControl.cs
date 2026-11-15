@@ -106,6 +106,8 @@ internal sealed partial class NativeTestControl
         internal bool Right;
         // press holdMs: the mouse-up waits until then (a held button, e.g. the shop quantity stepper's repeat).
         internal DateTime HoldUntil = DateTime.MinValue;
+        // press double: a native double click (PegUI's DOUBLECLICK on the second mouse-up), e.g. the shop's typed-count box.
+        internal bool Double;
         // "press" (left or right click), "ui-scroll", "ui-hover", "ui-unhover" or "ui-drag".
         internal string Gesture = "press";
         internal UiElement DragTarget;
@@ -1405,6 +1407,7 @@ internal sealed partial class NativeTestControl
             {
                 // PegUI sends nothing on right mouse-up; the opened preview covering the tile is the click's effect.
                 if (press.Right) { if (NativeUiTree.Alive(press.Target)) NativeUiTree.RightRelease(press.Target); }
+                else if (interrupted == null && press.Double) NativeUiTree.DoubleRelease(press.Target);
                 else if (interrupted == null) NativeReportUI.TestRelease(() => NativeUiTree.Release(press.Target));
                 else if (NativeUiTree.Alive(press.Target)) NativeUiTree.Cancel(press.Target);
             }
@@ -1472,6 +1475,8 @@ internal sealed partial class NativeTestControl
         if (press.Right && !NativeUiTree.RightClickable(target)) { RejectPress("Element does not accept right-click"); return; }
         press.Target = target; press.PressFrame = Time.frameCount;
         if (!press.Right && request.Has("holdMs")) press.HoldUntil = DateTime.UtcNow.AddMilliseconds(request.Integer("holdMs"));
+        press.Double = !press.Right && request.Has("double") && request.Integer("double") == 1;
+        if (press.Double && !NativeUiTree.DoubleClickable(target)) { RejectPress("Element does not accept a double click"); return; }
         if (!press.Right && (id == NativePremiumRewards.DoneId || id.StartsWith(NativePremiumRewards.DoneId + ".", StringComparison.Ordinal)))
         {
             operation.Detail["premiumDismissalsBefore"] = NativeResultsUI.PremiumRewards?.DismissalCount ?? 0;
@@ -1483,7 +1488,7 @@ internal sealed partial class NativeTestControl
         operation.Detail["waitMs"] = (DateTime.UtcNow - operation.AcceptedUtc).TotalMilliseconds;
         operation.Detail.Remove("lastBlocker");
         operation.Detail["nativeInvocationStarted"] = true;
-        try { if (press.Right) NativeUiTree.RightClick(target); else NativeUiTree.Press(target); }
+        try { if (press.Right) NativeUiTree.RightClick(target); else if (press.Double) NativeUiTree.DoublePress(target); else NativeUiTree.Press(target); }
         catch (Exception error) { FailPress("Press failed: " + error.GetType().Name + ": " + error.Message); return; }
         log.LogInfo("TEST_CONTROL_PRESS " + Json.Serialize(new JsonNode {
             { "inputKind", "semantic-ui" }, { "requestId", request.Id }, { "runId", launch.RunId }, { "element", id }, { "generation", snapshot.Generation },
