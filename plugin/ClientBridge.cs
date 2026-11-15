@@ -479,7 +479,14 @@ internal static class ClientBridge
 #endif
             // The NPC's own cosmetic pet (PROPOSED, docs/design/npc-pets.md): wire-only, never recorded or settled. Options > Show
             // Opponents' Pets off starts the match without it (NativeOpponentPetsOption.Gate).
-            try { match.OpponentPetCard = NativeOpponentPetsOption.Gate(NpcPetSeats.For(record, LocalShop.Default, LocalLadder.Profile?.Ladder.StarIndex ?? 0)?.CardId); }
+            try
+            {
+                string ownedPet = NpcPetSeats.For(record, LocalShop.Default, LocalLadder.Profile?.Ladder.StarIndex ?? 0)?.CardId;
+#if ENGINE_SOURCE
+                if (scenario?.NpcPet != null) ownedPet = scenario.NpcPet; // debug scenario npcPet: the NPC owns this pet this match
+#endif
+                match.OpponentPetCard = NativeOpponentPetsOption.Gate(ownedPet);
+            }
             catch (Exception error) { match.OpponentPetCard = NativeOpponentPetsOption.Gate(null); log.LogWarning("NPC pet unavailable: " + error.Message); }
             // NPC deck finishes follow the rank the opponent's medal shows (NativeGameplayRank reads the same rating);
             // Casual has no medal, so the player's ladder rank (NpcPremiums.SeatStarIndex).
