@@ -14,7 +14,7 @@ using SabberStoneCore.Tasks.SimpleTasks;
 internal static class MatchRandomSamplerProof
 {
     // Task shapes covered by the sampler, by migration step.
-    internal static readonly string[] DefaultGroups = { "minion" };
+    internal static readonly string[] DefaultGroups = { "minion", "card", "spell", "secret", "deck" };
 
     private sealed class Row
     {
