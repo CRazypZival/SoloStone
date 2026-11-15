@@ -9,7 +9,7 @@ using SabberStoneCore.Enums;
 // no replay). The pinned pool snapshot comes from tests/goldens/pools. Needs no client.
 // The packet half (transport parity, history shape, the witnesses that read packets) stays in transport-invariants. The three
 // transport-debt replays record no actions and are not covered here.
-internal static class PinnedReplayEngineProof
+internal static partial class PinnedReplayEngineProof
 {
     private sealed class PinnedReplay
     {

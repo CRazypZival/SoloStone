@@ -6,6 +6,8 @@ using SabberStoneCore.Model;
 using SabberStoneCore.Tasks.PlayerTasks;
 
 if (args.Contains("--ai-frontier-only")) { AiFrontierProof.Run(); return; }
+if (args.Contains("--renew-replay")) { Environment.Exit(PinnedReplayEngineProof.Renew(args)); return; }
+if (args.Contains("--renew-replay-selftest")) { PinnedReplayEngineProof.RenewSelfTest(); return; }
 if (args.Contains("--pinned-replays-only")) { PinnedReplayEngineProof.Run(); return; }
 if (args.Contains("--canonical-policy-only")) { CanonicalPolicyChecks.Run(); return; }
 if (args.Contains("--shadow-trial-only")) { ShadowTrialProof.Run(); return; }
@@ -656,5 +658,6 @@ CanonicalPolicyChecks.Run();
 ShadowTrialProof.Run();
 AiFrontierProof.Run();
 PinnedReplayEngineProof.Run();
+PinnedReplayEngineProof.RenewSelfTest();
 ClientExport.PrintSkips();
 Console.WriteLine("engine-proof: PASS");
