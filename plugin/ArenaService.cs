@@ -19,6 +19,7 @@ public sealed class ArenaService : IArenaService
             Offers = run?.Phase == ArenaPhase.Drafting ? run.PendingOffers.ToList() : new List<string>(),
             Deck = run?.Deck.ToList() ?? new List<string>(), Reward = ArenaRun.CopyReward(run?.Reward),
             EntryCost = rules.EntryGold, GoldBalance = profile.Gold,
+            // Preview only: the generic Standard pack art. The paid set is chosen when the run ends (by missing copies), so no set is promised.
             RewardTable = rules.RewardTable(run?.GrindTier ?? profile.GrindTier.Id, DraftRules.PreviewPackType).Select(ArenaRun.CopyReward).ToList()
         };
     }

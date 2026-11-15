@@ -124,6 +124,19 @@ internal static class ArenaChecks
         Console.WriteLine("ARENA pool size " + rules.Pool.Count + " (ActivePoolIds " + activeIds.Count + ")");
         Check(rules.Pool.Count > 0 && rules.Pool.All(LocalCardCatalog.IsStandardLegal), "pool is only Standard-legal cards");
         Check(!rules.Pool.Any(card => card.Id == "GIL_213" || card.Id == "CFM_305"), "Wild pack-pool cards are not in the pool");
+        // A pool change can leave a rarity bucket under three cards: offers fall back deterministically instead of failing the pick.
+        var tiny = DraftRules.WithPool(Cards.All.Where(c => c.Collectible && c.Rarity == Rarity.COMMON && c.Class == CardClass.NEUTRAL).Take(5));
+        var logged = new List<string>(); DraftRules.FallbackLog = logged.Add; DraftRules.fallbackLogged = false;
+        try {
+            string tinyHero = rules.Heroes[0];
+            for (int slot = 1; slot <= 2; slot++) {
+                var deck = slot == 1 ? new string[0] : new[] { "x" };
+                if (slot == 2) deck = new[] { tiny.Pool[0].Id };
+                var a = tiny.Offers(7, slot, tinyHero, deck);
+                Check(a.Count == 3 && a.Distinct().Count() == 3 && a.SequenceEqual(tiny.Offers(7, slot, tinyHero, deck)), "tiny pool offer falls back deterministically, slot " + slot);
+            }
+            Check(logged.Count == 1, "the fallback is logged once");
+        } finally { DraftRules.FallbackLog = null; }
         foreach (string hero in rules.Heroes)
             for (int seed = 0; seed < 60; seed++)
                 foreach (string id in rules.Offers(seed * 7919L + 13, 1, hero, new string[0]))
@@ -328,6 +341,9 @@ internal static class ArenaChecks
         var data = Read(path); var run = data.ArenaRun;
         run.PendingOffers[2] = Other(Cards.FromId(run.PendingOffers[2]).Rarity, run.PendingOffers.Concat(run.Deck));
         run.Picks[0].Offers[0] = Other(Rarity.LEGENDARY, run.Picks[0].Offers);   // an unchosen legendary the current pool would not have offered
+        // A card the engine no longer knows, and a legendary in a later pick (a rarity fix in card data): neither may lock the save.
+        run.Picks[0].Offers[2] = "GONE_ARENA_CARD"; run.Picks[1].Offers[0] = Other(Rarity.LEGENDARY, run.Picks[1].Offers);
+        run.PendingOffers[0] = "GONE_ARENA_PENDING";
         run.HeroOffers[2] = run.HeroOffers[2] == "HERO_01" ? "HERO_02" : "HERO_01";
         if (run.HeroOffers.Contains(run.HeroOffers[2]) && run.HeroOffers.Count(h => h == run.HeroOffers[2]) > 1) run.HeroOffers[2] = "HERO_11";
         data.ArenaReceipts[0].Reward.Gold += 1; data.ArenaReceipts[0].Reward.Dust += 1;

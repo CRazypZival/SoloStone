@@ -64,7 +64,7 @@ public sealed class ArenaRun
         Reward = DraftRules.Arena(RulesVersion).Reward(RunId, Wins, GrindTier, packType);
     }
 
-    // Structure only. Stored offers and rewards are history: they are never recomputed from today's card pool, rules or paces, so an
+    // Structure only (the legendary-first-pick rule lives in the generator, never in Validate: a card-data rarity fix must not lock a save). Stored offers and rewards are history: they are never recomputed from today's card pool, rules or paces, so an
     // update that changes any of them can never make a saved run or receipt unloadable. Rules are read for constants only.
     internal void Validate()
     {
@@ -85,11 +85,10 @@ public sealed class ArenaRun
         for (int i = 0; i < Picks.Count; i++) {
             var pick = Picks[i];
             if (pick == null || pick.Index < 0 || pick.Index >= rules.OfferSize || !ValidOffer(pick.Offers, rules.OfferSize)
-                || !LegendaryShape(pick.Offers, i == 0) || Deck[i] != pick.Offers[pick.Index]) Invalid();
+                || Deck[i] != pick.Offers[pick.Index]) Invalid();
         }
         if (Phase == ArenaPhase.Drafting) {
-            if (Hero == null || Picks.Count >= rules.DeckSize || !ValidOffer(PendingOffers, rules.OfferSize)
-                || !LegendaryShape(PendingOffers, Picks.Count == 0)) Invalid();
+            if (Hero == null || Picks.Count >= rules.DeckSize || !ValidOffer(PendingOffers, rules.OfferSize)) Invalid();
         } else if (PendingOffers.Count != 0) Invalid();
         if (Phase == ArenaPhase.Ready && Picks.Count != rules.DeckSize
             || Phase != ArenaPhase.RewardPending && (Reward != null || Retired || Wins == rules.MaxWins || Losses == rules.MaxLosses)
@@ -104,17 +103,6 @@ public sealed class ArenaRun
     internal static bool ValidOffer(List<string> offers, int size) => offers != null && offers.Count == size
         && offers.All(id => id != null && id.Length > 0 && id.Length <= 64 && id.All(c => char.IsLetterOrDigit(c) || c == '_'))
         && offers.Distinct(StringComparer.Ordinal).Count() == offers.Count;
-
-    // The first pick offers legendaries only and no later pick does; a card id the engine no longer knows is not judged.
-    private static bool LegendaryShape(List<string> offers, bool first)
-    {
-        foreach (string id in offers) {
-            Rarity rarity;
-            try { var card = Cards.FromId(id); if (card == null) continue; rarity = card.Rarity; } catch (Exception) { continue; }
-            if ((rarity == Rarity.LEGENDARY) != first) return false;
-        }
-        return true;
-    }
 
     internal static bool ValidRequest(string id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 128 && !id.Any(char.IsControl);
     internal static void Invalid() => throw new InvalidOperationException("Invalid Arena run record.");

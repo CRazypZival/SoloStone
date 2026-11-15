@@ -119,9 +119,16 @@ internal static partial class NativeArena
         Check(rules.Contains("12 wins or 3 losses") && rules.Contains("NPC opponents") && rules.Contains("150 gold") && rules.Contains("Rewards grow")
             && rules.Contains("retire at any time") && !rules.Contains("Underground") && GoldCostText(150) == "150 Gold", "rules popup text");
         ChoiceRequest(DeckId, 7, 1, 1, false, false, new List<int>()); Check(errorSeq == errorsBefore + 1, "a refusal bumps errorSeq");
-        // A disabled Arena is inert: every send keeps retail behavior and the unavailable notice is informational.
+        // A disabled Arena stays armed (a DRAFT scene still open must never reach retail code) and answers with a notice; it leaves DRAFT at once.
+        int leftBefore = NativeUIProbe.Left; int queued = replies.Count;
         Disable("test");
-        Check(!Offline && SessionRequest() && BeginRequest(false) && ContentsRequest(false), "disabled Arena leaves sends alone");
+        Check(NativeUIProbe.Left == leftBefore + 1, "disabling inside DRAFT leaves the scene");
+        Check(Offline && !Live && !SessionRequest() && !BeginRequest(false) && !ContentsRequest(false) && !RedraftRequest() && !FindGame()
+            && !ChoiceRequest(DeckId, 0, 1, 1, false, false, new List<int>()) && !RetireRequest(DeckId, 0, 0, false) && !AckRequest(DeckId, 0, false)
+            && !PremiumsRequest() && !RatingRequest() && !SaveRequest(DeckId, null, 0, 0, null, false) && !Underground() && !Disclaimer(),
+            "disabled Arena refuses every send instead of falling through to retail");
+        Check(replies.Count == queued && !mutationPending, "disabled Arena queues and changes nothing");
+        int tickets = 0; Check(!Tickets(ref tickets) && tickets == 1, "tickets are answered inside the DRAFT scene");
         errorsBefore = errorSeq; Unavailable();
         Check(errorSeq == errorsBefore && DialogManager.Last.m_text.Contains("unavailable"), "unavailable is a notice");
         disabled = false;

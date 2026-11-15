@@ -232,6 +232,8 @@ public static class ArenaRules
     public static bool IsArena(string mode) => mode == Mode;
     // A match that moves the ladder: every mode except Casual and Arena (Ranked records carry no mode).
     public static bool IsRanked(string mode) => !CasualRules.IsCasual(mode) && !IsArena(mode);
+    // Arena has no rivals: an Arena opponent never brings Ranked/Casual head-to-head memory (rival emotes and lines).
+    public static bool CarriesNpcMemory(string mode) => !IsArena(mode);
     public static string DeckKey(string runId) => "arena:" + runId;
     public static bool IsDeckKey(string key) => key != null && key.StartsWith("arena:", System.StringComparison.Ordinal);
 }

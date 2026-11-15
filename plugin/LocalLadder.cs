@@ -29,6 +29,7 @@ internal static class LocalLadder
         profile = selectedProfile;
         collectionUi = new LocalCollectionUI(profile);
         ArenaMatchHook.MatchStarter = StartArenaMatch;
+        DraftRules.FallbackLog = message => Debug.LogWarning(message);
     }
 
     internal static void ResetStartup(LocalProfile selectedProfile)
@@ -228,13 +229,13 @@ internal static class LocalLadder
             {
                 if (playtest == null) opponent = worldDeck;   // resolved and validated inside TryWorldEncounter
                 // Before PrepareLocalMatch: NativeMatch resolves the world NPC's profile and library deck through S1/S5.
-                NpcWorldRuntime.Begin(encounter);
+                if (!arena) NpcWorldRuntime.Begin(encounter);   // ArenaEncounter already began it (before it resolved the deck)
             }
             var prepared = ClientBridge.PrepareLocalMatch(selected, opponent.Id, seed, profile.Stars, personal ? resolved : null, premiumEntries);   // arena: the deck is served by key
             // Rivals-lite: the NPC's memory from SETTLED history only (no Pending exists yet: refused above). Every world
             // encounter, ladder or a playtest knob naming a world NPC id; fixed-deck playtests have no encounter and no memory.
             // Presentation only (name plate, emote choice), set before the match starts.
-            if (encounter != null)
+            if (encounter != null && ArenaRules.CarriesNpcMemory(arena ? ArenaRules.Mode : null))   // Arena keeps no rivals: Ranked/Casual memory never reaches an Arena opponent
                 prepared.Match.NpcMemory = NativeMatch.MemoryFrom(profile.NpcRecord(encounter.Npc.Id));
             var queued = playtest;
             // One-shot debug scenario (engine-source builds only; null elsewhere): armed on the pending record below so the
@@ -244,7 +245,7 @@ internal static class LocalLadder
                 DebugScenario.RunId, NativeTestControl.DiagnosticsEnabled);
             LocalAchievementPendingContext achievementContext = encounter != null && playtest == null && scenario == null && NativeMatch.SupportsAchievementEvidence
                 ? profile.AchievementContextFor(resolved, personal || arena, encounter.Npc.Id, encounter.Rating,
-                    (casual || arena ? CasualAchievementBand(encounter.Rating) : NpcWorld.BandForStarIndex(profile.Ladder.StarIndex)).ToString(), premiumEntries, personal ? profile.GetDraft(long.Parse(selected.Substring(7))).Sideboards : null) : null;
+                    (casual || arena ? CasualAchievementBand(encounter.Rating) : NpcWorld.BandForStarIndex(profile.Ladder.StarIndex)).ToString(), premiumEntries, personal ? profile.GetDraft(long.Parse(selected.Substring(7))).Sideboards : null, arena) : null;
             // A launch that throws after Begin clears its unstarted Pending atomically: no ladder change, no trapped save.
             // Test-control lanes only: a one-shot pet XP pacing percent frozen into this match's pending record (PetPacingKnob).
             if (PetPacingKnob.Take(PetPacingKnob.Path, NativeTestControl.DiagnosticsEnabled, PetPacingKnob.RunId, message => Debug.LogWarning(message)) is int pacing)
