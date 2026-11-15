@@ -53,12 +53,12 @@ internal static class NativeReportUI
     internal static bool CanExport => !exporting && result == null;
     // Offered after every successful export: cheap, and helps players who closed Explorer.
     internal static bool CopyVisible => result != null && !result.Pending;
-    // The preview is built and verified but not saved: SAVE ZIP and BACK are offered.
+    // The preview is built and verified but not saved: SAVE ZIP is offered; the save toggle rebuilds it.
     internal static bool PreviewPending => result != null && result.Pending;
     internal static bool IncludeSave { get; private set; }
-    internal static string Body => NativeReportText.Guidance + "\nPaste this id in your post: " + reportId;
+    internal static string Body => NativeReportText.Guidance; // The report id travels inside the zip (report.json).
     internal static string Status => exporting ? "Preparing the preview..." : error != null ? "Export failed: " + error
-        : result == null ? NativeReportText.SaveHint
+        : result == null ? ""
         : result.Pending ? NativeReportText.Preview(PreviewFiles(result), result.IncludeSave, result.Replaced)
         : "Exported. Attach this zip:\n" + NativeReportText.WrapPath(displayPath);
     private static List<KeyValuePair<string, long>> PreviewFiles(ReportExport.Result preview)
@@ -161,7 +161,15 @@ internal static class NativeReportUI
         result = null; error = displayPath = revealMode = null;
         popup.Open();
     }
-    internal static void ToggleSave() => Guard(() => { if (CanExport) { IncludeSave = !IncludeSave; popup.Refresh(); } });
+    // Before a preview it just flips; during a preview it discards that preview and builds a new one with the new setting.
+    internal static bool CanToggleSave => !exporting && (result == null || result.Pending);
+    internal static void ToggleSave() => Guard(() => {
+        if (!CanToggleSave) return;
+        bool rebuild = PreviewPending;
+        if (rebuild) DiscardPreview();
+        IncludeSave = !IncludeSave;
+        if (rebuild) Export(); else popup.Refresh();
+    });
     internal static void Close() => Guard(() => { DiscardPreview(); popup?.Hide(); });
     // Closing with an unsaved preview throws it away: only a saved zip is a report.
     private static void DiscardPreview()
@@ -169,7 +177,6 @@ internal static class NativeReportUI
         if (!PreviewPending) return;
         ReportExport.Discard(result); result = null; error = displayPath = revealMode = null; unseen = false;
     }
-    internal static void Back() => Guard(() => { if (PreviewPending && !exporting) { DiscardPreview(); popup.Refresh(); } });
     internal static void Save() => Guard(() => {
         if (!PreviewPending || exporting) return;
         try { ReportExport.Commit(result); }
@@ -331,14 +338,14 @@ internal sealed class NativeReportMenu : ButtonListMenu
         rows.Add(row); owned.Add(row.gameObject); controls[row] = id; slices.Add(new KeyValuePair<GameObject, bool>(row.gameObject, false));
         return row;
     }
-    private void Text(string value, UIBButton template)
+    private void Text(string value, UIBButton template, float height)
     {
         var source = ProfileFormKit.Label(template);
         if (source == null) throw new InvalidOperationException("Native report label template missing");
         var copy = UnityEngine.Object.Instantiate(source.gameObject, m_menu.m_buttonContainer.transform, true);
-        copy.transform.localPosition = Vector3.zero; copy.transform.localScale *= .7f;
+        copy.transform.localPosition = Vector3.zero;
         var text = copy.GetComponent(ProfileFormKit.TextType);
-        ProfileFormKit.ScaleRect(text, "Width", 1.65f); ProfileFormKit.ScaleRect(text, "Height", 4f);
+        ProfileFormKit.ScaleRect(text, "Width", 1.85f); ProfileFormKit.ScaleRect(text, "Height", height);
         ProfileFormKit.SetText(text, value); ProfileFormKit.SetColor(text, new Color(.22f, .15f, .09f, 1));
         ProfileFormKit.UpdateNow(text);
         owned.Add(copy); slices.Add(new KeyValuePair<GameObject, bool>(copy, true));
@@ -352,21 +359,20 @@ internal sealed class NativeReportMenu : ButtonListMenu
         var header = AccessTools.Field(typeof(ButtonListMenuDef), "m_headerText").GetValue(m_menu) as Component;
         ProfileFormKit.SetText(header, NativeReportText.Header);
         var toggle = Row("report.include-save", NativeReportText.IncludeSaveLabel(NativeReportUI.IncludeSave),
-            NativeReportUI.ToggleSave, NativeReportUI.CanExport);
+            NativeReportUI.ToggleSave, NativeReportUI.CanToggleSave);
         // The profile form's native plank-toggle fallback is synchronous, including on a frozen presentation queue.
-        Text(NativeReportUI.Body, toggle);
+        Text(NativeReportUI.Body, toggle, 3f);
         var guidance = slices[slices.Count - 1]; slices.RemoveAt(slices.Count - 1); slices.Insert(0, guidance);
-        // Preview first: SAVE ZIP writes exactly what the preview verified; BACK or closing throws it away.
+        // Preview first: SAVE ZIP writes exactly what the preview verified; the save toggle or closing throws it away.
         if (NativeReportUI.PreviewPending)
-        {
             Row("report.save", NativeReportText.SaveLabel, NativeReportUI.Save);
-            Row("report.back", NativeStrings.Get("GLOBAL_BACK", NativeReportText.BackLabel).ToUpperInvariant(), NativeReportUI.Back);
-        }
         else if (NativeReportUI.CanExport || NativeReportUI.Exporting)
             Row("report.export", NativeReportUI.Exporting ? "Preparing..." : NativeReportText.PreviewLabel, NativeReportUI.Export,
                 NativeReportUI.CanExport);
         Row("report.discord", NativeReportText.DiscordLabel, NativeReportUI.Discord, NativeReportText.DiscordEnabled);
-        Text(NativeReportUI.Status, toggle);
+        string status = NativeReportUI.Status;
+        // Under the guidance, not low in the panel, where the native board darkens text.
+        if (status.Length != 0) { Text(status, toggle, 5f); var line = slices[slices.Count - 1]; slices.RemoveAt(slices.Count - 1); slices.Insert(1, line); }
         if (NativeReportUI.CopyVisible) Row("report.copy-path", "COPY PATH", NativeReportUI.CopyPath);
         Row("report.close", NativeStrings.Get("GLOBAL_BUTTON_CLOSE", "CLOSE").ToUpperInvariant(), NativeReportUI.Close);
     }
@@ -393,9 +399,28 @@ internal sealed class NativeReportMenu : ButtonListMenu
             slice.Key.SetActive(true); // Native Show hides every cached plank immediately before LayoutMenu.
             container.AddSlice(slice.Key, Vector3.zero, Vector3.zero, false, true, false, slice.Value);
         }
-        container.UpdateSlices(); LayoutMenuBackground();
+        container.UpdateSlices();
         var camera = CameraUtils.FindFirstByLayerMask(1 << m_menu.gameObject.layer);
-        if (camera == null) return;
+        if (camera == null) { LayoutMenuBackground(); return; }
+        // The slice container reserves a text slice's template height, not its rendered lines: push each slice below the one above it.
+        float above = float.NaN;
+        foreach (var slice in slices)
+        {
+            Rect r = DeckLayout.ScreenRect(slice.Key, camera);
+            if (r.height <= 0) continue;
+            if (!float.IsNaN(above))
+            {
+                float gap = r.height * (slice.Value ? .15f : .1f), shift = r.yMax - (above - gap);
+                if (shift > 0)
+                {
+                    Vector3 pos = camera.WorldToScreenPoint(slice.Key.transform.position);
+                    slice.Key.transform.position += camera.ScreenToWorldPoint(pos - Vector3.up * shift) - camera.ScreenToWorldPoint(pos);
+                    r.y -= shift;
+                }
+            }
+            above = r.yMin;
+        }
+        LayoutMenuBackground();
         // Native background sizing omits caption text bounds; grow it to cover the text slices too.
         Rect frame = DeckLayout.ScreenRect(m_menu.m_background.gameObject, camera);
         float bottom = frame.yMin;
@@ -414,7 +439,12 @@ internal sealed class NativeReportMenu : ButtonListMenu
         }
         Rect rect = DeckLayout.ScreenRect(m_menu.gameObject, camera);
         if (rect.width <= 0 || rect.height <= 0) return;
+        // The native menu lays out near zero size, so set the size here: buttons as tall as the native Game Menu's (32 px at 720p),
+        // shrunk further only if the whole dialog would not fit.
         float scale = Math.Min(Screen.width * .86f / rect.width, Screen.height * .86f / rect.height);
+        var plank = rows.Count > 0 ? rows[0].GetComponent<Collider>() : null;
+        float plankHeight = plank != null ? DeckLayout.Project(plank.bounds, camera).height : 0f;
+        if (plankHeight > 0) scale = Math.Min(scale, Screen.height * (32f / 720f) / plankHeight);
         m_menu.transform.localScale *= scale;
         rect = DeckLayout.ScreenRect(m_menu.gameObject, camera);
         var at = camera.WorldToScreenPoint(m_menu.transform.position);

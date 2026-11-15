@@ -3,34 +3,32 @@ using System.Text.RegularExpressions;
 
 internal static class NativeReportText
 {
-    internal const string BugReportsUrl = "";
+    internal const string BugReportsUrl = NativeHelpText.DiscordUrl;
     internal const string Header = "REPORT AN ISSUE";
-    internal const string Guidance = "Attach the zip to your post in #bug-reports. Describe what you did, expected and saw, and when (turn, cards). Your save helps with progress bugs.";
-    internal const string SaveHint = "Your save is only included if you switch it on above.";
+    // Short lines: the native label shrinks one long line to fit its width, which made it unreadable.
+    internal const string Guidance = "Attach the zip to a post\nin #bug-reports on Discord.";
     // Plain ASCII: native Hearthstone fonts lack checkbox glyphs.
     // The preview step (I2d): what the zip holds, before anything is saved. Names are already redacted. Short enough for the native popup.
-    internal const string PreviewLabel = "PREVIEW REPORT", SaveLabel = "SAVE ZIP", BackLabel = "BACK";
+    internal const string PreviewLabel = "PREVIEW REPORT", SaveLabel = "SAVE ZIP";
     internal const int PreviewRows = 6;
     internal static string Size(long bytes) => bytes < 1024 ? bytes + " B" : bytes < 1024 * 1024 ? (bytes + 512) / 1024 + " KB"
         : ((bytes * 10 + 524288) / 1048576 / 10.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB";
     internal static string Preview(System.Collections.Generic.IList<System.Collections.Generic.KeyValuePair<string, long>> files, bool includeSave, long replaced)
     {
-        var lines = new System.Collections.Generic.List<string> { "Preview. The zip holds:" };
-        for (int i = 0; i < files.Count && i < PreviewRows; i++) lines.Add(files[i].Key + "  " + Size(files[i].Value));
-        if (files.Count > PreviewRows) lines.Add("and " + (files.Count - PreviewRows) + " more");
-        lines.Add(includeSave ? "Your save is included." : "Your save is not included.");
-        lines.Add(replaced + " personal details (Windows user, PC name, folders) were replaced. Nothing is uploaded; you attach the zip yourself.");
-        lines.Add("SAVE ZIP writes it. BACK discards it.");
-        return string.Join("\n", lines);
+        // Short lines: the dialog is native Game Menu size, so a file list would be unreadable.
+        long total = 0; foreach (var file in files) total += file.Value;
+        return "The zip holds " + files.Count + " files, " + Size(total) + ".\n"
+            + (includeSave ? "Your save is included.\n" : "Your save is not included.\n")
+            + replaced + " personal details replaced.\nNothing is uploaded.";
     }
     internal static string IncludeSaveLabel(bool on) => on ? "INCLUDE MY SAVE: ON" : "INCLUDE MY SAVE: OFF";
     internal static bool DiscordEnabled => !string.IsNullOrEmpty(BugReportsUrl);
-    internal static string DiscordLabel => DiscordEnabled ? "OPEN #BUG-REPORTS" : "#BUG-REPORTS (COMING SOON)";
+    internal static string DiscordLabel => DiscordEnabled ? "OPEN DISCORD" : "#BUG-REPORTS (COMING SOON)";
     internal static string ReportId(DateTime utc, string matchId) => "SR-" + utc.ToUniversalTime().ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) + "-"
         + (string.IsNullOrEmpty(matchId) ? "nomatch" : Regex.Replace(matchId, "[^A-Za-z0-9]", "").PadRight(6, '0').Substring(0, 6))
         + "-" + Guid.NewGuid().ToString("N").Substring(0, 4);
     internal static bool IsControl(string id) => id == "menu.report-issue"
-        || id == "report.include-save" || id == "report.export" || id == "report.save" || id == "report.back"
+        || id == "report.include-save" || id == "report.export" || id == "report.save"
         || id == "report.discord" || id == "report.copy-path" || id == "report.close";
     // Wine hides the Unix HOME: WINEHOMEDIR ("\??\Z:\home\deck") first, then HOME. Deployment keeps the release label beside compat/.
     internal static string DeckLabelPath(string wineHomeDir, string home)
@@ -53,7 +51,7 @@ internal static class NativeReportText
     {
         path = path ?? "";
         var lines = new System.Collections.Generic.List<string>();
-        for (int start = 0; start < path.Length; start += 56) lines.Add(path.Substring(start, Math.Min(56, path.Length - start)));
+        for (int start = 0; start < path.Length; start += 30) lines.Add(path.Substring(start, Math.Min(30, path.Length - start)));
         return string.Join("\n", lines);
     }
 }
