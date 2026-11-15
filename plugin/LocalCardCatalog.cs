@@ -125,7 +125,8 @@ public static class LocalCardCatalog
             throw new InvalidOperationException("Legacy V4 starter manifest mismatch.");
         if (NewBasicIds.Any(id => {
             EngineCard card = Current.Single(candidate => candidate.Id == id);
-            return card.Set != CardSet.CORE || card.Rarity != Rarity.FREE;
+            // Basic cards carry the old CORE set, or LEGACY once their 37.0 identity row is applied (Wild waves).
+            return (card.Set != CardSet.CORE && card.Set != CardSet.LEGACY) || card.Rarity != Rarity.FREE;
         }) || CurrentPool.Any(card => card.Rarity == Rarity.FREE) || QuarantinedIds.Any(id => Current.Any(card => card.Id == id)))
             throw new InvalidOperationException("Local card policy manifest mismatch.");
         if (LegacyGeneratedPublicIds.Any(id => {
