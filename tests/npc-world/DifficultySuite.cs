@@ -26,6 +26,7 @@ internal static class DifficultySuite
         HardUnchanged(mm);
         ShiftScalesWithRank(mm, world);
         CoreStepAtBronze(mm);
+        BeginnerServed(mm);
         BoostFadesAndKeepsFloors(world);
         Rematch(mm);
         CoreQueueRules(mm);
@@ -54,11 +55,15 @@ internal static class DifficultySuite
 
     private static void CoreDecks(NpcWorld world)
     {
-        var core = world.Catalogs.Decks.Decks.Where(NpcDifficultyShaper.IsCoreDeck).ToList();
-        Program.Require(core.Count == 11 && core.Select(d => d.Class).Distinct().Count() == 11, "one Core NPC deck per class: " + core.Count);
-        Program.Require(core.All(d => !d.Admitted && d.Id == NpcCoreDecks.IdFor(d.Class)), "Core decks are never admitted ladder decks");
-        Program.Require(world.All.All(npc => npc.DeckIds.All(id => !id.StartsWith(NpcCoreDecks.IdPrefix, StringComparison.Ordinal))),
-            "no NPC is generated with a Core deck");
+        var all = world.Catalogs.Decks.Decks.Where(NpcDifficultyShaper.IsCoreDeck).ToList();
+        var core = all.Where(d => d.Origin == NpcCoreDecks.Origin).ToList();
+        var beginner = all.Where(d => d.Origin == NpcBeginnerDecks.Origin).ToList();
+        Program.Require(all.Count == 22 && core.Count == 11 && beginner.Count == 11, "11 Core starters plus 11 beginner decks: " + core.Count + "+" + beginner.Count);
+        Program.Require(core.Select(d => d.Class).Distinct().Count() == 11 && beginner.Select(d => d.Class).Distinct().Count() == 11, "one of each per class");
+        Program.Require(core.All(d => d.Id == NpcCoreDecks.IdFor(d.Class)) && beginner.All(d => d.Id == NpcBeginnerDecks.IdFor(d.Class)), "Core deck ids");
+        Program.Require(all.All(d => !d.Admitted), "Core and beginner decks are never admitted ladder decks");
+        Program.Require(world.All.All(npc => npc.DeckIds.All(id => !id.StartsWith(NpcCoreDecks.IdPrefix, StringComparison.Ordinal)
+            && !id.StartsWith(NpcBeginnerDecks.IdPrefix, StringComparison.Ordinal))), "no NPC is generated with a Core or beginner deck");
         var problems = world.Catalogs.Decks.Validate();
         Program.Require(problems.Count == 0, "merged library validates: " + string.Join("; ", problems));
         var resolve = world.Catalogs.Decks.LocalDeckResolver(null, true, _ => true);
@@ -70,6 +75,40 @@ internal static class DifficultySuite
             var player = LocalDecks.PlayerCoreStarterDecks.Single(p => p.Hero == deck.Hero);
             Program.Require(local.CardIds.OrderBy(c => c, StringComparer.Ordinal).SequenceEqual(player.CardIds.OrderBy(c => c, StringComparer.Ordinal)),
                 "Core NPC deck matches the player's Core starter: " + deck.Id);
+        }
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var deck in beginner)
+        {
+            var local = resolve(deck.Id);
+            Program.Require(local != null, "beginner deck resolves: " + deck.Id);
+            local.Build();
+            var cards = local.CardIds.ToList();
+            Program.Require(cards.Count == 30, "beginner deck has 30 cards: " + deck.Id);
+            Program.Require(cards.All(id => id != "CS3_035"), "beginner deck has no Nozdormu: " + deck.Id);
+            Program.Require(cards.GroupBy(id => id).All(g => g.Count() <= 2), "beginner deck copy limit: " + deck.Id);
+            Program.Require(!LocalDecks.PlayerCoreStarterDecks.Any(p => p.Name.Equals(deck.Name, StringComparison.OrdinalIgnoreCase)) && names.Add(deck.Name),
+                "beginner deck name is unique: " + deck.Name);
+            var starter = LocalDecks.PlayerCoreStarterDecks.Single(p => p.Hero == deck.Hero);
+            Program.Require(!local.CardIds.OrderBy(c => c, StringComparer.Ordinal).SequenceEqual(starter.CardIds.OrderBy(c => c, StringComparer.Ordinal)),
+                "beginner deck differs from the Core starter: " + deck.Id);
+        }
+    }
+
+    // An Easy encounter at the Core step serves the beginner deck of its class; Medium serves the Core starter.
+    private static void BeginnerServed(LadderMatchmaker mm)
+    {
+        foreach (var level in new[] { NpcDifficulties.Easy, NpcDifficulties.Medium })
+        {
+            int core = 0;
+            for (int i = 0; i < 200; i++)
+            {
+                var e = mm.Choose(new MatchRequest(Profile + 5, i, 0, 1400, null, null, level)).Encounter;
+                if (!NpcDifficultyShaper.IsCoreDeck(e.Deck)) continue;
+                core++;
+                string expect = (level == NpcDifficulties.Easy ? NpcBeginnerDecks.IdPrefix : NpcCoreDecks.IdPrefix) + e.Deck.Class.ToLowerInvariant();
+                Program.Require(e.Deck.Id == expect, level.Id + " Core step serves " + expect + ", got " + e.Deck.Id);
+            }
+            Program.Require(core > 0, level.Id + " reaches the Core step at star 0");
         }
     }
 
@@ -238,24 +277,28 @@ internal static class DifficultySuite
         {
             NpcWorldRuntime.Install(world, mm);
             NpcWorldRuntime.InstallClientSeams(null);
-            NpcEncounter core = null;
-            for (int i = 0; i < 100 && core == null; i++)
+            foreach (var level in new[] { NpcDifficulties.Easy, NpcDifficulties.Medium })
             {
-                var e = mm.Choose(new MatchRequest(Profile + 3, i, 0, 1400, null, null, NpcDifficulties.Easy)).Encounter;
-                if (NpcDifficultyShaper.IsCoreDeck(e.Deck)) core = e;
+                string prefix = level == NpcDifficulties.Easy ? NpcBeginnerDecks.IdPrefix : NpcCoreDecks.IdPrefix;
+                NpcEncounter core = null;
+                for (int i = 0; i < 100 && core == null; i++)
+                {
+                    var e = mm.Choose(new MatchRequest(Profile + 3, i, 0, 1400, null, null, level)).Encounter;
+                    if (NpcDifficultyShaper.IsCoreDeck(e.Deck)) core = e;
+                }
+                Program.Require(core != null && core.Deck.Id.StartsWith(prefix, StringComparison.Ordinal), level.Id + " Core encounter exists");
+                bool refused = false;
+                try { LocalDecks.Get(core.Deck.Id); } catch (InvalidOperationException) { refused = true; }
+                Program.Require(refused, "a Core deck does not resolve before Begin");
+                NpcWorldRuntime.Begin(core);
+                var local = LocalDecks.Get(core.Deck.Id);
+                local.Build();
+                Program.Require(local.Id == core.Deck.Id, "a Core deck resolves and builds once Begun");
+                NpcWorldRuntime.End();
+                refused = false;
+                try { LocalDecks.Get(core.Deck.Id); } catch (InvalidOperationException) { refused = true; }
+                Program.Require(refused, "a Core deck stops resolving when the encounter ends");
             }
-            Program.Require(core != null && core.Deck.Id.StartsWith(NpcCoreDecks.IdPrefix, StringComparison.Ordinal), "an Easy Core encounter exists");
-            bool refused = false;
-            try { LocalDecks.Get(core.Deck.Id); } catch (InvalidOperationException) { refused = true; }
-            Program.Require(refused, "a Core deck does not resolve before Begin");
-            NpcWorldRuntime.Begin(core);
-            var local = LocalDecks.Get(core.Deck.Id);
-            local.Build();
-            Program.Require(local.Id == core.Deck.Id, "a Core deck resolves and builds once Begun");
-            NpcWorldRuntime.End();
-            refused = false;
-            try { LocalDecks.Get(core.Deck.Id); } catch (InvalidOperationException) { refused = true; }
-            Program.Require(refused, "a Core deck stops resolving when the encounter ends");
         }
         finally { NpcWorldRuntime.Uninstall(); }
     }
