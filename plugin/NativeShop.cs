@@ -2003,6 +2003,18 @@ internal static class NativeShop
         && products.Catalog.Products.Count() == NativeShopPurchase.Products.Count
         && NativeShopPurchase.Products.All(p => LocalModel(products.GetProductDataModel(NativeShopPurchase.PmtId(p))));
     // Purchase paths: native identity plus the current ledger quote.
+    // A pack page's selected variant is the client's mutable copy at the stepper's N (SetVariantQuantityAndUpdateDataModel):
+    // N packs at N times the quote, same PMT and booster. Control identity only; orders carry the catalogue model.
+    private static bool LocalPackSelection(ProductDataModel variant)
+    {
+        if (variant == null || !NativeShopPurchase.TryProduct(variant.PmtId, out var local) || !NativeShopPurchase.SupportsQuantity(local)
+            || variant.Items == null || variant.Items.Count != 1 || variant.Items[0] == null || variant.Prices == null || variant.Prices.Count != 1
+            || variant.Prices[0] == null || variant.Prices[0].Currency != CurrencyType.GOLD) return false;
+        var item = variant.Items[0];
+        return item.Quantity >= 1 && item.Quantity <= local.MaxQuantity && item.ItemId == NativeShopPurchase.NativeItemId(local)
+            && item.Booster != null && (int)item.Booster.Type == FairPackRules.NativeBoosterId(local.PackType)
+            && variant.Prices[0].Amount == (long)Quote(local) * item.Quantity;
+    }
     private static bool ValidProduct(ProductDataModel product)
     {
         return LocalModel(product) && Profile != null
@@ -3194,7 +3206,7 @@ internal static class NativeShop
         currentPage = shop.ProductPageController?.CurrentProductPage;
         var variant = currentPage?.GetSelectedVariant();
         bool catalogue = controlCache.Resolve(Time.frameCount, shop, currentPage, variant, NativeShopPurchase.CatalogueVersion,
-            LocalCatalogue, () => LocalModel(variant),
+            LocalCatalogue, () => LocalModel(variant) || LocalPackSelection(variant),
             error => Refuse("control identity: " + (error.InnerException ?? error).Message), out bool localVariant);
         localPage = catalogue && currentPage != null && currentPage.IsOpen && localVariant;
         return catalogue;

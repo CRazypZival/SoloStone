@@ -1081,6 +1081,13 @@ partial class NativeBundleHarness
             var shown = new ProductDataModel { PmtId = pmt, Prices = new() { new PriceDataModel { Currency = CurrencyType.GOLD, Amount = 500 } } };
             int shownCap = 1; PackBuyCap(shown, ref shownCap);
             check(shownCap == 10, "cap from the ledger unit quote, not the page's running total");
+            // Control identity of that page copy: N packs at exactly N times the quote, nothing else.
+            ProductDataModel Selection(int n, float amount) => new ProductDataModel { PmtId = pmt,
+                Prices = new() { new PriceDataModel { Currency = CurrencyType.GOLD, Amount = amount } },
+                Items = new() { new Item { ItemType = model.Items[0].ItemType, ItemId = model.Items[0].ItemId, Booster = model.Items[0].Booster, Quantity = n } } };
+            check(!LocalModel(Selection(5, 500)) && LocalPackSelection(Selection(5, 500)) && LocalPackSelection(Selection(1, 100))
+                && LocalPackSelection(Selection(50, 5000)) && !LocalPackSelection(Selection(51, 5100)) && !LocalPackSelection(Selection(5, 499))
+                && !LocalPackSelection(Selection(0, 0)) && !LocalPackSelection(deckModel), "page copy of N packs is local only at N x quote, N 1-50");
             int gold = profile.Gold, packs = profile.UnopenedPacks, popups = dialogs.Shown.Count; long receipts = profile.PurchaseSequence;
             // Over the balance: the native not-enough-gold alert names the batch total, no order.
             Time.realtimeSinceStartup += 1;
