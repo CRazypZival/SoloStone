@@ -785,6 +785,9 @@ public sealed class NativeMatch
             Logging = false
         };
         Game = new EngineGame(config);
+#if ENGINE_SOURCE
+        Game.RewindBoundaryDiagnostic = message => BotTrace?.Invoke("REWIND_BOUNDARY " + message);
+#endif
         OpponentPlateName = NpcMemoryText.Plate(OpponentName, npcProfile != null ? NpcMemory : null);
 
         if (premiumDeckCards != null)

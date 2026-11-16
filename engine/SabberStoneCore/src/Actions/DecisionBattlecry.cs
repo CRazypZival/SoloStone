@@ -21,7 +21,8 @@ namespace SabberStoneCore.Actions
         // 31008 is live Outcast state; 31009 is reserved for future secret-pick proxies.
         public static bool IsDecisionInternalTag(GameTag tag) => (int)tag >= 31001 && (int)tag <= 31009
             || InfinityRules.IsInternalTag(tag) || tag == ImbueRules.UndeadPlayedTurn || RepeatRules.IsInternalTag(tag) || TurnQueueRules.IsInternalTag(tag) || AutoPlayRules.IsInternalTag(tag);
-        internal static bool IsDecisionRecipe(Controller c) => HasDecisionPlay(c) || HasDecisionSpell(c) || c[AutomaticDecisionTag] != 0 || LocationRules.HasPending(c);
+        internal static bool IsDecisionRecipe(Controller c) => HasDecisionPlay(c) || HasDecisionSpell(c) || c[AutomaticDecisionTag] != 0 || LocationRules.HasPending(c)
+            || c.Game.Resolution.EffectFrames.Any();
         internal static bool HasDecisionPlay(Controller controller) => controller[DecisionSource] != 0;
 
         private static void BeginDecisionPlay(Controller c, IPlayable source, ICharacter target, DecisionBattlecryTask task)

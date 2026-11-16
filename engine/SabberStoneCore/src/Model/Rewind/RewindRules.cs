@@ -8,6 +8,7 @@ using SabberStoneCore.Kettle;
 using SabberStoneCore.Model.Entities;
 using SabberStoneCore.Model.Events;
 using SabberStoneCore.Tasks.PlayerTasks;
+using SabberStoneCore.Tasks.SimpleTasks;
 
 namespace SabberStoneCore.Model.Rewind
 {
@@ -50,11 +51,21 @@ namespace SabberStoneCore.Model.Rewind
         public static bool TryBegin(Game game, PlayerTask task)
         {
             if (!WouldBegin(game, task)) return false;
+            // Deathrattles can append summons after cleanup's summon catch-up. Settle them before taking the baseline.
+            if (!game.IsSnapshotBoundary && !game.ResolvingPlayerAction && game.Resolution.IsQuiescent && game.TaskQueue.IsQuiescent)
+            {
+                game.WarnRewindBoundary($"Settling source={task.Source?.Id ?? game.CurrentPlayer.Hero.HeroPower.Id}: {game.SnapshotBoundaryError}");
+                do { game.DeathProcessingAndAuraUpdate(); }
+                while (game.SummonedMinions.Count != 0 && game.State == State.RUNNING &&
+                    game.Player1.Choice == null && game.Player2.Choice == null);
+            }
             if (!game.IsSnapshotBoundary)
             {
                 SkippedNonQuiescentBoundaries++;
+                game.WarnRewindBoundary($"Skipped source={task.Source?.Id ?? game.CurrentPlayer.Hero.HeroPower.Id}: {game.SnapshotBoundaryError}");
                 return false;
             }
+            if (!WouldBegin(game, task)) return false;
             bool heroPower = task is HeroPowerTask;
             var source = heroPower ? task.Source ?? game.CurrentPlayer.Hero.HeroPower : game.IdEntityDic[task.Source.Id];
             game.Rewind = new RewindTransaction {
@@ -178,9 +189,18 @@ namespace SabberStoneCore.Model.Rewind
                 source is Spell ? ResolutionKind.SpellText : ResolutionKind.Battlecry, source.Id);
             using var cast = source is Spell spell ? game.Facts.Cast(spell, HistoryCastKind.Effect) : null;
             if (cast != null) cast.AllowBodyClaim = true;
-            // TaskProcessor opens the repeat's own POWER; a manual wrapper would nest same-source POWERs (no VFX targets).
+            // Queued effects own their POWER; direct decision recipes open theirs below.
             game.TaskQueue.StartEvent();
-            source.ActivateTask(PowerActivation.POWER, target, transaction.ChooseOne);
+            // Morchie's effect-only repeat owns normal decisions, without a second hand-play completion.
+            var recipe = (source.Power?.PowerTask as DecisionBattlecryTask)?.Recipe ??
+                (source.Power?.PowerTask as DecisionSpellTask)?.Recipe;
+            if (recipe != null)
+            {
+                if (game.History) game.PowerHistory.Add(PowerHistoryBuilder.BlockStart(BlockType.POWER, source.Id, "", -1, target?.Id ?? 0));
+                recipe.Process(game, source.Controller, source, target);
+                if (game.History) game.PowerHistory.Add(PowerHistoryBuilder.BlockEnd());
+            }
+            else source.ActivateTask(PowerActivation.POWER, target, transaction.ChooseOne);
             game.ProcessTasks();
             game.TaskQueue.EndEvent();
             game.DeathProcessingAndAuraUpdate();
