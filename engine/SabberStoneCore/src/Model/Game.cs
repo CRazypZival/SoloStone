@@ -606,10 +606,19 @@ namespace SabberStoneCore.Model
 			if (Resolution.HasSuspendedEffect && !(gameTask is ConcedeTask)) return false;
             if (SpellCompletion != null && !(gameTask is ChooseTask) && !(gameTask is ConcedeTask)) return false;
             // Rewind can settle overdue summon reactions before its snapshot; keep that history with this action.
-            bool preparedHistory = !preserveHistory && RewindRules.WouldBegin(this, gameTask) && !IsSnapshotBoundary;
+            bool prepareRewind = RewindRules.WouldBegin(this, gameTask) && !IsSnapshotBoundary;
+            if (prepareRewind && !RewindRules.IsLegalTask(this, gameTask)) return false;
+            bool preparedHistory = !preserveHistory && prepareRewind;
             if (preparedHistory) PowerHistory?.Last.Clear();
-            bool beganRewind = RewindRules.TryBegin(this, gameTask);
-            if (preparedHistory && State == State.COMPLETE) { SettleTerminalState(); return true; }
+            bool beganRewind = RewindRules.TryBegin(this, gameTask, out bool settled);
+            if (settled && (State != State.RUNNING || Player1.Choice != null || Player2.Choice != null ||
+                Resolution.HasSuspendedEffect || SpellCompletion != null || !RewindRules.IsLegalTask(this, gameTask)))
+            {
+                _optionsDecisionId = NextDecisionId;
+                SettleTerminalState();
+                RefreshHistoryDisplays();
+                return true;
+            }
             bool result;
 			_snapshotOperationDepth++;
 			try

@@ -823,6 +823,7 @@ public sealed class NativeMatch
             // recreate from the same seed/decks, whose original entity IDs also preserve the premium assignments.
             config.Player2HeroCard = ordinaryBotHero; config.Player2HeroClass = ordinaryBotHero.Class;
             Game = new EngineGame(config);
+            Game.RewindBoundaryDiagnostic = message => BotTrace?.Invoke("REWIND_BOUNDARY " + message);
             Game.StartGame();
         }
 #endif
@@ -1749,7 +1750,8 @@ public sealed class NativeMatch
             pendingTrade.engineHistory=NormalizeTradeEngineHistory(Game.PowerHistory.Last,pendingTrade.source,pendingTrade.player);
         }
 #endif
-        if (playedCard != null && playedCard != "GAME_005")
+        if (playedCard != null && playedCard != "GAME_005" && Game.PowerHistory.Last.OfType<PowerHistoryBlockStart>()
+            .Any(block => block.Source == task.Source.Id && NativePetReactions.IsCardPlay(block)))
             playedCardIds.Add(playedCard);
         ObserveRewardHistory(Game.PowerHistory.Last);
         minimumHealth = Math.Min(minimumHealth, Math.Max(0, Game.Player1.Hero.Health));

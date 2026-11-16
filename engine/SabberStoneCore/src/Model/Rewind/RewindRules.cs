@@ -48,16 +48,33 @@ namespace SabberStoneCore.Model.Rewind
                 ((Entity)source).GetNativeGameTag(GameTag.REWIND) == 1 && source[GameTag.USED_REWIND] < Budget(source.Card.Id);
         }
 
-        public static bool TryBegin(Game game, PlayerTask task)
+        internal static bool IsLegalTask(Game game, PlayerTask task) => game.CurrentPlayer.Options().Any(option =>
+            option.PlayerTaskType == task.PlayerTaskType &&
+            (option.Source?.Id ?? game.CurrentPlayer.Hero.HeroPower.Id) == (task.Source?.Id ?? game.CurrentPlayer.Hero.HeroPower.Id) &&
+            option.ActionTarget?.Id == task.ActionTarget?.Id && Math.Max(0, option.ChooseOne) == Math.Max(0, task.ChooseOne) &&
+            (task is not PlayCardTask play || play.ZonePosition == -1 || play.ZonePosition == ((PlayCardTask)option).ZonePosition));
+
+        public static bool TryBegin(Game game, PlayerTask task) => TryBegin(game, task, out _);
+
+        internal static bool TryBegin(Game game, PlayerTask task, out bool settled)
         {
+            settled = false;
             if (!WouldBegin(game, task)) return false;
             // Deathrattles can append summons after cleanup's summon catch-up. Settle them before taking the baseline.
             if (!game.IsSnapshotBoundary && !game.ResolvingPlayerAction && game.Resolution.IsQuiescent && game.TaskQueue.IsQuiescent)
             {
+                if (!IsLegalTask(game, task)) return false;
+                settled = true;
                 game.WarnRewindBoundary($"Settling source={task.Source?.Id ?? game.CurrentPlayer.Hero.HeroPower.Id}: {game.SnapshotBoundaryError}");
-                do { game.DeathProcessingAndAuraUpdate(); }
+                int iterations = 0;
+                do { game.DeathProcessingAndAuraUpdate(); iterations++; }
                 while (game.SummonedMinions.Count != 0 && game.State == State.RUNNING &&
-                    game.Player1.Choice == null && game.Player2.Choice == null);
+                    game.Player1.Choice == null && game.Player2.Choice == null &&
+                    !game.Resolution.HasSuspendedEffect && game.SpellCompletion == null && iterations < 64);
+                if (iterations == 64 && game.SummonedMinions.Count != 0)
+                    game.WarnRewindBoundary($"Settlement limit=64 source={task.Source?.Id ?? game.CurrentPlayer.Hero.HeroPower.Id}: {game.SnapshotBoundaryError}");
+                if (game.Resolution.HasSuspendedEffect || game.SpellCompletion != null ||
+                    game.State != State.RUNNING || game.Player1.Choice != null || game.Player2.Choice != null || !IsLegalTask(game, task)) return false;
             }
             if (!game.IsSnapshotBoundary)
             {

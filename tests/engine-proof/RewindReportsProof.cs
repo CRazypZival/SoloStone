@@ -4,6 +4,7 @@ using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Decisions;
 using SabberStoneCore.Model.Entities;
+using SabberStoneCore.Model.Events;
 using SabberStoneCore.Tasks;
 using SabberStoneCore.Tasks.PlayerTasks;
 using SabberStoneCore.Tasks.SimpleTasks;
@@ -164,16 +165,21 @@ internal static partial class RewindProof
         Answer(pending, true);
         Check(((Minion)pending.IdEntityDic[tidecaller.Id]).AttackDamage == attack + 1, "#159 retry does not repeat settled summon reaction");
 
-        var lethal = ReportFixture(1); var victim = lethal.CurrentPlayer;
-        Summon(victim, "CS2_237"); // Buzzard draws on the overdue Beast summon.
-        foreach (var held in victim.HandZone.ToArray()) victim.SetasideZone.Add(victim.HandZone.Remove(held));
-        foreach (var held in victim.DeckZone.ToArray()) victim.SetasideZone.Add(victim.DeckZone.Remove(held));
-        var unpaid = Add(victim, "TIME_001"); victim.Hero.Health = 1;
-        Generic.SummonBlock(lethal, (Minion)Entity.FromCard(victim, Cards.FromId("CS2_172")), -1, null);
-        bool terminalAccepted = lethal.Process(PlayCardTask.Any(victim, unpaid));
-        Check(terminalAccepted && lethal.State == State.COMPLETE &&
-            victim.UsedMana == 0 && unpaid.Zone == victim.HandZone && lethal.Rewind == null,
-            $"#159 lethal pending summon ends match before payment or Rewind action: accepted={terminalAccepted}, state={lethal.State}, mana={victim.UsedMana}, zone={unpaid.Zone.Type}");
+        foreach (int seat in new[] { 1, 2 })
+        foreach (bool autonomous in new[] { false, true })
+        {
+            var lethal = ReportFixture(seat); var victim = lethal.CurrentPlayer;
+            Summon(victim, "CS2_237"); // Buzzard draws on the overdue Beast summon.
+            foreach (var held in victim.HandZone.ToArray()) victim.SetasideZone.Add(victim.HandZone.Remove(held));
+            foreach (var held in victim.DeckZone.ToArray()) victim.SetasideZone.Add(victim.DeckZone.Remove(held));
+            var unpaid = Add(victim, "TIME_001"); victim.Hero.Health = 1;
+            Generic.SummonBlock(lethal, (Minion)Entity.FromCard(victim, Cards.FromId("CS2_172")), -1, null);
+            var unpaidTask = PlayCardTask.Any(victim, unpaid);
+            bool terminalAccepted = autonomous ? lethal.ProcessAutonomous(unpaidTask) : lethal.Process(unpaidTask);
+            Check(terminalAccepted && lethal.State == State.COMPLETE &&
+                victim.UsedMana == 0 && unpaid.Zone == victim.HandZone && lethal.Rewind == null,
+                $"#159 lethal pending summon ends match before payment or Rewind action: accepted={terminalAccepted}, state={lethal.State}, mana={victim.UsedMana}, zone={unpaid.Zone.Type}");
+        }
         Console.WriteLine("PASS #159 boundary safety: skip diagnostics, observer isolation/restore, pending trigger history, lethal catch-up prevents payment");
     }
 
@@ -196,8 +202,106 @@ internal static partial class RewindProof
         Console.WriteLine("PASS #80 Stadium Announcer: both seats, Keep/Rewind, with/without Morchie, no freeze");
     }
 
+    private static void SettlementInvalidatesAction(string only)
+    {
+        foreach (string scenario in new[] { "hand", "target" }.Where(s => only == null || only == s))
+        foreach (int seat in new[] { 1, 2 })
+        foreach (bool autonomous in new[] { false, true })
+        foreach (bool skipPrePhase in new[] { false, true })
+        {
+            var game = ReportFixture(seat); var player = game.CurrentPlayer;
+            IPlayable source; Minion target = null;
+            if (scenario == "hand")
+            {
+                new ReplaceHeroPower(Cards.FromId("END_000p")).Process(game, player, player.Hero, null);
+                Summon(player, "CS2_237");
+                while (player.HandZone.Count < 9) Add(player, "CS2_182");
+                source = player.Hero.HeroPower;
+            }
+            else
+            {
+                target = Summon(player.Opponent, "CS2_231");
+                Summon(player, "NEW1_019");
+                source = Add(player, "CS2_029"); source[GameTag.REWIND] = 1;
+            }
+            game.SetRandomSeed(3);
+            Generic.SummonBlock(game, (Minion)Entity.FromCard(player, Cards.FromId("CS2_172")), -1, null);
+            var task = player.Options().First(t => (scenario == "hand" ? t is HeroPowerTask : t.Source?.Id == source.Id)
+                && t.ActionTarget?.Id == target?.Id);
+            task.SkipPrePhase = skipPrePhase;
+            if (target != null) Check(target.Zone == player.Opponent.BoardZone, "F1 target still on board when action offered");
+            int deck = player.DeckZone.Count;
+            bool accepted = autonomous ? game.ProcessAutonomous(task) : game.Process(task);
+            Check(accepted && game.Rewind == null && player.UsedMana == 0 && player.NumCardsPlayedThisTurn == 0 &&
+                player.NumSpellsPlayedThisGame == 0 && player.NumTimesHeroPowerUsedThisGame == 0,
+                $"F1 {scenario} handled no-op: seat={seat}, autonomous={autonomous}, accepted={accepted}, mana={player.UsedMana}");
+            Check(scenario == "hand" ? player.HandZone.Count == 10 && player.DeckZone.Count == deck - 1 && !player.Hero.HeroPower.IsExhausted
+                : target.Zone == player.Opponent.GraveyardZone && source.Zone == player.HandZone,
+                "F1 settlement retained without playing stale task");
+            Check(game.PowerHistory.Last.OfType<SabberStoneCore.Kettle.PowerHistoryTagChange>().Any(e => scenario == "hand"
+                ? e.Tag == GameTag.ZONE && e.Value == (int)Zone.HAND
+                : e.EntityId == target.Id && e.Tag == GameTag.ZONE && e.Value == (int)Zone.GRAVEYARD), "F1 settlement history retained");
+            Check(player.Options().Any(t => t is EndTurnTask), "F1 fresh options available");
+            Balanced(game);
+            Console.WriteLine($"PASS F1 {scenario}: seat={seat}, autonomous={autonomous}, skipPrePhase={skipPrePhase}, settled no-op, history retained");
+        }
+    }
+
+    private static void SettlementGuards()
+    {
+        foreach (bool autonomous in new[] { false, true })
+        {
+            var game = ReportFixture(1); var player = game.CurrentPlayer;
+            Summon(player, "CS2_237"); var source = Add(player, "TIME_001");
+            Generic.SummonBlock(game, (Minion)Entity.FromCard(player, Cards.FromId("CS2_172")), -1, null);
+            player.UsedMana = 10;
+            var task = PlayCardTask.Any(player, source);
+            string before = Canonical.State(game) + Canonical.Value(game.Random.CaptureState()) + string.Concat(game.PowerHistory.Last.Select(e => e.Print()));
+            Check(!(autonomous ? game.ProcessAutonomous(task) : game.Process(task)) &&
+                before == Canonical.State(game) + Canonical.Value(game.Random.CaptureState()) + string.Concat(game.PowerHistory.Last.Select(e => e.Print())),
+                "F1 initially illegal Rewind play rejected without settlement or history mutation");
+        }
+        foreach (int seat in new[] { 1, 2 })
+        foreach (string scenario in new[] { "board", "choice" })
+        {
+            var game = ReportFixture(seat); var player = game.CurrentPlayer;
+            var source = Add(player, scenario == "board" ? "TIME_002" : "TIME_001");
+            if (scenario == "board") for (int i = 0; i < 5; i++) Summon(player, "CS2_231");
+            game.TriggerManager.Events.Subscribe<SummonEvent>(_ => {
+                if (scenario == "board")
+                {
+                    if (!player.BoardZone.IsFull) Generic.SummonBlock(game, (Minion)Entity.FromCard(player, Cards.FromId("CS2_231")), -1, null);
+                }
+                else if (player.Choice == null)
+                    Generic.CreateChoiceCards(player, source, null, ChoiceType.GENERAL, ChoiceAction.HAND, new[] { Cards.FromId("CS2_182") }, null);
+            });
+            Generic.SummonBlock(game, (Minion)Entity.FromCard(player, Cards.FromId("CS2_231")), -1, null);
+            var task = player.Options().First(t => t.Source?.Id == source.Id);
+            Check(game.Process(task) && game.Rewind == null && source.Zone == player.HandZone && player.UsedMana == 0,
+                "F1 " + scenario + " cancels stale action");
+            Check(scenario == "board" ? player.BoardZone.IsFull : player.Choice != null && player.Options().All(t => t is ChooseTask),
+                "F1 settlement preserves full board or legacy choice");
+        }
+        var capped = ReportFixture(1); var owner = capped.CurrentPlayer;
+        var card = Add(owner, "TIME_001");
+        int deaths = 0;
+        capped.TriggerManager.Events.Subscribe<SummonEvent>(sender => ((Minion)sender).ToBeDestroyed = true);
+        capped.TriggerManager.Events.Subscribe<DeathEvent>(_ => {
+            deaths++;
+            Generic.SummonBlock(capped, (Minion)Entity.FromCard(owner, Cards.FromId("CS2_231")), -1, null);
+        });
+        Generic.SummonBlock(capped, (Minion)Entity.FromCard(owner, Cards.FromId("CS2_231")), -1, null);
+        var warnings = new List<string>(); capped.RewindBoundaryDiagnostic = warnings.Add;
+        Check(!SabberStoneCore.Model.Rewind.RewindRules.TryBegin(capped, PlayCardTask.Any(owner, card)) && deaths == 64 &&
+            warnings.Count(w => w.StartsWith("Settlement limit=64")) == 1 && capped.SummonedMinions.Count == 1,
+            "F5 pathological summon/death settlement stops at 64 and warns");
+        Console.WriteLine("PASS F1/F5 boundary guards: both seats, full board, legacy choice; summon/death cycle capped at 64 with warning");
+    }
+
     internal static void ReportRegressions(string only = null)
     {
+        if (only == null || only.StartsWith("F1")) SettlementInvalidatesAction(only?.Split('-').ElementAtOrDefault(1));
+        if (only == null || only == "guards") SettlementGuards();
         if (only == null || only == "158") MorchieHerald();
         if (only == null || only == "159") BronzeAfterDeaths();
         if (only == null || only == "80") AnnouncerReports();

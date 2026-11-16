@@ -104,6 +104,7 @@ internal static partial class Program
         if (args.Contains("--rewind-presentation-only")) { RewindPresentationTags(); return; }
         if (args.Contains("--announcer-rewind-only")) { NativeMatch.ClockFreeBot = true; AnnouncerRewindHistory(); return; }
         if (args.Contains("--morchie-rewind-only")) { NativeMatch.ClockFreeBot = true; MorchieRewindChoices(); return; }
+        if (args.Contains("--rewind-settlement-only")) { NativeMatch.ClockFreeBot = true; RewindSettlementNoOp(args.ElementAtOrDefault(1)); return; }
         if (args.Contains("--king-llane-only")) { NativeMatch.ClockFreeBot = true; KingLlanePlayHistory(); return; }
         if (args.Contains("--vanguard-only")) { NativeMatch.ClockFreeBot = true; VanguardDrawHistory(); return; }
         if (args.Contains("--broxigar-only")) { NativeMatch.ClockFreeBot = true; BroxigarReturnHistory(); return; }
@@ -250,6 +251,7 @@ internal static partial class Program
         KingLlanePlayHistory();
         AnnouncerRewindHistory();
         MorchieRewindChoices();
+        RewindSettlementNoOp();
         GroupProofs.Run(ProofKind.Native);
         if (args.Contains("--hand-buff-only")) return;
         OverloadManaParity();
