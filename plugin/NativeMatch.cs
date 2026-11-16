@@ -1306,6 +1306,8 @@ public sealed class NativeMatch
                 picks.Add(remaining[index]); remaining.RemoveAt(index);
             }
         }
+        // Watchdog recovery and choices on a shortened NPC turn also invalidate the player's pending send.
+        expiredHumanChoices.Add(humanChoices.Index);
         CompleteHumanChoice(humanChoices.Index, picks, drive: false);
         return true;
     }

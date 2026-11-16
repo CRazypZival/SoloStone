@@ -14,6 +14,94 @@ internal static partial class Program
     private static void Invoke0(NativeMatch match, string name) =>
         typeof(NativeMatch).GetMethod(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(match, null);
 
+    // Compare the complete answer's wire prefix before options (human) or timeout/end-turn (timer).
+    private static void TimedChoiceCompletionNative()
+    {
+        foreach (string finish in new[] { "20s", "35s", "timer", "send-at-deadline", "watchdog" })
+        foreach (string cardId in new[] { "TIME_041", "UNG_941", "TIME_034", "CATA_200" })
+        {
+            string name = cardId + " choice " + finish;
+            List<string> expected = null;
+            for (int run = 0; run < 2; run++)
+            {
+                long now = 0;
+                var capture = new Capture();
+                var scenario = DebugScenario.Parse("humanHand=" + cardId + ",CS2_182\nhumanSeat=first");
+                var match = new NativeMatch(capture.Send, "mage", "mage", 8427) {
+                    DebugScenario = scenario, StartingPlayer = scenario.FirstPlayer,
+                    PlayerTurnTimerEnabled = true, TurnTimerClock = () => now, NativeHumanInputReady = () => true };
+                match.Start();
+                int mulliganPackets = capture.Packets.Count;
+                match.TickTurnTimer(100000);
+                Check(match.Game.Step == Step.BEGIN_MULLIGAN && capture.Packets.Count == mulliganPackets, name + ": mulligan has no turn timer");
+                match.SendChoices(capture.Last<EntityChoices>(17).Id, new List<int>());
+                var game = match.Game; var player = game.Player1;
+                player.BaseMana = 10; player.UsedMana = 0;
+                var source = player.HandZone.Single(c => c.Card.Id == cardId);
+                FlushFieldHistory(match); Invoke0(match, "SendHumanOptions");
+                match.TickTurnTimer();
+                var options = capture.Last<AllOptions>(14);
+                int play = options.Options.FindIndex(o => o.MainOption?.Id == match.WireReturnId(source.Id));
+                Check(play >= 0, name + ": playable");
+                match.SendOption(options.Id, play, 0, -1, source.Card.Type == CardType.MINION ? 1 : 0);
+                var offer = capture.Last<EntityChoices>(17);
+                Check(player.Choice != null && offer.CountMin == 1, name + ": mandatory choice published");
+                bool automatic = finish == "timer" || finish == "send-at-deadline" || finish == "watchdog";
+                int pick = finish == "watchdog" ? offer.Entities[0]
+                    : offer.Entities[new Random(match.Seed ^ 0x71a3).Next(offer.Entities.Count)];
+                now = run == 0 ? 1000 : finish == "20s" ? 20000 : finish == "35s" ? 35000 : finish == "watchdog" ? 19999 : 44999;
+                match.TickTurnTimer();
+                Check(player.Choice != null, name + ": choice remains human-owned before expiry");
+                int cursor = capture.Packets.Count;
+                if (run == 0 || !automatic) match.SendChoices(offer.Id, new List<int> { pick });
+                else if (finish == "watchdog")
+                {
+                    var presentation = MissingChoicePresentation(offer.Id);
+                    presentation.Type = player.Choice.ChoiceType;
+                    match.NativeHumanChoicePresentation = () => presentation;
+                    match.NpcClock = () => now;
+                    for (now = 20000; now <= 35000; now += 500) match.TickChoiceWatchdog();
+                }
+                else
+                {
+                    now = 45000;
+                    match.NativeHumanInputReady = () => false;
+                    if (finish == "send-at-deadline")
+                        ExpectTimerRejection(() => match.SendChoices(offer.Id, new List<int> { offer.Entities.Last() }), name);
+                    else match.TickTurnTimer();
+                }
+                Check(player.Choice == null && game.Rewind == null, name + ": engine choice settled");
+                var answer = capture.Packets.Skip(cursor)
+                    .TakeWhile(p => p.Id != 14 && p.Message is not PegasusGame.TurnTimer { Seconds: 0 }).ToArray();
+                var chosen = answer.Where(p => p.Id == 13).Select(p => (EntitiesChosen)p.Message).Single();
+                Check(chosen.ChooseEntities.Id == offer.Id && chosen.ChooseEntities.Entities.SequenceEqual(new[] { pick }),
+                    name + ": exactly one acknowledgement for the chosen offer");
+                if (cardId == "TIME_041") AssertGuessResult(capture, cursor, game, offer.Entities, pick, false, name);
+                var wire = capture.WirePackets.Skip(cursor).Take(answer.Length).Where(p => p.Id != 9).Select(p => {
+                    // Choice packet ids are global across matches; every other byte must agree.
+                    if (p.Id == 13) return "13:" + chosen.PlayerId + ":" + chosen.ChoiceType + ":" + string.Join(",", chosen.ChooseEntities.Entities);
+                    return p.Id + ":" + Convert.ToBase64String(p.Bytes);
+                }).ToList();
+                if (run == 0) expected = wire;
+                else
+                {
+                    Check(expected.SequenceEqual(wire), name + ": answer wire matches human pick, including history and actor retirement");
+                    Console.WriteLine("PASS " + name + ": answer wire matches human pick");
+                    if (automatic)
+                    {
+                        int packets = capture.Packets.Count;
+                        // Do not let a new turn's clock obscure whether the stale send changed anything.
+                        match.NativeHumanTimerReady = () => false;
+                        ExpectTimerRejection(() => match.SendChoices(offer.Id, new List<int> { offer.Entities.Last() }), name + " late pick");
+                        Check(capture.Packets.Skip(packets).All(p => p.Id == 9), name + ": late pick emits no duplicate completion");
+                    }
+                }
+                capture.SerializeAll();
+            }
+        }
+        Console.WriteLine("PASS timed choices: Forefather, Discover, Rewind, TARGET; delayed input, expiry, watchdog, late rejection; mulligan untimed");
+    }
+
     // #115: after Futuristic Forefather's guess the choice stayed on screen and the match stopped. The native choice path
     // from the human's seat: play, answer each offer, then the match must offer options and the turn must pass.
     private static void ForefatherGuessNative()
