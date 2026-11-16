@@ -252,24 +252,33 @@ internal static class TargetingRulesProof
         Verify(h.Zone.Type == Zone.GRAVEYARD, "Destroy then damage then heal: dies");
     }
 
-    // A rescued fatal hit must not own a later death, even when the next lethal hit precedes the death check.
+    // A rescued fatal hit must not own a later death, even when the next hit or destroy precedes the death check.
     private static void RescuedDeathAttribution()
     {
         var failures = new List<string>();
         foreach (bool settle in new[] { true, false })
-            Parts(failures, "settle=" + settle, () => {
-                var g = HistoryFactsProof.Fixture(); var p = g.Player1;
-                var first = Add(p, "CS2_029"); var second = Add(p.Opponent, "CS2_029");
-                var victim = Summon(p.Opponent, "CS2_182");
-                victim.TakeDamage(first, 6); victim.TakeHeal(p.Hero, 3);
-                if (settle) { g.DeathProcessingAndAuraUpdate(); End(g); }
-                victim.TakeDamage(second, victim.Health); g.DeathProcessingAndAuraUpdate();
-                var death = g.HistoryFacts.Query.Deaths().Single(f => f.EntityId == victim.Id);
-                var hit = g.HistoryFacts.Query.Damage().Single(f => f.VictimId == victim.Id && f.SourceId == second.Id);
-                Verify(death.SourceId == second.Id && death.SourceControllerId == p.Opponent.Id
-                    && death.Cause == HistoryDeathCause.SpellOrEffect && death.FatalDamageSequence == hit.Sequence,
-                    $"rescued death credits new source {second.Id}, got {death.SourceId} (settle={settle})");
-            });
+            foreach (string finish in new[] { "damage", "DestroyTask", "Destroy" })
+                Parts(failures, $"settle={settle} finish={finish}", () => {
+                    var g = HistoryFactsProof.Fixture(); var p = g.Player1;
+                    var first = Add(p, "CS2_029"); var second = Add(p.Opponent, "CS2_029");
+                    var victim = Summon(p.Opponent, "CS2_182");
+                    victim.TakeDamage(first, 6); victim.TakeHeal(p.Hero, 3);
+                    if (settle) { g.DeathProcessingAndAuraUpdate(); End(g); }
+                    if (finish == "damage") victim.TakeDamage(second, victim.Health);
+                    else if (finish == "DestroyTask")
+                        using (g.Resolution.Enter(SabberStoneCore.Model.Events.ResolutionKind.TaskResolution, second.Id))
+                            new SabberStoneCore.Tasks.SimpleTasks.DestroyTask(SabberStoneCore.Tasks.SimpleTasks.EntityType.TARGET).Process(g, p.Opponent, second, victim);
+                    else
+                        using (g.Resolution.Enter(SabberStoneCore.Model.Events.ResolutionKind.EffectResolution, second.Id)) victim.Destroy();
+                    g.DeathProcessingAndAuraUpdate();
+                    var death = g.HistoryFacts.Query.Deaths().Single(f => f.EntityId == victim.Id);
+                    long fatalSequence = finish == "damage"
+                        ? g.HistoryFacts.Query.Damage().Single(f => f.VictimId == victim.Id && f.SourceId == second.Id).Sequence : 0;
+                    Verify(death.SourceId == second.Id && death.SourceControllerId == p.Opponent.Id
+                        && death.Cause == (finish == "damage" ? HistoryDeathCause.SpellOrEffect : HistoryDeathCause.Destroy)
+                        && death.FatalDamageSequence == fatalSequence,
+                        $"rescued death credits new source {second.Id}, got {death.SourceId} (settle={settle} finish={finish})");
+                });
         Verify(failures.Count == 0, string.Join("; ", failures));
     }
 
@@ -278,31 +287,39 @@ internal static class TargetingRulesProof
         var failures = new List<string>();
         foreach (bool weapon in new[] { true, false })
             foreach (bool settle in new[] { true, false })
-                Parts(failures, $"weapon={weapon} settle={settle}", () => {
-                    var g = HistoryFactsProof.Fixture(); var p = g.Player1;
-                    IPlayable tracker; ICharacter attacker;
-                    if (weapon) { Play(g, p, "CORE_RLK_086"); tracker = p.Hero.Weapon; attacker = p.Hero; }
-                    else { var ursoc = Summon(p, "EDR_819"); ursoc.IsAttacking = true; tracker = ursoc; attacker = ursoc; }
-                    var victim = Summon(p.Opponent, "CS2_182");
-                    victim[DeathContextRules.CaptureDeath] = 1;
-                    victim.TakeDamage(attacker, 6, combat: true);
-                    Verify(victim[DeathContextRules.PendingTracker] == tracker.Id && victim[DeathContextRules.FatalSource] == attacker.Id,
-                        "fatal combat hit records tracker and source");
-                    victim.TakeHeal(p.Hero, 3);
-                    if (settle)
-                    {
+                foreach (string finish in new[] { "damage", "DestroyTask", "Destroy" })
+                    Parts(failures, $"weapon={weapon} settle={settle} finish={finish}", () => {
+                        var g = HistoryFactsProof.Fixture(); var p = g.Player1;
+                        IPlayable tracker; ICharacter attacker;
+                        if (weapon) { Play(g, p, "CORE_RLK_086"); tracker = p.Hero.Weapon; attacker = p.Hero; }
+                        else { var ursoc = Summon(p, "EDR_819"); ursoc.IsAttacking = true; tracker = ursoc; attacker = ursoc; }
+                        var victim = Summon(p.Opponent, "CS2_182");
+                        victim[DeathContextRules.CaptureDeath] = 1;
+                        victim.TakeDamage(attacker, 6, combat: true);
+                        Verify(victim[DeathContextRules.PendingTracker] == tracker.Id && victim[DeathContextRules.FatalSource] == attacker.Id,
+                            "fatal combat hit records tracker and source");
+                        victim.TakeHeal(p.Hero, 3);
+                        if (settle)
+                        {
+                            g.DeathProcessingAndAuraUpdate();
+                            Verify(new[] { DeathContextRules.PendingTracker, DeathContextRules.FatalOrdinal, DeathContextRules.FatalSource }
+                                .All(tag => !victim.NativeTags.ContainsKey(tag)), "rescue clears all fatal tracker tags");
+                        }
+                        if (finish == "damage") victim.TakeDamage(p.Opponent.Hero, victim.Health);
+                        else if (finish == "DestroyTask")
+                            using (g.Resolution.Enter(SabberStoneCore.Model.Events.ResolutionKind.TaskResolution, p.Opponent.Hero.Id))
+                                new SabberStoneCore.Tasks.SimpleTasks.DestroyTask(SabberStoneCore.Tasks.SimpleTasks.EntityType.TARGET).Process(g, p.Opponent, p.Opponent.Hero, victim);
+                        else
+                            using (g.Resolution.Enter(SabberStoneCore.Model.Events.ResolutionKind.EffectResolution, p.Opponent.Hero.Id)) victim.Destroy();
                         g.DeathProcessingAndAuraUpdate();
-                        Verify(new[] { DeathContextRules.PendingTracker, DeathContextRules.FatalOrdinal, DeathContextRules.FatalSource }
-                            .All(tag => !victim.NativeTags.ContainsKey(tag)), "rescue clears all fatal tracker tags");
-                    }
-                    victim.TakeDamage(p.Opponent.Hero, victim.Health); g.DeathProcessingAndAuraUpdate();
-                    Verify(PayloadRules.Entries(tracker, DeathContextRules.KillKey).Length == 0,
-                        "rescued victim must not enter combat kill payload");
-                    if (weapon) p.Hero.Weapon.Durability = 0;
-                    else ((Minion)tracker).Destroy();
-                    g.DeathProcessingAndAuraUpdate();
-                    Verify(!p.BoardZone.Any(m => m.Card.Id == victim.Card.Id), "tracker Deathrattle does not summon rescued victim");
-                });
+                        Verify(PayloadRules.Entries(tracker, DeathContextRules.KillKey).Length == 0,
+                            "rescued victim must not enter combat kill payload");
+                        Verify(victim[DeathContextRules.FatalSource] == p.Opponent.Hero.Id, "later fatal source replaces rescued combat source");
+                        if (weapon) p.Hero.Weapon.Durability = 0;
+                        else ((Minion)tracker).Destroy();
+                        g.DeathProcessingAndAuraUpdate();
+                        Verify(!p.BoardZone.Any(m => m.Card.Id == victim.Card.Id), "tracker Deathrattle does not summon rescued victim");
+                    });
         Verify(failures.Count == 0, string.Join("; ", failures));
     }
 
