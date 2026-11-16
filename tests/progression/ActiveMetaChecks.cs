@@ -124,6 +124,9 @@ internal static class ClassicWildChecks
             try { hidden = Cards.FromId(id); } catch (KeyNotFoundException) { }
             Check(!LocalCardCatalog.IsStandardId(id) && !LocalShop.IsStandardCard(hidden), "a CORE_ prefix alone is not Standard: " + id);
         }
+        Check(LocalProfile.KnownLedgerCard("CORE_EDR_004") && LocalProfile.KnownLedgerCard("CORE_FP1_011") && !LocalProfile.KnownLedgerCard("CORE_NOT_A_CARD"),
+            "a non-Standard collectible CORE_ id an older save may hold stays known to the ledger");
+        Check(NativeUIProjection.NativeCardIsWild(true, "BE_152") == null, "an unreleased set's card is left to the client, like its set");
         Check(LocalShop.IsStandardCard(Cards.FromId("CORE_EDR_004_2026")) && LocalShop.IsStandardCard(Cards.FromId("CORE_CS2_024"))
             && LocalShop.IsStandardCard(Cards.FromId("JAIL_831")) && !LocalShop.IsStandardCard(Cards.FromId("CS2_024")),
             "the shop's Standard check is the engine rule");

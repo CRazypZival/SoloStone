@@ -662,7 +662,7 @@ public sealed partial class LocalProfile : IDisposable
                 var repaired = RepairDeckPremiums(loaded, profileOptions.AllCosmetics);
                 var reprintGrants = GrantClassicReprints(loaded);
                 bool granted = AdoptAchievementHeroSkins(loaded) | GrantCoreUnlocks(loaded) | reprintGrants.Count > 0 | GrantClassRewards(loaded, null) | LocalCardMastery.Grant(loaded, null);
-                if ((granted || paceChanged || repaired.Count > 0) && !snapshot) { Commit(loaded); LogDeckRepairs(repaired); }
+                if ((granted || paceChanged || repaired.Count > 0) && !snapshot) { Commit(loaded); LogDeckRepairs(repaired); LogDeckRepairs(reprintGrants); }
                 else data = loaded;
             }
             if (!snapshot) {

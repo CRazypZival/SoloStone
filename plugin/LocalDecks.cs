@@ -1017,7 +1017,7 @@ public static class LocalDecks
                 "Flood the board with shielded recruits; Scarlet Recruiter pulls more; buff them and close with Stormwind Champion and Tirion.", DeckStyle.Value,
                 new[] { "CORE_ICC_038", "CORE_CFM_753", "CORE_EX1_362", "JAIL_377", "MEND_802", "CORE_CS2_093", "CORE_CS2_094", "CORE_CS2_122", "CORE_GVG_059", "CORE_GVG_061", "CATA_474", "JAIL_516", "CORE_CS2_222" },
                 new[] { "CORE_UNG_952", "CS3_024", "CORE_SW_047", "CORE_EX1_383" }),
-            new LocalDeck("player-core-priest", "Holy Light Priest", "HERO_09", "Showcase opponents",
+            new LocalDeck("player-core-priest", "Holy Nova Priest", "HERO_09", "Showcase opponents",
                 "Trade with sturdy minions and keep them healed; clear boards with Holy Nova; Soothsayer and big Taunts win late.", DeckStyle.Control,
                 new[] { "CORE_CS1_130", "CORE_CS2_004", "CORE_ICC_210", "EDR_463", "JAIL_941", "CAP_801", "CORE_CS1_112", "EDR_970", "CORE_UNG_084", "TLC_816", "CORE_BAR_313", "CORE_BAR_310", "JAIL_912" },
                 new[] { "CORE_EX1_110", "CORE_SCH_512", "CORE_EX1_198", "CORE_ICC_214" }),

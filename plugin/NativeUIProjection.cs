@@ -149,7 +149,9 @@ internal static class NativeUIProjection
             SabberStoneCore.Model.Card card;
             try { card = SabberStoneCore.Model.Cards.FromId(cardId); } catch (KeyNotFoundException) { card = null; }
             // Heroes (base heroes are Basic-set collectibles, skins HERO_SKINS) are never Wild cards: leave them to the client.
-            bool? wild = card == null || !card.Collectible || card.Type == SabberStoneCore.Enums.CardType.HERO ? (bool?)null : !LocalCardCatalog.IsStandard(card);
+            // An unreleased meta set's cards (BE) are not Wild either, just not out yet: like their set, leave them to the client.
+            bool? wild = card == null || !card.Collectible || card.Type == SabberStoneCore.Enums.CardType.HERO
+                || LocalCardCatalog.IsUnreleasedMetaSet((int)card.Set) ? (bool?)null : !LocalCardCatalog.IsStandard(card);
             nativeWild[cardId] = wild;
             return wild;
         }

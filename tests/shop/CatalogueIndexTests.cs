@@ -26,7 +26,8 @@ internal static class CatalogueIndexTests
             .Where(LocalCardCatalog.InActiveMeta).ToArray();
         foreach (var card in all) {
             check(LocalShop.IsStandardCard(card) == IsStandard(card), "Standard admission unchanged: " + card.Id);
-            check(LocalProfile.KnownLedgerCard(card.Id) == (ledger.Contains(card.Id) || LocalCoreProgression.AvailableCards.Any(c => c.Id == card.Id)),
+            check(LocalProfile.KnownLedgerCard(card.Id) == (ledger.Contains(card.Id) || LocalCoreProgression.AvailableCards.Any(c => c.Id == card.Id)
+                    || card.Id.StartsWith("CORE_", StringComparison.OrdinalIgnoreCase) && card.Collectible),
                 "Ledger/Core admission unchanged: " + card.Id);
             check(LocalDecks.IsCustomCard(card.Id) == LocalCardCatalog.Supported.Concat(legal).Any(c => c.Id == card.Id), "Custom admission unchanged: " + card.Id);
             check(LocalDecks.IsFabledCompanion(card.Id) == SabberStoneCore.Actions.FabledRules.IsCompanion(card.Id), "Companion index unchanged: " + card.Id);

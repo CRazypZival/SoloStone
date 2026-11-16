@@ -102,7 +102,7 @@ internal static class V16ClassicMigrationTests
         using (var profile = new LocalProfile(v14)) check(profile.WildCards(Mixed).SequenceEqual(new[] { "CS2_182" }), "V14 save with Classic decks migrates");
         check(Read(v14).Version == 16 && v14original.SequenceEqual(File.ReadAllBytes(v14 + ".v14.bak")), "V14 upgrade to V16 keeps a byte-exact .v14.bak");
 
-        // Failure paths, as for V14: a conflicting backup refuses without touching anything; a failed commit keeps the save
+        // Failure paths, as for V14: a conflicting backup is kept and the bytes are backed up beside it; a failed commit keeps the save
         // and its backup, and the retry with the matching backup finishes the upgrade.
         // The #87 review case: the player copies .v15.bak back over the save, plays on V15 (other bytes now), and upgrades again.
         path = V15Fixture(root, "v15-restored-and-played", out original);

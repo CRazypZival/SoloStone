@@ -1048,7 +1048,10 @@ public sealed partial class LocalProfile
     private static readonly Lazy<Dictionary<string, EngineCard>> ledgerCardIndex = new Lazy<Dictionary<string, EngineCard>>(() =>
         ledgerCards.Value.ToDictionary(card => card.Id, StringComparer.Ordinal));
     private static Dictionary<string, EngineCard> LedgerCardIndex => ledgerCardIndex.Value;
-    internal static bool KnownLedgerCard(string id) => id != null && (LedgerCardIndex.ContainsKey(id) || LocalCoreProgression.IsAvailable(id));
+    // A collectible CORE_ id stays known even when it is not Standard (#87): an older save may hold one (the old creation
+    // cheat put hidden and Legacy Core copies in CoreGrants, and a Legend deck snapshot can name it), and must keep loading.
+    internal static bool KnownLedgerCard(string id) => id != null && (LedgerCardIndex.ContainsKey(id) || LocalCoreProgression.IsAvailable(id)
+        || id.StartsWith("CORE_", StringComparison.OrdinalIgnoreCase) && IsCollectibleCard(id));
     // Premium receipts must keep loading after a meta change: any collectible definition is a valid sold card.
     private static bool IsCollectibleCard(string id) {
         try { return Cards.FromId(id)?.Collectible == true; } catch (KeyNotFoundException) { return false; }
