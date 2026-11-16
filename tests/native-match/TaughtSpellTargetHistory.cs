@@ -26,6 +26,7 @@ internal static partial class Program
             var taught = PayloadRules.StoreCard(token, 1, Cards.FromId("EX1_246"), PayloadPolicy.Copy | PayloadPolicy.Silence | PayloadPolicy.ShowOwner);
             token[GameTag.TAG_SCRIPT_DATA_NUM_1] = taught.Id;
             FlushFieldHistory(match);
+            int cursor = capture.WirePackets.Count;
             var task = p.Options().FirstOrDefault(t => t.Source?.Id == token.Id && t.Target?.Id == chosen.Id);
             Check(task != null, id + " NPC/human options choose carved Hex target");
             if (bot) InvokeProcess(match, task);
@@ -40,6 +41,12 @@ internal static partial class Program
             }
             FlushFieldHistory(match);
             Check(chosen.Card.Id == "hexfrog" && friendly.Card.Id == "CS2_182", id + " native chosen Hex resolves");
+            var cast = p.GraveyardZone.Single(c => c.Card.Id == "EX1_246");
+            var wire = capture.HistorySnapshots(cursor).SelectMany(h => h.List).ToArray();
+            Check(wire.Any(e => SnapshotEntity(e) == cast.Id && SnapshotTag(e, GameTag.CARD_TARGET) == chosen.Id)
+                || wire.Any(e => e.HasTagChange && e.TagChange.Entity == cast.Id
+                    && e.TagChange.Tag == (int)GameTag.CARD_TARGET && e.TagChange.Value == chosen.Id),
+                id + " cast Hex CARD_TARGET reaches serialized wire for " + (bot ? "NPC" : "human"));
             capture.SerializeAll();
         }
         Console.WriteLine("PASS taught spell native options: Treant/Pupil chosen Hex, human/NPC");

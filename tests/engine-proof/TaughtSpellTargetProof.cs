@@ -29,12 +29,14 @@ internal static class TaughtSpellTargetProof
             var friendly = Summon(p, "CS2_182");
             var enemy = Summon(p.Opponent, "CS2_182");
             var hidden = Summon(p.Opponent, "CS2_231"); hidden.HasStealth = true;
+            Summon(p.Opponent, "EDR_471");
             var token = Add(p, id);
             Teach(token, "EX1_246");
             var options = p.Options().OfType<PlayCardTask>().Where(t => t.Source.Id == token.Id).ToArray();
             Check(options.Select(t => t.Target?.Id ?? 0).ToHashSet().SetEquals(new[] { friendly.Id, enemy.Id }),
-                id + " Hex offers exactly friendly/enemy minions, no heroes, stealth or null; seat=" + p.PlayerId);
-            Check(!token.IsValidPlayTarget(null) && token.ValidPlayTargets.Select(t => t.Id).ToHashSet()
+                id + " Hex offers exactly friendly/enemy minions, no heroes, stealth, Elusive or null; seat=" + p.PlayerId);
+            Check(!token.IsValidPlayTarget(null) && !token.IsValidPlayTarget((ICharacter)token)
+                && token.ValidPlayTargets.Select(t => t.Id).ToHashSet()
                 .SetEquals(new[] { friendly.Id, enemy.Id }), "target validation matches options");
             var fair = FairBotState.Create(g, p.PlayerId, 21, DeckStyle.Control,
                 new FairOptions { RemoveOpponentSecrets = true, ShowOwnCarriedCards = true });
@@ -94,5 +96,39 @@ internal static class TaughtSpellTargetProof
             new TaskStack { Playables = new[] { randomSpell } });
         Check(notifications == 1, "existing random Choose One cast still notifies RNG once");
         Console.WriteLine("PASS taught spells: chosen Hex targets, both seats, clone/snapshot, Claw, no-target draw");
+    }
+
+    [GroupProof("taught-spell-granted-elusive")]
+    internal static void GrantedElusive() => Elusive(granted: true);
+
+    [GroupProof("taught-spell-printed-elusive")]
+    internal static void PrintedElusive() => Elusive(granted: false);
+
+    private static void Elusive(bool granted)
+    {
+        foreach (string id in new[] { "MEND_046t", "TIME_704t" })
+        foreach (bool second in new[] { false, true })
+        {
+            var g = ImbueProof.Make(CardClass.DRUID);
+            if (second) End(g);
+            var p = g.CurrentPlayer;
+            var protectedMinion = Summon(granted ? p : p.Opponent, granted ? "CS2_182" : "EDR_471");
+            if (granted) PlayEntity(g, p, Add(p, "RLK_048"));
+            Check(protectedMinion.CantBeTargetedBySpells, "printed/Anti-Magic Shell Elusive is active");
+            var token = Add(p, id);
+            string spell = granted ? "CATA_138" : "CS2_004";
+            Teach(token, spell);
+            Check(!token.IsValidPlayTarget(protectedMinion) && !token.ValidPlayTargets.Any()
+                && token.IsValidPlayTarget(null)
+                && p.Options().Where(t => t.Source?.Id == token.Id).All(t => t.Target == null),
+                id + (granted ? " Forest's Gift excludes friendly granted-Elusive target" : " Power Word: Shield excludes enemy printed-Elusive target"));
+            int attack = protectedMinion.AttackDamage, health = protectedMinion.Health, hand = p.HandZone.Count;
+            PlayEntity(g, p, token);
+            Check(p.GraveyardZone.Any(c => c.Card.Id == spell) && protectedMinion.AttackDamage == attack
+                && protectedMinion.Health == health && ((Minion)token).Health == 2,
+                id + " targetless cast retires without affecting Elusive target or newly played body");
+            if (!granted) Check(p.HandZone.Count == hand, id + " targetless Power Word: Shield still draws");
+        }
+        Console.WriteLine("PASS taught spells: " + (granted ? "friendly granted Elusive" : "enemy printed Elusive") + ", both tokens/seats, targetless cast");
     }
 }

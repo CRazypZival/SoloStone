@@ -95,8 +95,11 @@ namespace SabberStoneCore.Tasks.SimpleTasks
                             if (cardTarget != null) spell.CardTarget = cardTarget.Id;
                         }
                         else if (_targetType == EntityType.TARGET)
+                        {
                             // A Battlecry with no legal target still casts the untargeted parts of its spell.
                             cardTarget = target as ICharacter;
+                            if (cardTarget != null) spell.CardTarget = cardTarget.Id;
+                        }
 						else if
 							(_targetType != EntityType.INVALID)
 						{
@@ -113,7 +116,7 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 						if (!ImbueRules.CanCast(c, spell, cardTarget)) continue;
                         // History diagnostics only (match event log): what this automatic cast chose from; reads, draws nothing.
                         if (game.History)
-                            game.PowerHistory.NoteAutoChoice(spell.Id, _randTarget ? noteLegal : -2, mode,
+                            game.PowerHistory.NoteAutoChoice(spell.Id, _randTarget ? noteLegal : _targetType == EntityType.TARGET ? -3 : -2, mode,
                                 mode > 0 && spell.ChooseOnePlayables != null && mode <= spell.ChooseOnePlayables.Length ? spell.ChooseOnePlayables[mode - 1].Card.Id : null,
                                 randomMode);
                         // An automatic cast owns only its new choices, never its caller's pending prompt.

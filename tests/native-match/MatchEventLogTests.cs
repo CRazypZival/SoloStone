@@ -119,7 +119,8 @@ internal static partial class Program
         lines.Clear(); player.UsedMana = 0;
         Check(game.Process(PlayCardTask.Any(player, markTreant, (ICharacter)taunt)), "mark Treant play");
         FlushHistory(match);
-        var cast = EventLines(lines, "CAST", "card=CS2_009#", "by=MEND_046t#" + markTreant.Id, "pick=rule").Single();
+        var cast = EventLines(lines, "CAST", "card=CS2_009#", "by=MEND_046t#" + markTreant.Id).Single();
+        Check(cast.Contains("pick=chosen"), "the carried cast reports its player-chosen target: " + cast);
         var target = Regex.Match(cast, @"target=\S+?#(\d+)\(").Groups[1].Value;
         Check(target == taunt.Id.ToString(), "Mark of the Wild keeps the chosen Battlecry target: " + cast);
         EventCheck(lines, "ENCHANT", "Mark of the Wild buff", "target=", "#" + target + "(", "ench=CS2_009e#");
