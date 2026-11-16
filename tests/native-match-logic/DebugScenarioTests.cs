@@ -44,6 +44,112 @@ internal static partial class Program
         Check(applied.Contains("humanHeroPower=EDR_851p"), "outcome detail names it: " + applied);
     }
 
+    private static void DebugScenarioWeaponAndGraveyard()
+    {
+        void Reject(string text, string expected, Func<string, bool> known = null)
+        {
+            try { DebugScenario.Parse(text, known); }
+            catch (ArgumentException error) { Check(error.Message == expected, "scenario rejection: " + error.Message); return; }
+            throw new Exception("scenario accepted: " + text);
+        }
+        const string weapon = "humanWeapon=FP1_021";
+        const string grave = "humanGraveyard=CS2_120";
+        string canonical = weapon + "\nhumanWeaponDurability=1\n" + grave;
+        var scenario = DebugScenario.Parse(canonical);
+        Check(scenario.HumanWeapon == "FP1_021" && scenario.HumanWeaponDurability == 1
+            && scenario.HumanGraveyard.SequenceEqual(new[] { "CS2_120" }), "weapon and graveyard parse");
+        Check(scenario.Canonical() == canonical && DebugScenario.Parse(scenario.Canonical()).Canonical() == canonical, "new keys round-trip");
+        var absent = DebugScenario.Parse("humanMana=5");
+        Check(absent.HumanWeapon == null && absent.HumanWeaponDurability == 0 && absent.HumanGraveyard.Count == 0
+            && absent.Canonical() == "humanMana=5", "absent setup keys stay absent");
+        foreach (string key in new[] { "humanWeapon", "humanWeaponDurability", "humanGraveyard" })
+            Reject(canonical + "\n" + key + "=1", "Duplicate key: " + key);
+        foreach (string value in new[] { "0", "10", "01", "-1", "+1", "1.0", "1e0", "1 0", "999999999999" })
+            Reject(weapon + "\nhumanWeaponDurability=" + value, "humanWeaponDurability: out of range");
+        foreach (int value in new[] { 1, 9 })
+            Check(DebugScenario.Parse(weapon + "\nhumanWeaponDurability=" + value).HumanWeaponDurability == value, "durability boundary " + value);
+        Reject("humanWeaponDurability=1", "humanWeaponDurability needs humanWeapon.");
+        Reject("humanWeapon=CS2_120", "humanWeapon: CS2_120 is a MINION, not a weapon.");
+        Reject("humanWeapon=NO_SUCH_CARD", "humanWeapon: unknown card id NO_SUCH_CARD");
+        Reject("humanWeapon=FP1_021!", "humanWeapon has an invalid card id: 'FP1_021!'");
+        Reject("humanWeapon=FP1_021,AT_050", "humanWeapon takes at most 1 cards.");
+        Reject("humanWeapon=CS2_082", "humanWeapon: CS2_082 has no native client definition.", _ => false);
+        // The public card file has no Battlegrounds weapons; restore this test-only set tag before any game runs.
+        var battlegroundsWeapon = Cards.FromId("FP1_021");
+        int originalSet = battlegroundsWeapon.Tags[GameTag.CARD_SET];
+        try
+        {
+            battlegroundsWeapon.Tags[GameTag.CARD_SET] = 1453;
+            Reject(weapon, "humanWeapon: FP1_021 is a Battlegrounds weapon (set 1453), not a constructed one.");
+        }
+        finally { battlegroundsWeapon.Tags[GameTag.CARD_SET] = originalSet; }
+        Reject("humanGraveyard=CS2_029", "humanGraveyard: CS2_029 is not a minion.");
+        Reject("humanGraveyard=FP1_021", "humanGraveyard: FP1_021 is not a minion.");
+        Reject("humanGraveyard=NO_SUCH_CARD", "humanGraveyard: unknown card id NO_SUCH_CARD");
+        Reject(grave + ",", "humanGraveyard has an invalid card id: ''");
+        Reject(grave, "humanGraveyard: CS2_120 has no native client definition.", _ => false);
+        Check(DebugScenario.Parse("humanGraveyard=" + string.Join(",", Enumerable.Repeat("CS2_120", 7))).HumanGraveyard.Count == 7,
+            "seven deaths, including repeated card ids, accepted");
+        Reject("humanGraveyard=" + string.Join(",", Enumerable.Repeat("CS2_120", 8)), "humanGraveyard takes at most 7 cards.");
+
+        Game PlainGame()
+        {
+            var game = new Game(new SabberStoneCore.Config.GameConfig { RandomSeed = 17, StartPlayer = 1, Shuffle = false,
+                SkipMulligan = true, History = true, Logging = false,
+                Player1Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(),
+                Player2Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList() });
+            game.StartGame();
+            return game;
+        }
+        foreach (string id in new[] { "FP1_021", "GVG_036", "AT_050" })
+        {
+            var game = PlainGame();
+            string detail = DebugScenario.Parse("humanWeapon=" + id + "\nhumanWeaponDurability=1\nhumanBoard=GVG_002\nnpcBoard=CS2_120").Apply(game);
+            var equipped = game.Player1.Hero.Weapon;
+            Check(equipped.Card.Id == id && equipped.Controller == game.Player1 && equipped[GameTag.ZONE] == (int)EngineZone.PLAY
+                && equipped.Durability == 1 && equipped.Damage == equipped[GameTag.DURABILITY] - 1,
+                "equipped weapon and DAMAGE durability: " + id);
+            Check(game.Player2.Hero.Weapon == null && detail.Contains("humanWeapon=" + id), "human-only weapon setup reported");
+            int health = game.Player1.BoardZone[0].Health, attack = game.Player1.BoardZone[0].AttackDamage;
+            equipped.Damage++;
+            game.DeathProcessingAndAuraUpdate();
+            Check(game.Player1.Hero.Weapon == null && game.Player1.GraveyardZone.Contains(equipped), "weapon broke: " + id);
+            if (id == "FP1_021") Check(game.Player1.BoardZone[0].Health == health - 1 && game.Player2.BoardZone[0].Damage == 1, "Death's Bite deathrattle");
+            if (id == "GVG_036") Check(game.Player1.BoardZone[0].Health == health + 2 && game.Player1.BoardZone[0].AttackDamage == attack + 2, "Powermace deathrattle");
+            if (id == "AT_050") Check(game.Player1.Hero.HeroPower.Card.Id == "AT_050t", "Charged Hammer deathrattle");
+        }
+        var defaultGame = PlainGame();
+        DebugScenario.Parse(weapon).Apply(defaultGame);
+        Check(defaultGame.Player1.Hero.Weapon.Durability == Cards.FromId("FP1_021")[GameTag.DURABILITY]
+            && defaultGame.Player1.Hero.Weapon.Damage == 0, "absent durability preserves printed weapon");
+        var extended = PlainGame();
+        DebugScenario.Parse(weapon + "\nhumanWeaponDurability=9").Apply(extended);
+        Check(extended.Player1.Hero.Weapon.Durability == 9
+            && extended.Player1.Hero.Weapon.Damage == 0, "durability above printed max still leaves exactly nine");
+        var triggerGame = PlainGame();
+        DebugScenario.Parse("humanWeapon=EX1_366").Apply(triggerGame);
+        var summoned = (Minion)Entity.FromCard(triggerGame.Player1, Cards.FromId("CS2_120"), zone: triggerGame.Player1.BoardZone);
+        triggerGame.DeathProcessingAndAuraUpdate();
+        Check(summoned.AttackDamage == summoned.Card.ATK + 1 && summoned.Health == summoned.Card.Health + 1
+            && triggerGame.Player1.Hero.Weapon.Damage == 1, "equipped Sword of Justice registers summon trigger");
+        var resurrection = PlainGame();
+        string applied = DebugScenario.Parse(grave + "\nhumanHand=BRM_017").Apply(resurrection);
+        var dead = (Minion)resurrection.Player1.GraveyardZone.Single();
+        Check(dead.Card.Id == "CS2_120" && dead.ToBeDestroyed && dead.Zone.Type == EngineZone.GRAVEYARD
+            && resurrection.Player1.NumFriendlyMinionsThatDiedThisGame == 1 && resurrection.DeadMinions.Count == 0
+            && resurrection.Player2.GraveyardZone.Count == 0 && applied.Contains(grave), "friendly death staged without pending deaths");
+        resurrection.Player1.BaseMana = 10;
+        var resurrect = resurrection.Player1.HandZone.Single(c => c.Card.Id == "BRM_017");
+        Check(resurrection.Process(SabberStoneCore.Tasks.PlayerTasks.PlayCardTask.Any(resurrection.Player1, resurrect)), "Resurrect is playable");
+        Check(resurrection.Player1.BoardZone.Single().Card.Id == "CS2_120" && resurrection.Player1.GraveyardZone.Contains(dead), "Resurrect summons staged minion");
+        var quiet = PlainGame();
+        DebugScenario.Parse("humanGraveyard=FP1_002,FP1_002").Apply(quiet);
+        quiet.DeathProcessingAndAuraUpdate();
+        Check(quiet.Player1.BoardZone.Count == 0 && quiet.Player1.GraveyardZone.Count == 2
+            && quiet.Player1.GraveyardZone.All(c => c.ToBeDestroyed) && quiet.Player1.NumFriendlyMinionsThatDiedThisGame == 2,
+            "staged Haunted Creepers never fire Deathrattles");
+    }
+
     private static void DebugScenarioLanePaths()
     {
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

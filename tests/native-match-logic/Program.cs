@@ -54,9 +54,10 @@ internal static partial class Program
         DebugScenarioLanePaths();
         AcceptsHeroCardScenario();
         DebugScenarioHumanHeroPower();
+        DebugScenarioWeaponAndGraveyard();
         DebugScenarioFile();
         DebugScenarioNeverSettles();
-        Console.WriteLine("PASS debug scenario lane paths, hero card scenario, humanHeroPower key, scenario file and never-settles");
+        Console.WriteLine("PASS debug scenario lane paths, hero card scenario, humanHeroPower, weapon/graveyard keys, scenario file and never-settles");
     }
 
     private static void FairViewChecks()
