@@ -770,7 +770,7 @@ public sealed class DebugScenario
             var dead = (SabberStoneCore.Model.Entities.Minion)EngineEntity.FromCard(game.Player1, EngineCards.FromId(id), zone: game.Player1.GraveyardZone);
             dead.ToBeDestroyed = true;
             game.DeadMinions.Remove(dead);
-            // Record the historical board entry directly: no summon callbacks, even with a full staged board.
+            // BoardEntered(dead, summon: true) appends a MinionSummonedFact and calls OldGodRules.RecordSummon, even with a full staged board.
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var facts = typeof(EngineGame).GetProperty("Facts", flags).GetValue(game, null);
             facts.GetType().GetMethod("BoardEntered", flags).Invoke(facts, new object[] { dead, true });
