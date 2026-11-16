@@ -446,7 +446,8 @@ public sealed class LocalCardSeen
 
 public sealed partial class LocalProfile : IDisposable
 {
-    private const int CurrentVersion = 15;
+    private const int CurrentVersion = 17;
+    internal const int SaveVersion = CurrentVersion;
     // Personal decks only; loaners (NativeUIProjection.PlayerLoanerCapacity) sit above this cap. Raising it never
     // invalidates a save: load accepts any library size up to MaximumRecords and only shows the first drafts.
     public const int MaximumCustomDecks = 100;
@@ -602,7 +603,8 @@ public sealed partial class LocalProfile : IDisposable
 #endif
 
     // Versions the constructor loads (older ones are upgraded in place). The startup preflight shares this so the two cannot drift.
-    internal static bool IsSupportedVersion(int version) => version == 13 || version == 14 || version == CurrentVersion;
+    // 16 is #136's Classic migration; Arena (#143) is 17 on top of it.
+    internal static bool IsSupportedVersion(int version) => version == 13 || version == 14 || version == 15 || version == CurrentVersion;
 
     public LocalProfile(string path) : this(path, false) { }
 
@@ -627,7 +629,7 @@ public sealed partial class LocalProfile : IDisposable
         {
             if (!File.Exists(this.path))
             {
-                if (snapshot) throw new InvalidOperationException("Snapshot requires an existing V15 profile.");
+                if (snapshot) throw new InvalidOperationException("Snapshot requires an existing V" + CurrentVersion + " profile.");
                 data = NewProfile();
                 bornMissing = true;
             }
@@ -635,9 +637,9 @@ public sealed partial class LocalProfile : IDisposable
             {
                 LocalProfileData loaded = ReadFile(this.path);
                 if (loaded == null || !IsSupportedVersion(loaded.Version))
-                    throw new InvalidOperationException("Unsupported local profile version; create a fresh V15 profile.");
+                    throw new InvalidOperationException("Unsupported local profile version; create a fresh V" + CurrentVersion + " profile.");
                 if (snapshot && loaded.Version != CurrentVersion)
-                    throw new InvalidOperationException("Snapshot requires an existing V15 profile.");
+                    throw new InvalidOperationException("Snapshot requires an existing V" + CurrentVersion + " profile.");
                 if (loaded.FavoriteCardBacks != null && loaded.FavoriteCardBacks.Count == 0)
                     loaded.FavoriteCardBacks.Add(loaded.SelectedCardBack ?? 0);
                 loaded.SelectedCardBack = null;
@@ -645,7 +647,7 @@ public sealed partial class LocalProfile : IDisposable
                 bool upgrade = fromVersion < CurrentVersion;
                 if (upgrade && (loaded.Matches == null || loaded.Matches.Any(match => match == null)))
                     throw new InvalidOperationException("V" + fromVersion + " profile has an invalid match list.");
-                if (upgrade && (loaded.Matches.Concat(loaded.Pending == null ? Enumerable.Empty<LocalMatchRecord>() : new[] { loaded.Pending })
+                if (fromVersion < 15 && (loaded.Matches.Concat(loaded.Pending == null ? Enumerable.Empty<LocalMatchRecord>() : new[] { loaded.Pending })
                         .Any(match => match.PetSmall.HasValue || match.PetMedium.HasValue || match.PetLarge.HasValue || match.PetPacingPercent.HasValue
                             || match.PetRules != null && (match.PetRules.StartsWith("rule=2;", StringComparison.Ordinal) || match.PetRules.StartsWith("rule=3;", StringComparison.Ordinal)))))
                     throw new InvalidOperationException("V" + fromVersion + " cannot contain pet event counters.");
@@ -1924,7 +1926,7 @@ public sealed partial class LocalProfile : IDisposable
 
     private void Commit(LocalProfileData next)
     {
-        if (next.Version != CurrentVersion) throw new InvalidOperationException("Only V15 profiles can be committed.");
+        if (next.Version != CurrentVersion) throw new InvalidOperationException("Only V" + CurrentVersion + " profiles can be committed.");
         ValidateV14(next, profileOptions.AllCosmetics, profileOptions.LegendRating, profileOptions.AllDecks);
         GrantCoreUnlocks(next);
         GrantClassRewards(next, null);

@@ -110,10 +110,10 @@ internal static class ArenaChecks
             Check(profile.FeatsSnapshot().ArenaReceipts.Count == 20 && !profile.FeatsSnapshot().ArenaReceipts.Any(row => row.RunId == runId), "audit receipts bounded");
             Unchanged(profile, path, () => service.Begin("entry-1"), "pruned entry id stays spent");
         }
-        Gates(root); Settlement(root); Compatibility(root); Registry(root); Bot();
+        Gates(root); Settlement(root); Compatibility(root); SaveVersion(root); PreBumpFixture(root); Registry(root); Bot();
         StoredHistory(root);
         ArenaMatchChecks.Run(root);
-        Console.WriteLine("PASS Arena: deterministic draft, rune/exclusion rules, restart/retries, atomic rewards, tamper rejection, V15 compatibility, NPC drafter");
+        Console.WriteLine("PASS Arena: deterministic draft, rune/exclusion rules, restart/retries, atomic rewards, tamper rejection, current schema/V15 Arena upgrade, NPC drafter");
     }
 
     private static void Offers()
@@ -301,12 +301,12 @@ internal static class ArenaChecks
         string path = Path.Combine(root, "arena-compat.xml");
         using (var profile = new LocalProfile(path)) Fund(profile);
         var old = File.ReadAllBytes(path);
-        Check(!File.ReadAllText(path).Contains("Arena"), "old V15 no optional elements");
+        Check(!File.ReadAllText(path).Contains("Arena"), "current profile omits empty Arena elements");
         var data = Read(path); Write(path, data); Check(old.SequenceEqual(File.ReadAllBytes(path)), "old XML round trip byte identical");
         using (var profile = new LocalProfile(path)) {
-            Check(profile.ArenaRun == null, "old V15 no run");
+            Check(profile.ArenaRun == null, "current profile starts without a run");
             profile.CommitChange(next => true);
-            Check(old.SequenceEqual(File.ReadAllBytes(path)), "old V15 no-op commit byte identical");
+            Check(old.SequenceEqual(File.ReadAllBytes(path)), "current profile no-op commit byte identical");
             var service = new ArenaService(profile); Ok(service.Begin("tamper")); Ok(service.Choose(0, 0)); Ok(service.Choose(1, 0));
         }
         var valid = Read(path);
@@ -321,6 +321,66 @@ internal static class ArenaChecks
             Reject(() => { using var bad = new LocalProfile(path); }, "tampered run");
             Check(bytes.SequenceEqual(File.ReadAllBytes(path)), "tamper rejection leaves file");
         }
+    }
+
+    private static void SaveVersion(string root)
+    {
+        string path = Path.Combine(root, "arena-v15-upgrade.xml");
+        using (var profile = new LocalProfile(path)) {
+            Fund(profile);
+            Check(Read(path).Version == LocalProfile.SaveVersion, "fresh profiles write the current version");
+            var service = new ArenaService(profile);
+            Ok(service.Begin("v15-upgrade")); Ok(service.Choose(0, 1));
+            Ok(service.Choose(1, 2)); Ok(service.Choose(2, 0));
+        }
+        var before = Read(path).ArenaRun;
+        Check(before.Phase == ArenaPhase.Drafting && before.Picks.Count == 2 && Read(path).Version > 15,
+            "any save holding Arena data must exceed V15, the last schema 0.2.x opens, so its preflight returns save-incompatible");
+        string currentXml = File.ReadAllText(path);
+        File.WriteAllText(path, currentXml.Replace("<Version>" + LocalProfile.SaveVersion + "</Version>", "<Version>15</Version>"));
+        byte[] original = File.ReadAllBytes(path);
+        Check(Read(path).Version == 15, "simulate an earlier Arena test build's V15 save");
+        using (var profile = new LocalProfile(path)) {
+            var run = profile.ArenaRun;
+            Check(run.RunId == before.RunId && run.Phase == before.Phase && run.Picks.Count == before.Picks.Count
+                && run.Picks.Zip(before.Picks, (a, b) => a.Index == b.Index && a.Offers.SequenceEqual(b.Offers)).All(same => same)
+                && run.Deck.SequenceEqual(before.Deck) && run.PendingOffers.SequenceEqual(before.PendingOffers),
+                "V15 upgrade keeps the run, phase, picks, deck and offer in progress");
+        }
+        Check(Read(path).Version == LocalProfile.SaveVersion && Read(path).Version > 15, "upgraded Arena save is current and 0.2.x preflight refuses it");
+        Check(original.SequenceEqual(File.ReadAllBytes(path + ".v15.bak")), "V15 Arena upgrade keeps a byte-exact rollback backup");
+        Check(File.ReadAllText(path) == currentXml, "V15 Arena upgrade changes only the version");
+        byte[] upgraded = File.ReadAllBytes(path);
+        using (var profile = new LocalProfile(path)) Check(profile.ArenaRun.RunId == before.RunId, "upgraded Arena run reopens");
+        Check(upgraded.SequenceEqual(File.ReadAllBytes(path)), "second open leaves upgraded Arena bytes unchanged");
+    }
+
+    // The pre-bump Arena test build (566bc92, on the owner's Steam Deck and lane 0) wrote Arena data at V15. This fixture is that
+    // build's own output (a synthetic save generated by running the 566bc92 code: one finished run with a win, a loss and a claimed
+    // reward, a second run Ready at 1-0, three Arena matches). This build must open it with the run, matches, receipts and gold intact.
+    private static void PreBumpFixture(string root)
+    {
+        string source = Path.Combine(AppContext.BaseDirectory, "profile-fixtures", "v15-arena-566bc92.xml");
+        string path = Path.Combine(root, "arena-566bc92", "profile.xml");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.Copy(source, path);
+        byte[] original = File.ReadAllBytes(path);
+        var before = Read(path);
+        Check(before.Version == 15 && before.ArenaRun != null && before.Matches.Count(m => m.Mode == ArenaRules.Mode) == 3
+            && before.ArenaReceipts.Count == 1 && before.ArenaEntryRequestIds.Count == 2, "fixture is the pre-bump V15 Arena save");
+        using (var profile = new LocalProfile(path)) {
+            var run = profile.ArenaRun;
+            Check(run.RunId == "30e426b2-b08b-4489-9584-dddd439541b2" && run.Phase == ArenaPhase.Ready && run.Wins == 1 && run.Losses == 0
+                && run.Deck.Count == 30 && run.Deck.SequenceEqual(before.ArenaRun.Deck), "the run in progress survives the upgrade");
+            Check(profile.Gold == before.GoldBalance && profile.History.Count(m => m.Mode == ArenaRules.Mode) == 3, "gold and Arena matches survive");
+            var view = new ArenaService(profile).View();
+            Check(view.Error == null && view.Phase == ArenaPhase.Ready && view.Wins == 1 && view.Slot == 30, "the upgraded run is playable");
+            profile.CommitChange(next => true);
+        }
+        var after = Read(path);
+        Check(after.Version == LocalProfile.SaveVersion && after.ArenaReceipts.Count == 1 && after.ArenaEntryRequestIds.Count == 2,
+            "upgraded to the current version with receipts and spent entry ids");
+        Check(original.SequenceEqual(File.ReadAllBytes(path + ".v15.bak")), "byte-exact V15 backup for a rollback");
     }
 
     // Offers and rewards are stored history: a card-pool, rules or pace change after they were made must neither fail the load nor
