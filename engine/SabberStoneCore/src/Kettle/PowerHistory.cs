@@ -657,6 +657,7 @@ namespace SabberStoneCore.Kettle
             if (start < 0 || !(Last[start] is PowerHistorySubSpellStart scope) || scope.SpellPrefabGuid != GeneratedShufflePrefab
                 || scope.Source != card.Controller.Hero.Id || scope.Targets.Count != 0 || scope.RequirePublicOrigin) return -1;
             var attachments = new HashSet<int>();
+            var retirements = new List<IPowerHistoryEntry>();
             bool Attached(int id) => game.IdEntityDic.TryGetValue(id, out var entity)
                 && (entity is Enchantment enchantment && enchantment.Target != null && cards.Contains(enchantment.Target.Id)
                     || cards.Contains(entity[GameTag.PARENT_CARD])
@@ -676,16 +677,20 @@ namespace SabberStoneCore.Kettle
                         && retired.Controller == card.Controller && retired.Zone == card.Controller.SetasideZone
                         && retired[Actions.CardStateBoundary.ReplacedHiddenZone] == (int)Zone.DECK
                         && (change.Tag == Actions.CardStateBoundary.ReplacedHiddenZone && change.Value == (int)Zone.DECK
-                            || change.Tag == GameTag.ZONE && change.Value == (int)Zone.SETASIDE): break;
+                            || change.Tag == GameTag.ZONE && change.Value == (int)Zone.SETASIDE):
+                        retirements.Add(change); break;
                     default: return -1;
                 }
             }
             // Both histories must hold the same unflushed run, or a merge would desynchronize them.
-            int fullEnd = Full.LastIndexOf(Last[end]);
-            if (fullEnd < 0 || fullEnd + creation - end >= Full.Count) return -1;
-            for (int i = end; i <= creation; i++)
-                if (!ReferenceEquals(Full[fullEnd + i - end], Last[i])) return -1;
-            return end;
+            int fullStart = Full.LastIndexOf(Last[start]);
+            if (fullStart < 0 || fullStart + creation - start >= Full.Count) return -1;
+            for (int i = start; i <= creation; i++)
+                if (!ReferenceEquals(Full[fullStart + i - start], Last[i])) return -1;
+            // Retired cards must stay outside SpawnToDeck's inferred targets (#160).
+            foreach (var retirement in retirements) { Full.Remove(retirement); Last.Remove(retirement); }
+            Full.InsertRange(fullStart, retirements); Last.InsertRange(start, retirements);
+            return end + retirements.Count;
         }
 
         /// <summary>The enchantment whose granted Deathrattle is resolving, for presentation recipes only.</summary>

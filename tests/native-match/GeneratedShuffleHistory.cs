@@ -144,17 +144,30 @@ internal static partial class Program
             source.Cost = 0;
             var before = owner.DeckZone.Select(c => c.Id).ToHashSet();
             FlushFieldHistory(match); int cursor = capture.Packets.Count;
+            Check(match.Game.PowerHistory.Full.OfType<SabberStoneCore.Kettle.PowerHistoryTagChange>()
+                .Any(e => before.Contains(e.EntityId) && e.Tag == GameTag.ZONE && e.Value == (int)EngineZone.HAND),
+                "replacement fixture has own deck cards returned from starting hand; bot=" + bot);
+            if (!bot) Check(NativeHistory(capture).Any(e => e.HasShowEntity && before.Contains(e.ShowEntity.Entity)
+                && !string.IsNullOrEmpty(e.ShowEntity.Name)), "replacement fixture has known own deck cards returned by mulligan");
             InvokeProcess(match, owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id));
             FlushFieldHistory(match);
             var generated = owner.DeckZone.Select(c => c.Id).ToHashSet();
             string label = "TIME_707:bot=" + bot;
             Check(generated.Count == before.Count && generated.Count > 1 && !generated.Overlaps(before)
                 && held.Zone == owner.SetasideZone, label + " replaces hand and entire deck");
-            var entries = History(capture, cursor);
+            var entries = capture.HistorySnapshots(cursor).SelectMany(p => p.List).ToList();
             int scopes = 0, depth = 0, enclosed = 0;
             foreach (var entry in entries)
             {
-                if (entry.HasSubSpellStart && entry.SubSpellStart.SpellPrefabGuid == GeneratedShufflePrefab) { scopes++; depth++; }
+                if (entry.HasSubSpellStart && entry.SubSpellStart.SpellPrefabGuid == GeneratedShufflePrefab)
+                {
+                    scopes++; depth++;
+                    Check(entry.SubSpellStart.TargetEntityIds.Count == 0,
+                        label + " spawn scope has zero explicit wire targets; targets=["
+                        + string.Join(",", entry.SubSpellStart.TargetEntityIds) + "]");
+                }
+                if (entry.HasTagChange && before.Contains(entry.TagChange.Entity))
+                    Check(depth == 0, label + " retired deck card stays outside spawn inference");
                 if (entry.HasFullEntity && generated.Contains(entry.FullEntity.Entity))
                 {
                     Check(depth == 1 && TagValue(entry.FullEntity.Tags, GameTag.ZONE) == (int)EngineZone.DECK,
@@ -170,7 +183,7 @@ internal static partial class Program
             AssertGeneratedShuffleAdmission(capture);
             capture.SerializeAll();
         }
-        Console.WriteLine("PASS Alternate Reality: entire replacement deck in one shuffle scope, both seats; privacy/admission");
+        Console.WriteLine("PASS Alternate Reality: one replacement-deck shuffle scope, zero explicit wire targets, R1 clean; both seats with mulligan returns, privacy");
     }
 
     private static void BatchedStoryShuffle()
@@ -269,6 +282,15 @@ internal static partial class Program
             // A silent listener adds no rows, so it cannot separate flights; one that does is the tag/block barrier.
             bool joined = barrier is "none" or "creator" or "listener" or "replacement";
             Check(scopes.Length == (joined ? 1 : 2), "shuffle grouping respects " + barrier + " barrier; reveal=" + reveal);
+            if (barrier == "replacement")
+                foreach (var rows in new[] { history.Last, history.Full })
+                {
+                    var retiredRows = rows.OfType<SabberStoneCore.Kettle.PowerHistoryTagChange>()
+                        .Where(e => e.EntityId == retiring.Id).ToArray();
+                    int start = rows.IndexOf(scopes[0]);
+                    Check(retiredRows.Length > 0 && rows.Skip(start - retiredRows.Length).Take(retiredRows.Length)
+                        .SequenceEqual(retiredRows), "retirement rows stay ordered immediately before spawn scope in both histories");
+                }
             Check(history.Full.Count(e => e is SabberStoneCore.Kettle.PowerHistorySubSpellStart)
                 == history.Full.Count(e => e is SabberStoneCore.Kettle.PowerHistorySubSpellEnd), barrier + " keeps scopes balanced; reveal=" + reveal);
             if (barrier != "flush")
