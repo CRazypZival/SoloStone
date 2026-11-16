@@ -1620,7 +1620,9 @@ internal static partial class Program
                 var discoverOwner = discoverGame.CurrentPlayer;
                 Check(new DiscoverTask().Process(discoverGame, discoverOwner, discoverGame.IdEntityDic[source.Id], null) == TaskState.COMPLETE
                     && discoverOwner.Choice?.Choices.Count > 0
-                    && discoverOwner.Choice.Choices.All(entity => discoverOwner.Wild.Contains(discoverGame.IdEntityDic[entity].Card)),
+                    // Discover reads the match's pool (the Standard policy), not the frozen legacy lists.
+                    && discoverOwner.Choice.Choices.All(entity => Cards.RandomPool(discoverGame, PoolDestination.Hand)
+                        .ClassAndNeutral(discoverOwner.HeroClass).Contains(discoverGame.IdEntityDic[entity].Card)),
                     "INVALID source Discover resolves controller class: " + id + "/" + loaner.Hero);
                 // Quest spells are deliberately absent from random pools; admitted dual-class cards use export membership.
                 bool admitted = game.OfflinePools.Standard.Any(member => member.CardId == id);
