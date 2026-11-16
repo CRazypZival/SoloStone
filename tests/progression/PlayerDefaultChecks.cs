@@ -59,11 +59,12 @@ internal static class PlayerDefaultChecks
         foreach (var deck in catalog)
         {
             var cards = deck.Build();
-            // #87 (owner 2026-11-15): Core cards plus current-set commons and rares; never an expansion epic or legendary.
+            // #87 (owner 2026-11-15): a Core backbone plus current-set commons and rares; never an expansion epic or legendary.
             Check(cards.Count == 30 && cards.All(card => LocalCardCatalog.IsStandard(card) && card.Implemented
                     && LocalDecks.IsAllowedInDeck(card, LocalDecks.HeroClass(deck.Hero))
                     && (LocalCardCatalog.IsCore(card.Id) || card.Rarity == SabberStoneCore.Enums.Rarity.COMMON || card.Rarity == SabberStoneCore.Enums.Rarity.RARE)),
                 "Standard, own-class or neutral, Core or current-set common/rare 30-card starter: " + deck.Id);
+            Check(cards.Count(card => LocalCardCatalog.IsCore(card.Id)) >= 18, "starter keeps a Core backbone (18 or more of 30): " + deck.Id);
             Check(deck.CardIds.GroupBy(id => id).All(group => group.Count() <= (LocalCoreProgression.ById.TryGetValue(group.Key, out var core)
                     ? core.Copies : SabberStoneCore.Model.Cards.FromId(group.Key).Rarity == SabberStoneCore.Enums.Rarity.LEGENDARY ? 1 : 2))
                 && !deck.CardIds.Contains("CS3_035"), "starter copies respect copy limits and avoid Nozdormu: " + deck.Id);
