@@ -4,7 +4,6 @@ using System.Linq;
 using System.Reflection;
 using PegasusGame;
 using SabberStoneCore.Auras;
-using SabberStoneCore.Enchants;
 using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
@@ -48,6 +47,7 @@ internal static partial class Program
             FlushFieldHistory(match);
             var play = owner.Options().FirstOrDefault(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id);
             if (play == null) { untested.Add(card.Id + ":unplayable"); continue; }
+            int cursor = capture.Packets.Count;
             InvokeProcess(match, play);
             played++;
             void Step(string label)
@@ -61,16 +61,23 @@ internal static partial class Program
                     int engine = source[tag];
                     int wire = client.TryGetValue((int)tag, out int sent) ? sent : source.Card[tag];
                     if (engine != wire) failures.Add($"{card.Id} {label} {tag}: engine {engine}, client {wire}");
+                    var changes = History(capture, cursor).Where(e => e.HasTagChange
+                        && e.TagChange.Entity == source.Id && e.TagChange.Tag == (int)tag).ToArray();
+                    // RemoveFrom publishes printed resets; count the applied effective value separately.
+                    int applied = changes.Count(e => e.TagChange.Value != source.Card[tag]);
+                    if (applied > 1) failures.Add($"{card.Id} {label} {tag}={engine}: {applied} effective tag-change rows");
                 }
+                cursor = capture.Packets.Count;
             }
             Step("played");
             source.Damage = 1; Step("damaged");
             source.Damage = 0; Step("healed");
             owner.Hero.Armor = 10; Step("armor 10");
             owner.Hero.Armor = 0; Step("armor 0");
-            var buff = new Effect(GameTag.ATK, EffectOperator.ADD, 3);
-            buff.ApplyTo(source); Step("attack +3");
-            buff.RemoveFrom(source); Step("attack back");
+            source.AttackDamage += 3; Step("attack +3");
+            if (card.Id == "GIL_685") Check(source.HasTaunt && source.HasLifeSteal, "Paragon switches on at attack >= 3");
+            source.AttackDamage -= 3; Step("attack back");
+            if (card.Id == "GIL_685") Check(!source.HasTaunt && !source.HasLifeSteal, "Paragon switches off at attack < 3");
             var axe = (Weapon)EngineEntity.FromCard(owner, Cards.FromId("CS2_106"), zone: owner.HandZone);
             FlushFieldHistory(match);
             owner.UsedMana = 0;
@@ -92,6 +99,6 @@ internal static partial class Program
         Console.WriteLine($"adaptive tags: {cards.Count} cards ({string.Join(" ", cards.Select(c => c.Id))}), {played} played, {steps} states; not exercised: {string.Join(", ", untested)}");
         Check(played >= 10, "adaptive tag sweep played the minions");
         Check(failures.Count == 0, "switching adaptive tag reaches the client as the engine value: " + string.Join("; ", failures.Take(40)));
-        Console.WriteLine("PASS switching adaptive effects send the effective tag value");
+        Console.WriteLine("PASS switching adaptive effects publish effective tags once; Paragon switches both ways");
     }
 }
