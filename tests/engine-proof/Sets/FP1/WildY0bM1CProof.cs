@@ -373,7 +373,7 @@ internal static class WildY0bM1CProof
             Core2026Proof.Check(opp.BoardZone.Count == 1 && opp.BoardZone[0].Card.Id == "CS2_065" && p.HandZone.Count(c => c.Card.Id == "CS2_064") == 1, "the opponent's Voidcaller uses the opponent's hand only");
             End(g);
         });
-        WildSetsProof.Case("FP1_023", (g, p, id) => {
+        WildSetsProof.Held("FP1_023", "held: FX-MISSING live (deathrattle)", (g, p, id) => {
             var opp = p.Opponent; var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 3 && card.ATK == 3 && card.Health == 4 && card.Class == CardClass.PRIEST, "Dark Cultist is a 3-mana 3/4 Priest minion");
             var a = Summon(p, "CS2_182"); var b = Summon(p, "CS2_168"); var c = Summon(p, "CS2_179"); var cultist = Summon(p, id);

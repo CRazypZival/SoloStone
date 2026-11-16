@@ -3358,7 +3358,7 @@
 "GVG_043":["daedf10e","<b>Cri de guerre :</b> donne +1 ATQ à un serviteur allié aléatoire."],
 "GVG_043e":["0639b73f","+1 ATQ."],
 "GVG_045":["04d682a3","Inflige $2 à $4 points de dégâts à un serviteur. Invoque un diablotin 1/1 pour chaque point de dégâts infligé."],
-"GVG_046":["2c340317","<b>Provocation</b>\nGagne +1_ATQ pour chaque_autre Bête que vous contrôlez."],
+"GVG_046":["c34f4f70","<b>Provocation</b>. <b>Cri de guerre :</b> gagne +1 ATQ pour chacune de vos autres Bêtes."],
 "GVG_046e":["9e53c7c5","Attaque augmentée."],
 "GVG_047":["b1e7c2f9","Détruit un serviteur adverse aléatoire. <b>Combo_:</b> détruit aussi l’arme de votre adversaire."],
 "GVG_048":["c3e3ec29","<b>Cri de guerre_:</b> donne +2_ATQ à vos autres Méca."],

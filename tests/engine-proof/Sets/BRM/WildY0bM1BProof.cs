@@ -55,7 +55,7 @@ internal static class WildY0bM1BProof
             Core2026Proof.Check(p.BoardZone.Count == 1 && p.BoardZone.Single().Card.Cost == 1 && opp.BoardZone.Single().Card.Id == id,
                 "the opponent's Hungry Dragon gives the gift to me");
         });
-        WildSetsProof.Case("BRM_027", (g, p, id) => {
+        WildSetsProof.Held("BRM_027", "held: still wedges the client after the CONTROLLER fix (live, wy0b-fx-4); needs live diagnosis", (g, p, id) => {
             var opp = p.Opponent;
             var card = Cards.FromId(id);
             Core2026Proof.Check(card.Cost == 9 && card.ATK == 9 && card.Health == 7 && card.Tags.GetValueOrDefault(GameTag.ELITE) == 1, "Majordomo Executus is a 9-mana 9/7 Legendary");

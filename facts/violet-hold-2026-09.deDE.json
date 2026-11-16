@@ -3357,7 +3357,7 @@
 "GVG_043":["daedf10e","<b>Kampfschrei:</b> Verleiht einem zufälligen befreundeten Diener +1 Angriff."],
 "GVG_043e":["0639b73f","+1 Angriff."],
 "GVG_045":["04d682a3","Fügt einem Diener $2–$4 Schaden zu. Beschwört pro zugefügtem Schadenspunkt einen Wichtel (1/1)."],
-"GVG_046":["2c340317","<b>Spott</b> Hat +1 Angriff für jedes andere Wildtier, das Ihr kontrolliert."],
+"GVG_046":["c34f4f70","<b>Spott</b>. <b>Kampfschrei:</b> Erhält +1 Angriff für jedes andere Wildtier, das Ihr kontrolliert."],
 "GVG_046e":["9e53c7c5","Erhöhter Angriff."],
 "GVG_047":["b1e7c2f9","Vernichtet einen zufälligen feindlichen Diener. <b>Combo:</b> Zerstört auch die Waffe Eures Gegners."],
 "GVG_048":["c3e3ec29","<b>Kampfschrei:</b> Verleiht Euren anderen Mechs +2 Angriff."],

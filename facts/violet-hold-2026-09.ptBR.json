@@ -3355,7 +3355,7 @@
 "GVG_043":["daedf10e","<b>Grito de Guerra:</b> Conceda +1 de Ataque a um lacaio aliado aleatório."],
 "GVG_043e":["0639b73f","+1 de Ataque."],
 "GVG_045":["04d682a3","Cause $2-$4 de dano a um lacaio. Evoque um Diabrete 1/1 para cada ponto de dano causado."],
-"GVG_046":["2c340317","<b>Provocar</b>\nTem +1 de Ataque para cada outra Fera que você controlar."],
+"GVG_046":["c34f4f70","<b>Provocar</b>. <b>Grito de Guerra:</b> Ganhe +1 de Ataque para cada outra Fera que você tiver."],
 "GVG_046e":["9e53c7c5","Ataque aumentado."],
 "GVG_047":["b1e7c2f9","Destrua um lacaio inimigo aleatório. <b>Combo:</b> E a arma do seu oponente."],
 "GVG_048":["c3e3ec29","<b>Grito de Guerra:</b> Conceda +2 de Ataque aos seus outros Mecanoides."],

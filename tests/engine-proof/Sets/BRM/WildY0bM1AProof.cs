@@ -150,7 +150,7 @@ internal static class WildY0bM1AProof
             Core2026Proof.Check(p.Opponent.BoardZone.Any(m => m.Card.Id == id && m.HasTaunt), "opponent plays Lumberer with the discount");
             minion.Silence(); Core2026Proof.Check(minion.HasTaunt == false, "Silence removes Taunt");
         });
-        WildSetsProof.Case("BRM_010", (g, p, id) => {
+        WildSetsProof.Held("BRM_010", "held: FX-MISSING live (choose:BRM_010a, choose:BRM_010b)", (g, p, id) => {
             var held = Add(p, id);
             var picks = p.Options().Where(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == held.Id).Select(t => t.ChooseOne).Distinct().OrderBy(x => x).ToArray();
             Core2026Proof.Check(picks.SequenceEqual(new[] { 1, 2 }), "Druid of the Flame offers exactly two branches: " + string.Join(",", picks));

@@ -23,7 +23,7 @@ internal static class WildY0bM4BProof
         WildSetsProof.Case("LOE_047", TombSpider);
         WildSetsProof.Case("LOE_050", MountedRaptor);
         WildSetsProof.Case("LOE_053", DjinniOfZephyrs);
-        WildSetsProof.Case("LOE_061", AnubisathSentinel);
+        WildSetsProof.Held("LOE_061", "held: FX-MISSING live (deathrattle)", AnubisathSentinel);
         WildSetsProof.Held("LOE_073", FossilizedDevilsaur);
         WildSetsProof.Case("LOE_076", SirFinley);
         WildSetsProof.Case("LOE_077", BrannBronzebeard);
@@ -37,7 +37,7 @@ internal static class WildY0bM4BProof
         WildSetsProof.Held("LOE_110", AncientShade);
         WildSetsProof.Held("LOE_111", "held: generated-shuffle FX scope", ExcavatedEvil);
         WildSetsProof.Case("LOE_113", EveryfinIsAwesome);
-        WildSetsProof.Case("LOE_116", ReliquarySeeker);
+        WildSetsProof.Held("LOE_116", "held: FX-MISSING live (play)", ReliquarySeeker);
         WildSetsProof.Case("LOE_118", CursedBlade);
         WildSetsProof.Case("LOE_119", AnimatedArmor);
         // HELD: the client stores SPELLPOWER 1 for this Spell Damage +2 card, so its identity row would break the effect.

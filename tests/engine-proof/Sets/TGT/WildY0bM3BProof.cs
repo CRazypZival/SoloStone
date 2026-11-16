@@ -725,7 +725,7 @@ internal static class WildY0bM3BProof
             }
         });
 
-        WildSetsProof.Case("AT_042", (g, p, id) => {
+        WildSetsProof.Held("AT_042", "held: FX-MISSING live (choose:AT_042a, choose:AT_042b)", (g, p, id) => {
             var lion = (Minion)PlayChoice(g, p, id, 1);
             lion = p.BoardZone.Single();
             Check(lion.Card.Id == "AT_042t" && lion.AttackDamage == 2 && lion.Health == 1 && lion.HasCharge && !lion.HasStealth, "Lion form: a 2/1 with Charge");

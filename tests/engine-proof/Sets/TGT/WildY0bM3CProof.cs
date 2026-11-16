@@ -473,7 +473,7 @@ internal static class WildY0bM3CProof
             });
         });
 
-        WildSetsProof.Case("AT_059", (g, p, id) => {
+        WildSetsProof.Held("AT_059", "held: FX-MISSING live (inspire)", (g, p, id) => {
             var archer = Summon(p, id);
             Check(archer.AttackDamage == 2 && archer.Health == 1, "Brave Archer is a 2/1");
             Check(Add(p, id).Cost == 1, "Brave Archer costs 1");

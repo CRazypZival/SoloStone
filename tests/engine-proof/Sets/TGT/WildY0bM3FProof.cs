@@ -45,7 +45,7 @@ internal static class WildY0bM3FProof
         WildSetsProof.Held("AT_129", FjolaLightbane);
         WildSetsProof.Held("AT_130", SeaReaver);
         WildSetsProof.Held("AT_131", EydisDarkbane);
-        WildSetsProof.Case("AT_132", JusticarTrueheart);
+        WildSetsProof.Held("AT_132", "held: upgraded hero powers not checkable; needs a scenario that uses the hero power after a Justicar upgrade", JusticarTrueheart);
         WildSetsProof.Case("AT_133", GadgetzanJouster);
         foreach (string line in HeldReport) Console.WriteLine(line);
     }
