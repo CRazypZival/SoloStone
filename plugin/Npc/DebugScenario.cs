@@ -34,7 +34,7 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 //       10 cap, for a counter gag such as 32/333. Needs humanSeat=first; excludes humanMana/npcMana; npcManaRaw CUR <= 10 (its own
 //       turn start would otherwise send a negative RESOURCES_USED). Capture-only.)
 //   npcMana=N          humanMana=N           (mana crystals on that player's FIRST turn, full)
-//   humanCorpses=N     npcCorpses=N        (starting Corpses, 0..2147483647; matching hero must be a Death Knight)
+//   humanCorpses=N     npcCorpses=N        (starting Corpses, 0..999; matching hero must be a Death Knight)
 //   runId=<this launch's run id>   (REQUIRED by Read: the file is bound to one launch, like enable-test-control)
 // ENGINE_SOURCE builds only (the Deck and lane builds); other builds ignore the file. A file is honoured only while test
 // control is live and its runId is this launch's; anything else is rejected (renamed .rejected-<utc>), and any file left over
@@ -201,8 +201,8 @@ public sealed class DebugScenario
             NpcBoard = Cards(values, "npcBoard", MaxBoard, known), HumanBoard = Cards(values, "humanBoard", MaxBoard, known),
             NpcBoardStats = Stats(values, "npcBoardStats", "npcBoard"), HumanBoardStats = Stats(values, "humanBoardStats", "humanBoard"),
             NpcSummonStats = SummonRule(values, "npcSummonStats", known),
-            HumanCorpses = values.ContainsKey("humanCorpses") ? Number(values, "humanCorpses", 0, int.MaxValue) : (int?)null,
-            NpcCorpses = values.ContainsKey("npcCorpses") ? Number(values, "npcCorpses", 0, int.MaxValue) : (int?)null,
+            HumanCorpses = values.ContainsKey("humanCorpses") ? Number(values, "humanCorpses", 0, 999) : (int?)null,
+            NpcCorpses = values.ContainsKey("npcCorpses") ? Number(values, "npcCorpses", 0, 999) : (int?)null,
             NpcMana = Mana(values, "npcMana"), HumanMana = Mana(values, "humanMana") };
     }
 

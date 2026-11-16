@@ -65,10 +65,10 @@ internal static partial class Program
         Check(DebugScenario.Parse("humanMana=3").HumanCorpses == null, "omitted Corpses stay unset");
         foreach (string key in new[] { "humanCorpses", "npcCorpses" })
         {
-            foreach (string bad in new[] { "-1", "+1", "1.5", "ten", "2147483648", "1,2" })
+            foreach (string bad in new[] { "-1", "+1", "1.5", "ten", "1000", "2147483647", "2147483648", "1,2" })
                 RejectsScenario(key + "=" + bad, key + " invalid count");
             RejectsScenario(key + "=1\n" + key + "=2", key + " duplicate");
-            Check(DebugScenario.Parse(key + "=2147483647").Canonical() == key + "=2147483647", key + " int maximum");
+            Check(DebugScenario.Parse(key + "=999").Canonical() == key + "=999", key + " maximum");
             foreach (var game in new[] { CorpseScenarioGame(CardClass.MAGE, CardClass.MAGE),
                 CorpseScenarioGame(enabled: false),
                 key == "humanCorpses" ? CorpseScenarioGame(CardClass.MAGE) : CorpseScenarioGame(npc: CardClass.MAGE) })
