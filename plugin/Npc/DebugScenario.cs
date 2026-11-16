@@ -249,6 +249,7 @@ public sealed class DebugScenario
         int set = (int)card.Set;
         if (set == 5 || set == 18 || set == 1453 || set == 1586 || set == 1904)
             throw new ArgumentException(key + ": " + id + " is a hero power of set " + set + " (Battlegrounds, Mercenaries, Tavern Brawl, tutorial or mission), not a constructed one.");
+        if (!card.Implemented) throw new ArgumentException(key + ": " + id + " has no engine behaviour registration.");
         if (known != null && !known(id)) throw new ArgumentException(key + ": " + id + " has no native client definition.");
         return id;
     }

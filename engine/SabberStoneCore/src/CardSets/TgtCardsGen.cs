@@ -1052,6 +1052,7 @@ namespace SabberStoneCore.CardSets
 				// 37.0: each player keeps one minion with the highest Attack; a tie is broken at random, a lone minion is kept.
 				PowerTask = new FuncNumberTask(p =>
 				{
+					if (p.Game.History) p.Game.PowerHistory.TargetRange(p.Controller.BoardZone.Concat(p.Controller.Opponent.BoardZone).Select(m => m.Id));
 					foreach (var owner in new[] { p.Controller, p.Controller.Opponent })
 					{
 						var minions = owner.BoardZone.ToArray();
@@ -1257,7 +1258,12 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("AT_016", new CardDef(new Power
 			{
-				PowerTask = new SwapAttackHealthTask(EntityType.ALLMINIONS, "AT_016e")
+				PowerTask = ComplexTask.Create(
+					new FuncNumberTask(p => {
+						if (p.Game.History) p.Game.PowerHistory.TargetRange(IncludeTask.GetEntities(EntityType.ALLMINIONS, p.Controller, p, null, null));
+						return 0;
+					}),
+					new SwapAttackHealthTask(EntityType.ALLMINIONS, "AT_016e"))
 			}));
 
 			// ----------------------------------------- SPELL - PRIEST

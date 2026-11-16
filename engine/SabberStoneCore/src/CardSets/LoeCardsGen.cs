@@ -583,7 +583,12 @@ namespace SabberStoneCore.CardSets
 					// 6 other minions; a Location fills a slot but is not a minion.
 					new ConditionTask(EntityType.SOURCE, new SelfCondition(me => me.Controller.BoardZone.Count(
 						other => other != me && other is SabberStoneCore.Model.Entities.Minion) >= 6)),
-					new FlagTask(true, new AddEnchantmentTask("LOE_009e", EntityType.SOURCE)))
+					new FlagTask(true, ComplexTask.Create(
+						new FuncNumberTask(p => {
+							if (p.Game.History) p.Game.PowerHistory.TargetRange(new[] { p.Id });
+							return 0;
+						}),
+						new AddEnchantmentTask("LOE_009e", EntityType.SOURCE))))
 			}));
 
 			// ---------------------------------------- SPELL - WARLOCK
