@@ -141,10 +141,11 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 		{
 			Card[][] cardsToDiscover;
 			ChoiceAction choiceAction;
+			var pool = Cards.RandomPool(game, PoolDestination.Hand, source);
 
 			// Sets of cards to discover.
 			if (_discoverType != DiscoverType.INVALID)
-				cardsToDiscover = Discover(in game, controller, source, in _discoverType, out choiceAction);
+				cardsToDiscover = Discover(pool, controller, source, in _discoverType, out choiceAction);
 			else
 			{
 				CardClass cls = Criteria.CardClass == CardClass.OP_CLASS
@@ -159,8 +160,23 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 						cls = (CardClass) game.Random.Next(2, 11);
 				}
 
-				cardsToDiscover = Discover(Cards.RandomPool(game, PoolDestination.Hand, source), in _discoverCriteria, cls);
+				cardsToDiscover = Discover(pool, in _discoverCriteria, cls);
 				choiceAction = _choiceAction;
+			}
+
+			// Random Discover cannot offer its source; copies from existing zones and fixed choices are exempt.
+			if (!pool.Legacy && IsDiscover && _discoverType != DiscoverType.BASIC_HEROPOWERS
+				&& _discoverType != DiscoverType.ARTIFACT && _discoverType != DiscoverType.DECK_MINION
+				&& _discoverType != DiscoverType.OP_DECK_MINION && _discoverType != DiscoverType.OP_DECK
+				&& _discoverType != DiscoverType.OWN_SPELL && _discoverType != DiscoverType.DIED_THIS_GAME)
+			{
+				var discoverSource = source;
+				// Keep the memo's sets intact for other sources. WithoutSource only copies a set containing the source.
+				cardsToDiscover = cardsToDiscover.Select(set => (Card[])pool.WithoutSource(set, discoverSource)).ToArray();
+				// Source exclusion may leave a tri-class set empty or fewer than three distinct choices.
+				if (cardsToDiscover.Length == 3 && (cardsToDiscover.Any(set => set.Length == 0)
+					|| cardsToDiscover.SelectMany(set => set).Distinct().Count() < 3))
+					cardsToDiscover = new[] { cardsToDiscover.SelectMany(set => set).Distinct().ToArray() };
 			}
 
 			if (cardsToDiscover.Length == 1)
@@ -267,11 +283,9 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 		//	});
 		//}
 
-		private Card[][] Discover(in Game game, Controller controller, IEntity source, in DiscoverType discoverType,
+		private Card[][] Discover(MatchRandomPool pool, Controller controller, IEntity source, in DiscoverType discoverType,
 			out ChoiceAction choiceAction)
 		{
-			var pool = Cards.RandomPool(game, PoolDestination.Hand, source);
-
 			switch (discoverType)
 			{
 				case DiscoverType.DRUID_ROGUE_SHAMAN:

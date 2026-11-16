@@ -39,9 +39,11 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 			// Uncached: the old process cache ignored format, and a conditional cache hit fell through
 			// to the unconditional pool.
 			// The match's pool (legacy replays keep the frozen list).
-			Card[] cards = Cards.RandomPool(game, PoolDestination.Other, source).All
+			var pool = Cards.RandomPool(game, PoolDestination.Other, source);
+			Card[] cards = (Card[])pool.WithoutSource(pool.All
 				.Where(card => card.Type == CardType.SPELL && (_condition != null ? _condition(card) : !card.IsQuest))
-				.ToArray();
+				.ToArray(), source);
+			if (!pool.Legacy && cards.Length == 0) return TaskState.STOP;
 
 			Controller c = source.Controller;
 			Util.DeepCloneableRandom rnd = game.Random;

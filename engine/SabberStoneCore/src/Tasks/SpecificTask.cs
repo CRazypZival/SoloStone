@@ -768,7 +768,8 @@ namespace SabberStoneCore.Tasks
 		private static Card[] ClassSecrets(Game game, CardClass cardClass, IEntity source)
 		{
 			var pool = Cards.RandomPool(game, PoolDestination.Other, source);
-			return pool.Legacy ? GetFormatTypeClassSecrets(game.FormatType, cardClass) : pool.Secrets(cardClass).ToArray();
+			return pool.Legacy ? GetFormatTypeClassSecrets(game.FormatType, cardClass)
+				: pool.WithoutSource(pool.Secrets(cardClass), source).ToArray();
 		}
 
 		private static Card[] GetFormatTypeClassSecrets(FormatType format, CardClass cardClass)

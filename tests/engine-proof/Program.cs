@@ -105,6 +105,7 @@ if (args.Length > 0 && args[0] == "--split-effects-only") { SplitEffectProof.Run
 
 if (args.Contains("--pool-caches-only")) { PoolCacheIsolationProof.Run(); return; }
 if (args.Contains("--match-random-pools-only")) { MatchRandomPoolProof.Run(); return; }
+if (args.Contains("--match-random-regressions-only")) { MatchRandomRegressionProof.Run(); return; }
 if (args.Contains("--match-random-percard-only")) { MatchRandomSamplerProof.PerCardOnly(); return; }
 if (args.Length >= 1 && args[0] == "--match-random-sampler-only") { MatchRandomSamplerProof.Run(args.Skip(1).ToArray()); return; }
 if (args.Length == 2 && args[0] == "--pool-criteria-child") { PoolCacheIsolationProof.CriteriaChild(int.Parse(args[1])); return; }
@@ -458,6 +459,7 @@ LegacyPoolEligibilityProof.Run();
 OfflinePoolLegacyCompatibilityProof.Run();
 PoolCacheIsolationProof.Run();
 MatchRandomPoolProof.Run();
+MatchRandomRegressionProof.Run();
 MatchRandomSamplerProof.Run(quick: true);
 PoolInitOrderProof.Run();
 

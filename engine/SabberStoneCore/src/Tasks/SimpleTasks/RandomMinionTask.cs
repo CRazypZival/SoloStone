@@ -110,7 +110,7 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 			if (Amount > 1)
 			{
 				var list = new List<Card>(cardsList);
-				while (randomMinions.Count < Amount && cardsList.Count > 0)
+				while (randomMinions.Count < Amount && (pool.Legacy ? cardsList.Count : list.Count) > 0)
 				{
 					Card card = list.Choose(game.Random);
 					list.Remove(card);
