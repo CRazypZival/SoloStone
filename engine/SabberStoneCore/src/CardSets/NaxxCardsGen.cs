@@ -659,7 +659,7 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("FP1_028e", new CardDef(new Power
 			{
-				Enchant = new OngoingEnchant(Effects.AttackHealth_N(1))
+				Enchant = new OngoingEnchant(Effects.Attack_N(1))
 			}));
 
 			// ---------------------------------- ENCHANTMENT - NEUTRAL

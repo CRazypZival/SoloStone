@@ -770,7 +770,15 @@ public sealed class DebugScenario
             var dead = (SabberStoneCore.Model.Entities.Minion)EngineEntity.FromCard(game.Player1, EngineCards.FromId(id), zone: game.Player1.GraveyardZone);
             dead.ToBeDestroyed = true;
             game.DeadMinions.Remove(dead);
-            game.Player1.NumFriendlyMinionsThatDiedThisGame++;
+            // Record the historical board entry directly: no summon callbacks, even with a full staged board.
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var facts = typeof(EngineGame).GetProperty("Facts", flags).GetValue(game, null);
+            facts.GetType().GetMethod("BoardEntered", flags).Invoke(facts, new object[] { dead, true });
+            SabberStoneCore.Actions.CorpseRules.RecordDeath(dead);
+            facts.GetType().GetMethod("Died", flags).Invoke(facts, new object[] { dead, dead.Cost });
+            game.Player1.NumFriendlyMinionsThatDiedThisTurn++;
+            game.CurrentPlayer.NumMinionsPlayerKilledThisTurn++;
+            game.NumMinionsKilledThisTurn++;
         }
         if (HumanGraveyard.Count > 0) applied.Add("humanGraveyard=" + string.Join(",", HumanGraveyard));
         if (HumanHeroPower != null)

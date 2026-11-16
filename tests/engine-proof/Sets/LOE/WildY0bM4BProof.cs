@@ -430,6 +430,13 @@ internal static class WildY0bM4BProof
     {
         string original = p.Hero.HeroPower.Card.Id;
         Ok(original == "CS2_083b", "fixture hero power is the Rogue one");
+        var poolGame = g.CloneExact();
+        new DiscoverTask(DiscoverType.BASIC_HEROPOWERS, 100).Process(poolGame, poolGame.Player1, poolGame.Player1.Hero, null);
+        var fullPool = poolGame.Player1.Choice.Choices.Select(key => poolGame.IdEntityDic[key].Card.Id).Append(original).ToArray();
+        var expectedPool = new[] { "CS2_102", "CS2_049", "CS2_083b", "CS2_101", "DS1h_292", "CS2_017", "CS2_056", "CS1h_001", "CS2_034", "HERO_10bp", "HERO_11bp" };
+        Ok(fullPool.Length == 11 && fullPool.Distinct().Count() == 11 && fullPool.ToHashSet().SetEquals(expectedPool)
+            && fullPool.Select(power => Cards.FromId(power).Class).Distinct().Count() == 11,
+            "full Finley pool: nine classic classes plus DH and DK, no duplicates; held class excluded from offers");
         var finley = (Minion)Play(g, p, id);
         Ok(Alive(finley) && finley.AttackDamage == 1 && finley.Health == 3 && p.UsedMana == 1 && finley.Card.IsRace(Race.MURLOC), "1-mana 1/3 Murloc");
         Ok(p.Choice != null && p.Choice.Choices.Count == 3, "three options");

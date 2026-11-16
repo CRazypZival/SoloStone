@@ -92,10 +92,10 @@ internal static partial class Program
             "seven deaths, including repeated card ids, accepted");
         Reject("humanGraveyard=" + string.Join(",", Enumerable.Repeat("CS2_120", 8)), "humanGraveyard takes at most 7 cards.");
 
-        Game PlainGame()
+        Game PlainGame(bool corpses = false)
         {
             var game = new Game(new SabberStoneCore.Config.GameConfig { RandomSeed = 17, StartPlayer = 1, Shuffle = false,
-                SkipMulligan = true, History = true, Logging = false,
+                SkipMulligan = true, History = true, Logging = false, EnableCorpses = corpses,
                 Player1Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(),
                 Player2Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList() });
             game.StartGame();
@@ -136,7 +136,7 @@ internal static partial class Program
         string applied = DebugScenario.Parse(grave + "\nhumanHand=BRM_017").Apply(resurrection);
         var dead = (Minion)resurrection.Player1.GraveyardZone.Single();
         Check(dead.Card.Id == "CS2_120" && dead.ToBeDestroyed && dead.Zone.Type == EngineZone.GRAVEYARD
-            && resurrection.Player1.NumFriendlyMinionsThatDiedThisGame == 1 && resurrection.DeadMinions.Count == 0
+            && resurrection.Player1.NumFriendlyMinionsThatDiedThisGame == 0 && resurrection.DeadMinions.Count == 0
             && resurrection.Player2.GraveyardZone.Count == 0 && applied.Contains(grave), "friendly death staged without pending deaths");
         resurrection.Player1.BaseMana = 10;
         var resurrect = resurrection.Player1.HandZone.Single(c => c.Card.Id == "BRM_017");
@@ -146,8 +146,43 @@ internal static partial class Program
         DebugScenario.Parse("humanGraveyard=FP1_002,FP1_002").Apply(quiet);
         quiet.DeathProcessingAndAuraUpdate();
         Check(quiet.Player1.BoardZone.Count == 0 && quiet.Player1.GraveyardZone.Count == 2
-            && quiet.Player1.GraveyardZone.All(c => c.ToBeDestroyed) && quiet.Player1.NumFriendlyMinionsThatDiedThisGame == 2,
+            && quiet.Player1.GraveyardZone.All(c => c.ToBeDestroyed) && quiet.Player1.NumFriendlyMinionsThatDiedThisGame == 0
+            && quiet.HistoryFacts.Query.Deaths().Count() == 2,
             "staged Haunted Creepers never fire Deathrattles");
+        foreach (bool corpses in new[] { false, true })
+        {
+            var real = PlainGame(corpses);
+            var staged = PlainGame(corpses);
+            real.Player1[(GameTag)412] = staged.Player1[(GameTag)412] = 6;
+            var victim = (Minion)Entity.FromCard(real.Player1, Cards.FromId("CS2_120"), zone: real.Player1.BoardZone);
+            victim.ToBeDestroyed = true;
+            real.DeathProcessingAndAuraUpdate();
+            DebugScenario.Parse(grave).Apply(staged);
+            var stagedDead = (Minion)staged.Player1.GraveyardZone.Single();
+            var realFact = real.HistoryFacts.Query.Deaths().Single();
+            var stagedFact = staged.HistoryFacts.Query.Deaths().Single();
+            Check(stagedDead.Zone.Type == victim.Zone.Type && stagedDead.ToBeDestroyed == victim.ToBeDestroyed
+                && staged.DeadMinions.Count == 0, "staged death matches real graveyard state");
+            Check(real.Player1[(GameTag)412] == 6 && staged.Player1[(GameTag)412] == real.Player1[(GameTag)412],
+                "death leaves tag 412 unchanged, including a pre-existing value");
+            Check(staged.Player1.NumFriendlyMinionsThatDiedThisTurn == real.Player1.NumFriendlyMinionsThatDiedThisTurn
+                && staged.CurrentPlayer.NumMinionsPlayerKilledThisTurn == real.CurrentPlayer.NumMinionsPlayerKilledThisTurn
+                && staged.NumMinionsKilledThisTurn == real.NumMinionsKilledThisTurn, "staged death matches real turn counters");
+            Check(stagedFact.EntityId == stagedDead.Id && stagedFact.DbfId == realFact.DbfId
+                && stagedFact.ControllerId == realFact.ControllerId && stagedFact.CostAtDeath == realFact.CostAtDeath,
+                "staged MinionDiedFact matches real death");
+            Check(staged.Player1[GameTag.CORPSES] == real.Player1[GameTag.CORPSES]
+                && staged.Player1[GameTag.CORPSES] == (corpses ? 1 : 0), "staged corpses match real death with corpses=" + corpses);
+            Check(Game.LoadSnapshot(staged.SaveSnapshot()).HistoryFacts.Query.Deaths().Single().EntityId == stagedDead.Id,
+                "staged death history survives snapshot validation");
+        }
+        var fullBoard = PlainGame();
+        DebugScenario.Parse("humanBoard=" + string.Join(",", Enumerable.Repeat("CS2_120", 7))
+            + "\nhumanWeapon=EX1_366\nhumanGraveyard=FP1_002").Apply(fullBoard);
+        fullBoard.DeathProcessingAndAuraUpdate();
+        Check(fullBoard.Player1.BoardZone.Count == 7 && fullBoard.Player1.BoardZone.All(m => m.AttackDamage == m.Card.ATK)
+            && fullBoard.Player1.Hero.Weapon.Damage == 0 && fullBoard.Player1.GraveyardZone.Count == 1,
+            "staged death needs no board slot and fires neither summon triggers nor Deathrattles");
     }
 
     private static void DebugScenarioLanePaths()
