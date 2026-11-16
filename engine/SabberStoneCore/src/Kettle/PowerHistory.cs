@@ -633,7 +633,8 @@ namespace SabberStoneCore.Kettle
 
         // Last index of an unflushed generated spawn scope into the same deck that this creation can join:
         // same block, and in between only the scope cards' own deck-side tag changes and enchantments attached to
-        // them (e.g. Academic Espionage's cost buff). Any other row, such as a listener's effect, keeps its own scope.
+        // them (e.g. Academic Espionage's cost buff), Choose One options, or retirement of a replaced card from that deck.
+        // Any other row, such as a listener's effect, keeps its own scope.
         private int JoinableShuffleEnd(IPlayable card, int creation)
         {
             var game = card.Game;
@@ -655,18 +656,27 @@ namespace SabberStoneCore.Kettle
             }
             if (start < 0 || !(Last[start] is PowerHistorySubSpellStart scope) || scope.SpellPrefabGuid != GeneratedShufflePrefab
                 || scope.Source != card.Controller.Hero.Id || scope.Targets.Count != 0 || scope.RequirePublicOrigin) return -1;
-            var buffs = new HashSet<int>();
-            bool Buff(int id) => game.IdEntityDic.TryGetValue(id, out var entity) && entity is Enchantment enchantment
-                && enchantment.Target != null && cards.Contains(enchantment.Target.Id);
+            var attachments = new HashSet<int>();
+            bool Attached(int id) => game.IdEntityDic.TryGetValue(id, out var entity)
+                && (entity is Enchantment enchantment && enchantment.Target != null && cards.Contains(enchantment.Target.Id)
+                    || cards.Contains(entity[GameTag.PARENT_CARD])
+                    && game.IdEntityDic.TryGetValue(entity[GameTag.PARENT_CARD], out var parent)
+                    && parent.ChooseOnePlayables?.Any(option => option.Id == id) == true);
             for (int i = end + 1; i < creation; i++)
             {
                 switch (Last[i])
                 {
-                    case PowerHistoryFullEntity full when Buff(full.Entity.Id): buffs.Add(full.Entity.Id); break;
-                    case PowerHistoryShowEntity show when buffs.Contains(show.Entity.Id): break;
-                    case PowerHistoryTagChange change when buffs.Contains(change.EntityId): break;
+                    case PowerHistoryFullEntity full when Attached(full.Entity.Id): attachments.Add(full.Entity.Id); break;
+                    case PowerHistoryShowEntity show when attachments.Contains(show.Entity.Id): break;
+                    case PowerHistoryTagChange change when attachments.Contains(change.EntityId): break;
                     case PowerHistoryTagChange change when cards.Contains(change.EntityId) && change.Tag != GameTag.CONTROLLER
                         && (change.Tag != GameTag.ZONE || change.Value == (int)Zone.DECK): break;
+                    // Alternate Reality interleaves random picks and shuffles; merge history without changing RNG order (#160).
+                    case PowerHistoryTagChange change when game.IdEntityDic.TryGetValue(change.EntityId, out var retired)
+                        && retired.Controller == card.Controller && retired.Zone == card.Controller.SetasideZone
+                        && retired[Actions.CardStateBoundary.ReplacedHiddenZone] == (int)Zone.DECK
+                        && (change.Tag == Actions.CardStateBoundary.ReplacedHiddenZone && change.Value == (int)Zone.DECK
+                            || change.Tag == GameTag.ZONE && change.Value == (int)Zone.SETASIDE): break;
                     default: return -1;
                 }
             }

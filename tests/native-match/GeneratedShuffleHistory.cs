@@ -31,6 +31,7 @@ internal static partial class Program
     // scope.
     private static void GeneratedShuffleHistory()
     {
+        ReplacedDeckShuffleHistory();
         BatchedStoryShuffle();
         ShuffleBatchBarriers();
         PlagueAttackShuffle();
@@ -130,6 +131,48 @@ internal static partial class Program
         Console.WriteLine("PASS generated shuffle: Cosmic Outcast/middle, Forgotten Torch, Gang Up copies, Iron Juggernaut/Beneath the Grounds opponent deck/preallocated batches; both views, boundaries, native spawn contract/privacy");
     }
 
+    // #160: retiring each old deck card must not split the replacement cards into separate flights.
+    private static void ReplacedDeckShuffleHistory()
+    {
+        foreach (bool bot in new[] { false, true })
+        {
+            var (match, capture) = AnimationMatch(bot);
+            var owner = match.Game.CurrentPlayer;
+            foreach (var old in owner.HandZone.ToArray()) owner.SetasideZone.Add(owner.HandZone.Remove(old));
+            var held = EngineEntity.FromCard(owner, Cards.FromId("CS2_182"), zone: owner.HandZone);
+            var source = EngineEntity.FromCard(owner, Cards.FromId("TIME_707"), zone: owner.HandZone);
+            source.Cost = 0;
+            var before = owner.DeckZone.Select(c => c.Id).ToHashSet();
+            FlushFieldHistory(match); int cursor = capture.Packets.Count;
+            InvokeProcess(match, owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id));
+            FlushFieldHistory(match);
+            var generated = owner.DeckZone.Select(c => c.Id).ToHashSet();
+            string label = "TIME_707:bot=" + bot;
+            Check(generated.Count == before.Count && generated.Count > 1 && !generated.Overlaps(before)
+                && held.Zone == owner.SetasideZone, label + " replaces hand and entire deck");
+            var entries = History(capture, cursor);
+            int scopes = 0, depth = 0, enclosed = 0;
+            foreach (var entry in entries)
+            {
+                if (entry.HasSubSpellStart && entry.SubSpellStart.SpellPrefabGuid == GeneratedShufflePrefab) { scopes++; depth++; }
+                if (entry.HasFullEntity && generated.Contains(entry.FullEntity.Entity))
+                {
+                    Check(depth == 1 && TagValue(entry.FullEntity.Tags, GameTag.ZONE) == (int)EngineZone.DECK,
+                        label + " replacement FULL enclosed in deck shuffle");
+                    enclosed++;
+                }
+                if (entry.HasSubSpellEnd) depth--;
+            }
+            Check(scopes == 1 && depth == 0 && enclosed == generated.Count,
+                label + " replacements share one shuffle scope; scopes=" + scopes + ", cards=" + enclosed);
+            if (bot) Check(entries.Where(e => generated.Contains(SnapshotEntity(e)))
+                .All(e => string.IsNullOrEmpty(SnapshotName(e))), label + " replacement identities remain private");
+            AssertGeneratedShuffleAdmission(capture);
+            capture.SerializeAll();
+        }
+        Console.WriteLine("PASS Alternate Reality: entire replacement deck in one shuffle scope, both seats; privacy/admission");
+    }
+
     private static void BatchedStoryShuffle()
     {
         foreach (bool bot in new[] { false, true })
@@ -181,7 +224,8 @@ internal static partial class Program
     private static void ShuffleBatchBarriers()
     {
         foreach (bool reveal in new[] { false, true })
-        foreach (string barrier in new[] { "none", "creator", "tag", "zone", "block", "reset", "flush", "listener", "other-deck" })
+        foreach (string barrier in new[] { "none", "creator", "tag", "zone", "block", "reset", "flush", "listener", "other-deck",
+            "replacement", "hand-replacement", "replacement-tag", "opponent-replacement" })
         {
             var (match, _) = AnimationMatch();
             var game = match.Game; var owner = game.Player1;
@@ -198,7 +242,16 @@ internal static partial class Program
                 Check(SabberStoneCore.Actions.Generic.ShuffleIntoDeck(destination, source, card, reveal), "barrier setup shuffle");
                 return card;
             }
+            var retiringOwner = barrier == "opponent-replacement" ? owner.Opponent : owner;
+            var retiring = EngineEntity.FromCard(retiringOwner, Cards.FromId("CS2_182"),
+                zone: barrier == "hand-replacement" ? retiringOwner.HandZone : retiringOwner.DeckZone);
             var first = Shuffle(owner);
+            if (barrier.Contains("replacement"))
+            {
+                retiring[SabberStoneCore.Actions.CardStateBoundary.ReplacedHiddenZone] = (int)retiring.Zone.Type;
+                retiringOwner.SetasideZone.Add(retiring.Zone.Remove(retiring));
+                if (barrier == "replacement-tag") retiring[GameTag.COST] = 1;
+            }
             SabberStoneCore.Kettle.IPowerHistoryEntry entry = barrier switch {
                 "creator" => SabberStoneCore.Kettle.PowerHistoryBuilder.TagChange(first.Id, GameTag.DISPLAYED_CREATOR, source.Id),
                 "tag" => SabberStoneCore.Kettle.PowerHistoryBuilder.TagChange(source.Id, GameTag.COST, 1),
@@ -214,7 +267,7 @@ internal static partial class Program
             var scopes = history.Full.Skip(blockIndex).OfType<SabberStoneCore.Kettle.PowerHistorySubSpellStart>()
                 .Where(e => e.SpellPrefabGuid == GeneratedShufflePrefab).ToArray();
             // A silent listener adds no rows, so it cannot separate flights; one that does is the tag/block barrier.
-            bool joined = barrier is "none" or "creator" or "listener";
+            bool joined = barrier is "none" or "creator" or "listener" or "replacement";
             Check(scopes.Length == (joined ? 1 : 2), "shuffle grouping respects " + barrier + " barrier; reveal=" + reveal);
             Check(history.Full.Count(e => e is SabberStoneCore.Kettle.PowerHistorySubSpellStart)
                 == history.Full.Count(e => e is SabberStoneCore.Kettle.PowerHistorySubSpellEnd), barrier + " keeps scopes balanced; reveal=" + reveal);
