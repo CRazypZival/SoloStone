@@ -192,6 +192,7 @@ internal static partial class Program
                 "unknown anonymous/enchantment FX retains inference instead of inventing a hero anchor");
             cases++;
         }
+        foreach (string hero in new[] { "CORE_EX1_323", "CATA_190h", "TLC_513t" })
         foreach (bool sameOwner in new[] { false, true })
         foreach (bool usesPower in new[] { false, true })
         {
@@ -203,22 +204,18 @@ internal static partial class Program
             var power = Full(201, "EX1_tk33", 10, sameOwner ? 1 : 2);
             var start = new PowerHistoryData { PowerStart = new() { Source = 200, Type = (HistoryBlock.Type)(int)BlockType.POWER } };
             var packet = new PegasusGame.PowerHistory { List = new() {
-                Full(200, "CORE_EX1_323", 3, 1),
+                Full(200, hero, 3, 1),
                 new() { PowerStart = new() { Source = 200, Type = (HistoryBlock.Type)(int)BlockType.PLAY } }, power,
                 new() { TagChange = new() { Entity = usesPower ? 201 : 200, Tag = (int)GameTag.COST, Value = 0 } }, start,
                 Full(202, "EX1_323w", 7, 1), new() { PowerEnd = new() }, new() { PowerEnd = new() } } };
             typeof(NativeMatch).GetMethod("SendPowerHistory", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(match, new object[] { packet });
             var sent = capture.HistorySnapshots().Single().List;
-            Check(NativeAdmission.Validate(sent).Count(f => f.Rule == "R4") == (sameOwner && !usesPower ? 0 : 1),
-                "hero power FULL ownership repair requires same controller");
-            if (sameOwner && !usesPower)
-            {
-                var mutant = sent.ToList();
-                var sentPower = mutant.Single(e => e.HasFullEntity && e.FullEntity.Entity == 201);
-                var sentStart = mutant.Single(e => e.HasPowerStart && (int)e.PowerStart.Type == (int)BlockType.POWER);
-                mutant.Remove(sentPower); mutant.Insert(mutant.IndexOf(sentStart), sentPower);
-                Check(NativeAdmission.Validate(mutant).Any(f => f.Rule == "R4"), "returning hero-power FULL to parent must fail strict scanner");
-            }
+            Check(sent.FindIndex(e => e.HasFullEntity && e.FullEntity.Entity == 201)
+                < sent.FindIndex(e => e.HasPowerStart && e.PowerStart.Type == HistoryBlock.Type.POWER),
+                hero + " generic normalization preserves power FULL in PLAY");
+            // Jaraxxus relocation runs during engine conversion; generic normalization must not conceal a missing repair.
+            Check(NativeAdmission.Validate(sent).Count(f => f.Rule == "R4") == (hero == "CORE_EX1_323" ? 1 : 0),
+                hero + " only Jaraxxus requires the power FULL inside its effect list");
             cases++;
         }
         Console.WriteLine($"PASS native admission transport: {cases} cases; both block kinds, ordered typed targets/source fallback, authored metadata, privacy, removal mutations");
