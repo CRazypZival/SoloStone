@@ -345,6 +345,13 @@ internal static class MatchRandomSamplerProof
         if (!value) throw new Exception("match random sampler: " + message);
     }
 
+    // The per-card checks alone (`--match-random-percard-only`): the named cards, played for real.
+    internal static void PerCardOnly()
+    {
+        var game = NewGame(1, FormatType.FT_WILD, CardClass.MAGE);
+        PerCard(game.OfflinePools.Standard.ToDictionary(m => m.CardId), true);
+    }
+
     // A summon, transform or generated card never rolls its own source (modern code's rule, owner decision 2026-11-16).
     // Positive control first: with another source the same card does come up, so the absence below is not luck.
     private static void SourceExclusion(Dictionary<string, OfflinePoolPolicy.Member> members)
