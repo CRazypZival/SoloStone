@@ -266,8 +266,9 @@ internal static partial class NativeUIProbe
             finalizer: new HarmonyMethod(typeof(NativeUIProbe), nameof(FinishLocalReorder)));
         foreach (string name in new[] { "AddPendingDeckRename", "AddPendingDeckEdit" })
             Hook(harmony, typeof(CollectionManager), name, nameof(ReadOnly));
-        Hook(harmony, typeof(CollectionManagerDisplay), "CreateDeckFromClipboard", nameof(BlockDeckImport));
-        Hook(harmony, typeof(CollectionInputMgr), "PasteDeckInEditModeFromShareableDeck", nameof(BlockDeckImport));
+        Hook(harmony, typeof(CollectionManagerDisplay), "CreateDeckFromClipboard", nameof(PlanDeckCodeImport));
+        Hook(harmony, typeof(CollectionManagerDisplay), "OnDeckCreatedFromClipboard", nameof(ProjectImportedDeck));
+        Hook(harmony, typeof(CollectionInputMgr), "PasteDeckInEditModeFromShareableDeck", nameof(BlockDeckEditPaste));
         harmony.Patch(Required(typeof(DeckTrayDeckListContent), "ShouldDeckBoxesBeLocked"),
             prefix: new HarmonyMethod(typeof(NativeUIProbe), nameof(UnlockLocalDeckBoxSlots)));
         harmony.Patch(Required(typeof(CollectionDeckBoxVisual), "SetDeckID"),
