@@ -189,6 +189,10 @@ namespace SabberStoneCore.Presentation
             return result;
         }
 
+        /// <summary>The recipe a power has when it resolves in its own POWER block.</summary>
+        internal static SubSpellRecipe FindOwnPower(string sourceCard, VisualPhase phase) =>
+            Recipes.TryGetValue((sourceCard, BlockType.POWER, 0, -1, 0, phase), out var recipe) ? recipe : null;
+
         internal static SubSpellRecipe Find(PowerHistoryBlockStart block, string sourceCard, VisualPhase phase)
         {
             if (block == null) return null;

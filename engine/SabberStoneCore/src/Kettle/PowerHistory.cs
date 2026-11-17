@@ -654,6 +654,13 @@ namespace SabberStoneCore.Kettle
         /// <summary>The enchantment whose granted Deathrattle is resolving, for presentation recipes only.</summary>
         internal Enchantment GrantedDeathrattle { get; set; }
 
+        /// <summary>
+        /// Id of an entity whose power task runs inside another entity's block (Wisprider triggering the hero power).
+        /// The hit is attributed in a TRIGGER block of that entity, which no POWER-keyed recipe matches, so the entity
+        /// keeps the recipe it has when it runs in its own block. Presentation only.
+        /// </summary>
+        internal int DelegatedPowerSource { get; set; }
+
         internal IDisposable Visual(Game game, VisualPhase phase, IPlayable source = null, IEntity target = null)
         {
             if (!_enabled || CurrentBlock == null) return null;
@@ -680,6 +687,9 @@ namespace SabberStoneCore.Kettle
                 && source.Id == CurrentBlock.Source && SubSpellRecipes.Find(CurrentBlock, GrantedDeathrattle.Card.Id, phase) != null)
                 identity = GrantedDeathrattle;
             var recipe = SubSpellRecipes.Find(CurrentBlock, identity.Card.Id, phase);
+            if (recipe == null && source.Id == DelegatedPowerSource && CurrentBlock.BlockType == BlockType.TRIGGER
+                && CurrentBlock.EffectIndex == -1 && CurrentBlock.TriggerKeyword.GetValueOrDefault() == 0)
+                recipe = SubSpellRecipes.FindOwnPower(identity.Card.Id, phase);
             if (recipe == null || (recipe.Group ? target != null
                 : recipe.Targets == VisualTargets.Resolved && target == null)) return null;
             int visualSource = recipe.Source == VisualSource.Inherit ? 0
