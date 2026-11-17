@@ -143,18 +143,34 @@ internal static class DeckCodeChecks
             Check(orphan.Cards.Count == 2 && orphan.Unusable == 1, "a Fabled companion without its primary is dropped and counted");
         }
 
-        // The native fill after an import is skipped silently, once, only for that deck and only while fresh; any other edit paste speaks.
-        Check(NativeDeckCodeImport.SkipNativeFill(7, true, 7) && !NativeDeckCodeImport.SkipNativeFill(7, true, 8)
-            && !NativeDeckCodeImport.SkipNativeFill(7, false, 7) && !NativeDeckCodeImport.SkipNativeFill(0, true, 0),
-            "the native fill is skipped only for the imported deck, in the Collection; a real edit paste is not");
+        // The native fill after an import is skipped silently, once, only for that deck; any other edit paste speaks.
+        var skip = new NativeDeckCodeImport.NativeFillSkip();
+        skip.Arm(7);
+        Check(!skip.TryConsume(true, 8) && skip.TryConsume(true, 7) && !skip.TryConsume(true, 7), "the native fill is skipped only for the imported deck, once; a real edit paste is not");
+        skip.Arm(7);
+        Check(!skip.TryConsume(false, 7) && !skip.TryConsume(true, 7), "leaving the Collection drops the skip");
+        skip.Arm(7); skip.Reset();
+        Check(!skip.TryConsume(true, 7), "the next import resets the skip");
 
-        // The Wild switch widens only the Standard test: tokens, uncollectible and hero cards stay unusable either way.
-        var junk = Cards.All.Where(card => card.Implemented && !card.Collectible).Select(card => card.Id).Take(200).ToArray();
-        var heroCard = Cards.All.Where(card => card.Type == CardType.HERO).Select(card => card.Id).FirstOrDefault() ?? junk[0];
-        Check(junk.Length > 0 && junk.Concat(new[] { heroCard }).All(id => !NativeDeckCodeImport.Usable(id, false) && !NativeDeckCodeImport.Usable(id, true)),
-            "tokens, uncollectible and hero cards are unusable with the Wild switch off and on");
-        Check(neutral.All(id => NativeDeckCodeImport.Usable(id, false) && NativeDeckCodeImport.Usable(id, true)) && pack.All(id => NativeDeckCodeImport.Usable(id, true)),
-            "Standard cards stay usable with the Wild switch on");
+        // Tokens, uncollectible and hero cards are unusable: every uncollectible card in the catalogue, CATA_190h included.
+        var uncollectible = Cards.All.Where(card => !card.Collectible).Select(card => card.Id).ToList();
+        Check(uncollectible.Count > 200 && uncollectible.All(id => !NativeDeckCodeImport.Usable(id)),
+            "every uncollectible card in the catalogue is unusable: " + uncollectible.Count);
+        // CATA_190h (Deathwing, Worldbreaker) is a collectible Standard hero card the editor accepts: the import matches the editor.
+        Check(NativeDeckCodeImport.Usable("CATA_190h") == (LocalProfile.KnownLedgerCard("CATA_190h") && LocalShop.IsStandardCard(Cards.FromId("CATA_190h"))),
+            "CATA_190h is usable exactly as the editor accepts it");
+        Check(neutral.All(NativeDeckCodeImport.Usable) && pack.All(NativeDeckCodeImport.Usable), "Standard cards stay usable");
+
+        // Death Knight: cards that would push a deck over three runes are dropped and counted.
+        var dkClass = LocalDecks.HeroClass("HERO_11");
+        var runed = Cards.All.Where(card => card.Class == dkClass && NativeDeckCodeImport.Usable(card.Id) && LocalDecks.RuneCounts(new[] { card }).Sum() > 0 && LocalDecks.RuneCounts(new[] { card }).Sum() <= 3)
+            .OrderBy(card => card.Id, StringComparer.Ordinal).ToList();
+        Card runeA = null, runeB = null;
+        foreach (var x in runed) { runeB = runed.FirstOrDefault(y => LocalDecks.RuneCounts(new[] { x, y }).Sum() > 3); if (runeB != null) { runeA = x; break; } }
+        Check(runeA != null, "fixture: two Death Knight cards that need more than three runes together");
+        var runePlan = Plan("HERO_11", Main((runeA.Id, 1), (runeB.Id, 1)));
+        Check(runePlan.Cards.SequenceEqual(new[] { runeA.Id }) && runePlan.OverLimit == 1
+            && LocalDecks.RuneCounts(runePlan.Cards.Select(Cards.FromId)).Sum() <= 3, "a Death Knight code is trimmed to three runes and the rest counted");
 
 
         // Refusals.
@@ -171,15 +187,14 @@ internal static class DeckCodeChecks
             .Select(card => card.Id).Take(35).ToArray();
         Refuses(() => Plan(Mage, Main(forty.Select(id => (id, 1)).ToArray())), DeckCodeRefusalReason.Oversize, "more cards than a deck holds is refused");
 
-        // Name: the code's name, cut to 32 visible characters; the usual name when it has none or none is valid.
+        // Name: the code's name, cut to 32 UTF-16 code units; the usual name when it has none or none is valid.
         Check(Plan(Mage, Main((neutral[0], 2)), name: "  Face  Hunter ").Name == "Face  Hunter", "the name is trimmed");
         Check(Plan(Mage, Main((neutral[0], 2)), name: new string('x', 80)).Name == new string('x', 32), "a long name is cut to 32 characters");
         Check(Plan(Mage, Main((neutral[0], 2)), name: "a\nb\tc").Name == "abc", "control characters leave the name");
         Check(Plan(Mage, Main((neutral[0], 2)), name: null).Name == "New deck" && Plan(Mage, Main((neutral[0], 2)), name: "   ").Name == "New deck"
             && Plan(Mage, Main((neutral[0], 2)), name: "​").Name == "New deck", "no usable name falls back to the usual one");
 
-        // A Wild code: Wild-only cards are not in the Standard pool. They are dropped until PR #136 is on main, then one line keeps them.
-        Check(!NativeDeckCodeImport.KeepsWildOnlyCards, "Wild-only cards are dropped for now (flip NativeDeckCodeImport.KeepsWildOnlyCards after PR #136)");
+        // A Wild code: Wild-only cards are not in the Standard pool. They are dropped: the usable set follows the profile ledger (PR #136 decides).
         var wild = Plan(Mage, Main((neutral[0], 2), (notInPool, 2)));
         Check(wild.Cards.Count == 2 && wild.Unusable == 2, "a Wild code keeps its Standard cards and drops the Wild-only ones");
 

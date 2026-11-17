@@ -15,7 +15,9 @@ internal static partial class NativeUIProbe
     private sealed class PendingImport { internal DeckCodePlan Plan; internal DateTime Created = DateTime.UtcNow; }
     private static PendingImport pendingImport;
     // The client fills a new deck from its cached code through the edit-mode paste right after it opens: skip that one call.
-    private static long nativeFillSkipDeck;
+    private static readonly NativeDeckCodeImport.NativeFillSkip nativeFillSkip = new NativeDeckCodeImport.NativeFillSkip();
+    // A planned import is in flight until CreateLocalDraft reports whether it made a deck (the postfix then tidies a refusal).
+    private static bool importInFlight, importCreated;
     private static readonly Dictionary<long, DeckCodePlan> importProjections = new Dictionary<long, DeckCodePlan>();
 
     // What the last import did, for the status file and test control.
@@ -32,6 +34,8 @@ internal static partial class NativeUIProbe
         // The edit-mode branch (overwrite prompt, paste while editing) is the blocked edit paste's: it speaks alone.
         if (CollectionManager.Get()?.IsInEditMode() == true) return true;
         pendingImport = null;
+        nativeFillSkip.Reset();
+        importInFlight = false; importCreated = false;
         try
         {
             var contents = __0?.DeckContents;
@@ -43,6 +47,7 @@ internal static partial class NativeUIProbe
                 .Select(card => (CardIdOrNull(card.LinkedCardDbId), CardIdOrNull(card.Def.Asset), card.Qty)).ToList();
             var plan = NativeDeckCodeImport.Plan(hero, __0.DeckName, null, main, side);
             pendingImport = new PendingImport { Plan = plan };
+            importInFlight = true;
             LastImportStage = "planned";
             LastImportError = "";
             log.LogInfo("NATIVE_DECK import planned hero=" + plan.Hero + " cards=" + plan.Cards.Count + " sideboards=" + plan.Sideboards.Count
@@ -92,6 +97,31 @@ internal static partial class NativeUIProbe
         return pending != null && (DateTime.UtcNow - pending.Created).TotalSeconds <= PlanLifetimeSeconds ? pending.Plan : null;
     }
 
+
+    // The client swaps its deck-created callback to the clipboard one after SendCreateDeck returns, even when no deck was made.
+    // Put the ordinary one back (the recipe page, no paste on the next New Deck).
+    private static void RestoreDeckCreatedCallbacks(CollectionManagerDisplay display)
+    {
+        var manager = CollectionManager.Get();
+        manager.RemoveDeckCreatedListener((CollectionManager.DelOnDeckCreated)Delegate.CreateDelegate(
+            typeof(CollectionManager.DelOnDeckCreated), display, Required(typeof(CollectionManagerDisplay), "OnDeckCreatedFromClipboard")));
+        manager.RegisterDeckCreatedListener((CollectionManager.DelOnDeckCreated)Delegate.CreateDelegate(
+            typeof(CollectionManager.DelOnDeckCreated), display, Required(typeof(CollectionManagerDisplay), "OnDeckCreatedByPlayer")));
+    }
+
+    // Postfix of CreateDeckFromClipboard: a planned import that made no deck (gate refusal, failed commit) restores the callbacks
+    // and clears the cached code, as No on the prompt does.
+    private static void TidyRefusedImport(CollectionManagerDisplay __instance)
+    {
+        if (!active || !importInFlight) return;
+        importInFlight = false;
+        if (importCreated) return;
+        NativeRecipeSafety.OrDefault(() => { RestoreDeckCreatedCallbacks(__instance); Invoke(__instance, "RejectDeckFromClipboard"); return true; }, false, LogRecipeFailure);
+    }
+
+    // Prefix of CollectionManagerDisplay.Exit: nothing armed outlives the Collection.
+    private static void LeaveCollectionImportState() { nativeFillSkip.Reset(); }
+
     private static string ImportRefusalText(int personalCount) =>
         NativeUIProjection.PersonalDeckBlocker(personalCount, SessionLoanerKeys().Count()) ?? "This deck code cannot be imported here.";
 
@@ -139,7 +169,7 @@ internal static partial class NativeUIProbe
             lastDeckOperation = "import:" + __0;
             lastDeckError = "";
             LastImportStage = "projected";
-            nativeFillSkipDeck = __0;
+            nativeFillSkip.Arm(__0);
             string message = LastImportMessage;
             if (message.Length > 0)
                 Processor.ScheduleCallback(0.8f, false, _ => { try { UIStatus.Get()?.AddInfo(message); } catch (Exception) { } });
@@ -152,15 +182,7 @@ internal static partial class NativeUIProbe
             // Clear the cached code and the clipboard, as the client does when the player answers No, so the code is not offered
             // again. The empty native deck left beside the saved one cannot be saved over it: SaveLocalDraft refuses a base deck that differs from the profile draft.
             NativeRecipeSafety.OrDefault(() => { Invoke(__instance, "RejectDeckFromClipboard"); return true; }, false, LogRecipeFailure);
-            // Put the client's swapped deck-created callbacks back, so the next New Deck is an ordinary one (recipe page, no paste).
-            NativeRecipeSafety.OrDefault(() => {
-                var manager = CollectionManager.Get();
-                manager.RemoveDeckCreatedListener((CollectionManager.DelOnDeckCreated)Delegate.CreateDelegate(
-                    typeof(CollectionManager.DelOnDeckCreated), __instance, Required(typeof(CollectionManagerDisplay), "OnDeckCreatedFromClipboard")));
-                manager.RegisterDeckCreatedListener((CollectionManager.DelOnDeckCreated)Delegate.CreateDelegate(
-                    typeof(CollectionManager.DelOnDeckCreated), __instance, Required(typeof(CollectionManagerDisplay), "OnDeckCreatedByPlayer")));
-                return true;
-            }, false, LogRecipeFailure);
+            NativeRecipeSafety.OrDefault(() => { RestoreDeckCreatedCallbacks(__instance); return true; }, false, LogRecipeFailure);
             NativeRecipeSafety.OrDefault(() => {
                 NativeRecipeGuide.ShowError("DECK SAVED", "Your deck is saved locally. Restart the game to reload it.");
                 return true;
@@ -175,10 +197,9 @@ internal static partial class NativeUIProbe
     {
         if (!active) return true;
         long edited = CollectionManager.Get()?.GetEditedDeck()?.ID ?? 0;
-        if (NativeDeckCodeImport.SkipNativeFill(nativeFillSkipDeck, CurrentCollectionScene(), edited))
+        if (nativeFillSkip.TryConsume(CurrentCollectionScene(), edited))
         {
             log.LogInfo("NATIVE_DECK import native fill skipped deck=" + edited);
-            nativeFillSkipDeck = 0;
             return false;
         }
         log.LogWarning("NATIVE_DECK blocked edit paste");

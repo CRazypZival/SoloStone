@@ -80,6 +80,7 @@ internal static partial class NativeUIProbe
                 : Profile.CreateDraftFromCode(ImportDeckName(name, hero, import), hero, import.Cards, import.Sideboards),
             error => { if (import != null) { LastImportStage = "commit-failed"; LastImportError = Unwrap(error).Message; } ReportDeckError(import == null ? "create" : "import", candidateId, error); },
             out LocalCustomDeck saved)) return false;
+        if (import != null) importCreated = true;
         try
         {
             if (import != null) importProjections[saved.Id] = import;

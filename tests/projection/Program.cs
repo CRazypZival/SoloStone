@@ -94,7 +94,7 @@ Check(!(bool)Call("CanCreateDraft",true,false,true,true,0,L(0)),"paste source bl
     string failure = null;
     bool made = (bool)Call("TryCreateDraft", (Func<LocalCustomDeck>)(() => throw new IOException("disk full")),
         (Action<Exception>)(error => failure = (string)Call("DeckWriteFailureMessage", "import", 7L, error.Message)), null!);
-    Check(!made && failure != null && failure.Contains("import failed") && failure.Contains("disk full"), "an import commit failure gets the deck-write failure text, not an exception");
+    Check(!made && failure != null && failure.Contains("import failed") && failure.Contains("disk full") && failure.Contains("Try the import again"), "an import commit failure gets the deck-write failure text, not an exception");
 }
 // Deck-code import (#140): a pasted code is served only when the import planned it; every other source/hash mix is unchanged.
 foreach (var (normal, pasted, hasCode, planned, expected) in new[] {

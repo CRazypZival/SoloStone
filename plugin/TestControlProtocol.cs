@@ -256,7 +256,7 @@ internal sealed class ControlRequest
             // Native Collection page flip to one card (CollectionPageManager.JumpToPageWithCard); no click.
             case "collection-jump": extras = "cardId"; if (UiRules.CollectionCardId(Text("cardId")) == null) throw new FormatException("Invalid card ID"); break;
             // Deck-code import live check (#140): put text on the client's clipboard, then drive the Collection's own paste entry.
-            case "clipboard-set": extras = "text"; Text("text"); break;
+            case "clipboard-set": extras = "text"; Text("text", 4096); break;
             case "collection-paste-check":
                 extras = "mode answer";
                 if (Has("mode") && Text("mode") != "prompt" && Text("mode") != "paste") throw new FormatException("Invalid paste mode");
@@ -410,9 +410,9 @@ internal sealed class ControlRequest
             throw new FormatException("Invalid shop ID: " + key);
     }
     internal bool Has(string key) => Fields.ContainsKey(key);
-    internal string Text(string key)
+    internal string Text(string key, int maxLength = 256)
     {
-        if (!Fields.TryGetValue(key, out object value) || !(value is string text) || text.Length == 0 || text.Length > 256)
+        if (!Fields.TryGetValue(key, out object value) || !(value is string text) || text.Length == 0 || text.Length > maxLength)
             throw new FormatException("Invalid string: " + key);
         return text;
     }

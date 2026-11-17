@@ -856,7 +856,7 @@ internal static class NativeUIProjection
         if (operation != "create" && operation != "save" && operation != "delete" && operation != "import")
             throw new ArgumentException("Unknown deck operation.", nameof(operation));
         return "Local deck " + operation + " failed for " + id + ": "
-            + ErrorDetail(detail) + ". Fix the deck and retry.";
+            + ErrorDetail(detail) + (operation == "import" ? ". Nothing was saved. Try the import again." : ". Fix the deck and retry.");
     }
     internal static string ReorderRefreshFailureMessage(bool committed, string detail) =>
         (committed ? "Deck order was saved" : "Deck order is unchanged")

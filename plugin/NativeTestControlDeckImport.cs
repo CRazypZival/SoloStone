@@ -26,8 +26,8 @@ internal sealed partial class NativeTestControl
             {
                 if (request.Command == "clipboard-set")
                 {
-                    GUIUtility.systemCopyBuffer = request.Text("text");
-                    operation.Detail["clipboardLength"] = request.Text("text").Length;
+                    GUIUtility.systemCopyBuffer = request.Text("text", 4096);
+                    operation.Detail["clipboardLength"] = request.Text("text", 4096).Length;
                     operation.Detail["inputKind"] = "clipboard";
                 }
                 else

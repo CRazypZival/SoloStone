@@ -98,9 +98,12 @@ internal static class PluginSourcePins
                 failures.Add("deck-code import must never touch the server, the format or grants: " + forbidden);
         if (System.Text.RegularExpressions.Regex.Matches(profile, @"\bCommit\(").Count != 1 || profile.Contains("CreateDraft(", StringComparison.Ordinal))
             failures.Add("CreateDraftFromCode must write through exactly one commit, with no empty draft first");
-        foreach (string required in new[] { "IsInEditMode() == true) return true;", "NativeDeckCodeImport.SkipNativeFill(", "nativeFillSkipDeck = __0;", "RemoveDeckCreatedListener(", "Invoke(__instance, \"RejectDeckFromClipboard\")" })
+        if (!probe.Contains("nameof(TidyRefusedImport)", StringComparison.Ordinal) || !probe.Contains("nameof(LeaveCollectionImportState)", StringComparison.Ordinal)
+            || !editor.Contains("importCreated = true;", StringComparison.Ordinal))
+            failures.Add("a refused or failed import must restore the client's callbacks (postfix), and leaving the Collection must drop the fill skip");
+        foreach (string required in new[] { "IsInEditMode() == true) return true;", "nativeFillSkip.TryConsume(", "nativeFillSkip.Arm(__0);", "RestoreDeckCreatedCallbacks(", "RemoveDeckCreatedListener(", "Invoke(__instance, \"RejectDeckFromClipboard\")" })
             if (!hooks.Contains(required, StringComparison.Ordinal)) failures.Add("deck-code hooks lost a review fix: " + required);
-        if (!plan.Contains("internal static bool KeepsWildOnlyCards => false;", StringComparison.Ordinal))
-            failures.Add("Wild-only cards are dropped until PR #136 is on main (KeepsWildOnlyCards)");
+        if (plan.Contains("KeepsWildOnlyCards", StringComparison.Ordinal) || !plan.Contains("Cards.FromId(id).Collectible", StringComparison.Ordinal))
+            failures.Add("Usable must require collectible cards and carry no Wild switch (the profile ledger decides, PR #136)");
     }
 }
