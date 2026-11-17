@@ -82,7 +82,7 @@ internal static partial class Program
             if (args.Contains(moved)) throw new ArgumentException(moved + " moved to the native-match-logic suite");
         ControllerAdmissionInvariant.Install();
         if (args.Contains("--choice-timeout-only")) { NativeMatch.ClockFreeBot = true; TimedChoiceCompletionNative(); return; }
-        if (args.Contains("--softlock-only")) { NativeMatch.ClockFreeBot = true; ForefatherGuessNative(); AnnouncerRewindDeathKnightNative(); ForefatherFromDiscoverNative(); ForefatherNpcGuessNative(); NpcGuessForcedPicksNative(); GlimmerrootGuessNative(); TimedChoiceCompletionNative(); return; }
+        if (args.Contains("--softlock-only")) { NativeMatch.ClockFreeBot = true; ForefatherGuessNative(); AnnouncerRewindDeathKnightNative(); ForefatherFromDiscoverNative(); ForefatherNpcGuessNative(); NpcGuessForcedPicksNative(); NpcGuessTwoHeldNative(); GlimmerrootGuessNative(); TimedChoiceCompletionNative(); return; }
         if (args.Contains("--ledgerline-only")) { NativeMatch.ClockFreeBot = true; NpcWorldIntegrationTests.LedgerlineForefatherGuess(); return; }
         if (args.Contains("--match-event-log-review-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogReview(); return; }
         if (args.Contains("--match-event-log-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogNative(); return; }
@@ -255,7 +255,7 @@ internal static partial class Program
         AnnouncerRewindDeathKnightNative();
         ForefatherFromDiscoverNative();
         ForefatherNpcGuessNative();
-        NpcGuessForcedPicksNative();
+        NpcGuessForcedPicksNative(); NpcGuessTwoHeldNative();
         GlimmerrootGuessNative();
         TimedChoiceCompletionNative();
         GroupProofs.Run(ProofKind.Native);

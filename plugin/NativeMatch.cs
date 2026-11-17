@@ -1095,8 +1095,9 @@ public sealed class NativeMatch
         if (Game.State == State.COMPLETE) { deferredOpposing.Clear(); return (null, null, null); }
         if (deferredOpposing.Count > 0 || !OpposingChoiceReceived(shown.Index))
         {
-            // Steam Deck, match d5b8e205: a slow client may not have this EntityChoices yet when the NPC answers. Sent with the
-            // answer's history, the result row could be replayed before the choice exists, and the conceal spell would never see it.
+            // A slow client (the Steam Deck) may not have this EntityChoices yet when the NPC answers. Client code reading, not seen
+            // live: a choice queued behind an earlier opponent choice does not hold the power queue, so a result row sent with the
+            // answer's history could be replayed before the conceal spell exists. The row follows the released EntitiesChosen instead.
             deferredOpposing.Add((shown, picks, proxies, guessResult));
             guessResult = null;
             return (null, null, null);
@@ -1119,9 +1120,9 @@ public sealed class NativeMatch
             if (entry.Guess.HasValue)
             {
                 // The answer's Battlecry block went out already: the row follows its EntitiesChosen on its own, loose.
+                // Its own row, not the shared guessResult field: a pending guess of the human's must still reach its own history.
                 var result = new NativePowerHistory();
-                guessResult = entry.Guess;
-                PlaceGuessResult(result);
+                InsertGuessRow(result, entry.Guess.Value.Source, entry.Guess.Value.Target);
                 SendPowerHistory(result);
             }
             RetireChosenChoiceActors(entry.Choices, entry.Picks, entry.Proxies, new HashSet<int>());
@@ -6257,6 +6258,11 @@ public sealed class NativeMatch
         if (!guessResult.HasValue) return;
         var (source, target) = guessResult.Value;
         guessResult = null;
+        InsertGuessRow(packet, source, target);
+    }
+
+    private void InsertGuessRow(NativePowerHistory packet, int source, int target)
+    {
         var row = new PowerHistoryData { MetaData = new PegasusGame.PowerHistoryMetaData {
             Type = HistoryMeta.Type.TARGET, Data = source, Info = new List<int> { target } } };
         int at = packet.List.FindIndex(r => r.HasPowerStart && (int)r.PowerStart.Type == (int)HistoryBlock.Type.POWER && r.PowerStart.Source == source);

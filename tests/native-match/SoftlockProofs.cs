@@ -411,10 +411,55 @@ internal static partial class Program
             InvokeProcess(match, EndTurnTask.Any(bot));
             FlushFieldHistory(match);
             Check(game.CurrentPlayer == game.Player1 && game.State == State.RUNNING, name + ": the NPC's turn hands back to the human");
+            Check(DeckDiscoverWireHistory(capture, cursor).Count(r => r.HasMetaData && r.MetaData.Type == HistoryMeta.Type.TARGET && r.MetaData.Info.Count == 1
+                && shown.Entities.Contains(r.MetaData.Info[0])) == 1, name + ": no second result row in the end-turn history");
             capture.SerializeAll();
             cases++;
         }
         Console.WriteLine($"PASS NPC guess sources: {cases} forced picks, held and prompt EntitiesChosen, the result row follows the pick (Deck d5b8e205)");
+    }
+
+    // Two NPC guesses held at once (the second queued behind the first even after its own receipt): each EntitiesChosen is
+    // released in order once the client has the first choice, and each result row follows its own EntitiesChosen.
+    private static void NpcGuessTwoHeldNative()
+    {
+        var (capture, match) = NpcGuessMatch();
+        var received = new HashSet<int>();
+        match.NativeOpposingChoiceReceived = id => received.Contains(id);
+        var game = match.Game; var bot = game.Player2;
+        var shownChoices = new List<EntityChoices>(); var sources = new List<int>();
+        int cursor = capture.Packets.Count;
+        foreach (string card in new[] { "TIME_041", "UNG_035" })
+        {
+            var source = Generic.DrawCard(bot, Cards.FromId(card));
+            FlushFieldHistory(match);
+            InvokeProcess(match, bot.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id));
+            FlushFieldHistory(match);
+            Check(bot.Choice != null, "two held guesses: " + card + " opens its choice");
+            var shown = capture.Packets.Where(p => p.Id == 17).Select(p => (EntityChoices)p.Message).Last(c => c.PlayerId == bot.PlayerId && c.Source == source.Id);
+            InvokeProcess(match, ChooseTask.Pick(bot, match.EngineReturnId(shown.Entities[0])));
+            FlushFieldHistory(match);
+            shownChoices.Add(shown); sources.Add(source.Id);
+        }
+        Check(match.DeferredOpposingChosen == 2 && !capture.Packets.Skip(cursor).Any(p => p.Id == 13), "two held guesses: both EntitiesChosen wait");
+        received.Add(shownChoices[1].Id); match.TickNpc();
+        Check(match.DeferredOpposingChosen == 2 && !capture.Packets.Skip(cursor).Any(p => p.Id == 13), "two held guesses: the second waits behind the first");
+        received.Add(shownChoices[0].Id); match.TickNpc();
+        Check(match.DeferredOpposingChosen == 0, "two held guesses: both released");
+        int RowPacket(EntityChoices shown) => capture.Packets.FindIndex(cursor, p => p.Id == 19 && ((PowerHistory)p.Message).List.Any(r => r.HasMetaData
+            && r.MetaData.Type == HistoryMeta.Type.TARGET && r.MetaData.Info.Count == 1 && shown.Entities.Contains(r.MetaData.Info[0])));
+        int ChosenPacket(EntityChoices shown) => capture.Packets.FindIndex(cursor, p => p.Id == 13 && ((EntitiesChosen)p.Message).ChooseEntities.Id == shown.Id);
+        int chosen0 = ChosenPacket(shownChoices[0]), row0 = RowPacket(shownChoices[0]), chosen1 = ChosenPacket(shownChoices[1]), row1 = RowPacket(shownChoices[1]);
+        Check(chosen0 >= 0 && chosen0 < row0 && row0 < chosen1 && chosen1 < row1,
+            $"two held guesses: EntitiesChosen, row, EntitiesChosen, row in order ({chosen0}, {row0}, {chosen1}, {row1})");
+        for (int i = 0; i < 2; i++)
+            Check(DeckDiscoverWireHistory(capture, cursor).Count(r => r.HasMetaData && r.MetaData.Type == HistoryMeta.Type.TARGET && r.MetaData.Data == sources[i]
+                && r.MetaData.Info.Count == 1 && shownChoices[i].Entities.Contains(r.MetaData.Info[0])) == 1, "two held guesses: one row for source " + sources[i]);
+        InvokeProcess(match, EndTurnTask.Any(bot));
+        FlushFieldHistory(match);
+        Check(game.CurrentPlayer == game.Player1 && game.State == State.RUNNING, "two held guesses: the NPC's turn hands back to the human");
+        capture.SerializeAll();
+        Console.WriteLine("PASS NPC guess sources: two held guesses release in order, each row after its own EntitiesChosen");
     }
 
     // OpposingChoiceMatch with class cards in both decks: Glimmerroot offers a card from its opponent's starting deck only when
