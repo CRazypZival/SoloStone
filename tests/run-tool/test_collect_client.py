@@ -85,6 +85,22 @@ class CollectClient(unittest.TestCase):
             self.link(self.references / name, linked / name)
         self.refused_and_kept(linked)
 
+    def test_a_folder_of_hard_links_to_references_game_is_refused(self):
+        self.collect_once()
+        linked = Path(self.temp.name) / 'hard-linked-files'
+        linked.mkdir()
+        for name in FILES:
+            os.link(self.references / name, linked / name)
+        self.refused_and_kept(linked)
+
+    def test_references_game_that_only_links_to_the_client_is_replaced_by_copies(self):
+        self.references.mkdir(parents=True)
+        for name in FILES:
+            self.link(self.client / name, self.references / name)
+        self.collect_once()
+        self.assertFalse(any((self.references / name).is_symlink() for name in FILES))
+        self.assertTrue(all((self.client / name).is_file() for name in FILES))
+
     def test_a_failed_copy_keeps_the_earlier_copy(self):
         self.collect_once()
         copy = self.run.shutil.copyfile

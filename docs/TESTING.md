@@ -65,7 +65,8 @@ python3 tests/run.py --client "/path/to/Hearthstone"
 `--client` takes your Hearthstone folder, or its `Managed` folder. It copies the libraries the plugin references (the
 13 files in step 1 of [BUILDING.md](BUILDING.md)) into `references/game/`, which git ignores, then runs everything.
 Nothing is committed and nothing leaves your machine. Later runs find the copied files, so `--client` is needed only
-after your client changes. Use the client version named in `installer/tested-client.json`; another one can fail
+after your client changes. It refuses a folder that is `references/game` itself (or links to it), so it never removes
+the copy it would copy from. Use the client version named in `installer/tested-client.json`; another one can fail
 in ways that are not bugs.
 
 A `client` suite is **skipped, with the reason printed**, when `references/game` is incomplete or when data it needs
