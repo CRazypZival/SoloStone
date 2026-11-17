@@ -6354,7 +6354,13 @@ public sealed class NativeMatch
     private PegasusGame.PowerHistoryEntity ToNativeHistoryEntity(EngineHistoryEntity entity, bool revealToHuman = false, bool completeSnapshot = true,
         IReadOnlyDictionary<int, EngineHistoryEntity> resetEntities = null, bool currentHealthSnapshot = false)
     {
+        // A Watfin offer with one changed stat is shown as its original card, whose printed stats the client compares the
+        // shown ones with: send the shown stats as the definition too, so no stat is coloured and the answer is not given away.
+        bool changedOffer = false;
 #if ENGINE_SOURCE
+        // Only while it is an offer: once picked, the card keeps its real stats, and a later buff colours normally.
+        changedOffer = entity.Name == "JAIL_EVENT_100t" && entity.Tags != null && entity.Tags.ContainsKey(GameTag.MODULAR_ENTITY_PART_1)
+            && (!entity.Tags.TryGetValue(GameTag.ZONE, out int offerZone) || offerZone == (int)SabberStoneCore.Enums.Zone.SETASIDE);
         entity = SabberStoneCore.Actions.DiscoverRealRules.ProjectOfferForNative(entity);
 #endif
         // Callers supply an entry snapshot, IdentityAt result, checkpoint, or endpoint-only snapshot.
@@ -6541,6 +6547,9 @@ public sealed class NativeMatch
                 && raceDefinition.Id.StartsWith("CFM_712_t", StringComparison.Ordinal)
                 ? new[] { GameTag.ATK, GameTag.HEALTH, GameTag.COST }.Select(tag =>
                     new NativeTag { Name = (int)tag, Value = raceDefinition[tag] }).ToList()
+                : changedOffer && !hidden && name.Length > 0
+                ? new[] { GameTag.ATK, GameTag.HEALTH, GameTag.COST }.Select(tag => new NativeTag { Name = (int)tag,
+                    Value = tags.FirstOrDefault(shown => shown.Name == (int)tag)?.Value ?? 0 }).ToList()
                 : new List<NativeTag>(),
             Tags = tags.OrderBy(tag => tag.Name).ToList()
         };

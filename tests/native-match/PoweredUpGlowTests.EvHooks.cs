@@ -71,8 +71,43 @@ internal static partial class PoweredUpGlowTests
             }
             f.Process(ConcedeTask.Any(p)); Check(g.State == State.COMPLETE,"Concede remains legal");
         }
+        WatfinOfferDefTags();
         EvHooksNativeLocationInput(); EvHooksNativeStartup(); EvHooksNativeChooseOne(); EvHooksNativeQueuedCraft();
         Console.WriteLine("PASS EVENT native private offers/draws/rewards/startup, dynamic stats and Concede");
+    }
+    // #124: the changed offer's stat must not be coloured, so the client's printed baseline for it is the shown value.
+    internal static void WatfinOfferDefTags()
+    {
+        int changedStat = 0, offersChecked = 0;
+        for (int seed = 1; seed <= 60; seed++)
+        {
+            var f = new Fixture(); var g = f.Game; var p = g.CurrentPlayer;
+            foreach (var held in p.HandZone.ToArray()) p.SetasideZone.Add(p.HandZone.Remove(held));
+            p.BaseMana = 10; p.UsedMana = 0; g.SetRandomSeed(seed);
+            f.Process(PlayCardTask.Any(p, Generic.DrawCard(p, Cards.FromId("JAIL_EVENT_100"))));
+            int custom = p.Choice.Choices.Single(i => g.IdEntityDic[i].Card.Id == "JAIL_EVENT_100t");
+            var rows = f.Entries.Where(e => e.HasFullEntity && e.FullEntity.Entity == custom).Select(e => e.FullEntity).ToArray();
+            Check(rows.Length > 0, "Watfin offer is sent as a FULL_ENTITY: seed " + seed);
+            foreach (var row in rows)
+            {
+                offersChecked++;
+                foreach (var tag in new[] { GameTag.ATK, GameTag.HEALTH, GameTag.COST })
+                {
+                    int shown = row.Tags.FirstOrDefault(t => t.Name == (int)tag)?.Value ?? 0;
+                    var def = row.DefTags.SingleOrDefault(t => t.Name == (int)tag);
+                    Check(def != null && def.Value == shown, $"Watfin offer definition {tag} equals the shown value: seed {seed}");
+                    if (Cards.FromId(row.Name)[tag] != shown) changedStat++;
+                }
+            }
+            f.Process(ChooseTask.Pick(p, custom));
+            var picked = g.IdEntityDic[custom];
+            // A snapshot of the picked card in the hand shows its real stats and carries no definition override.
+            foreach (var e in f.Entries.Where(e => e.HasShowEntity && e.ShowEntity.Entity == custom).Select(e => e.ShowEntity)
+                .Where(e => e.Tags.Any(t => t.Name == (int)GameTag.ZONE && t.Value == (int)SabberStoneCore.Enums.Zone.HAND)))
+                Check(e.DefTags.Count == 0, "Watfin card keeps its real stats once picked: seed " + seed);
+            Check(picked.Zone == p.HandZone, "Watfin pick reaches the hand");
+        }
+        Check(offersChecked >= 60 && changedStat > 0, "Watfin DefTags test saw changed stats (" + changedStat + ")");
     }
     private static void EvHooksNativeChooseOne()
     {
