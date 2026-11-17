@@ -1112,21 +1112,29 @@ public sealed class NativeMatch
     {
         if (deferredOpposing.Count == 0) return;
         if (Game == null || Game.State == State.COMPLETE) { deferredOpposing.Clear(); return; }
-        while (deferredOpposing.Count > 0 && OpposingChoiceReceived(deferredOpposing[0].Choices.Index))
+        if (!OpposingChoiceReceived(deferredOpposing[0].Choices.Index)) return;
+        // SendPowerHistory places a pending guessResult (the human's, answered in this same batch) into any packet: set it aside
+        // while these releases send their own rows and retire packets, so it reaches the human's own answer history.
+        var pending = guessResult;
+        guessResult = null;
+        try
         {
-            var entry = deferredOpposing[0];
-            deferredOpposing.RemoveAt(0);
-            SendChosen(entry.Choices, entry.Picks);
-            if (entry.Guess.HasValue)
+            while (deferredOpposing.Count > 0 && OpposingChoiceReceived(deferredOpposing[0].Choices.Index))
             {
-                // The answer's Battlecry block went out already: the row follows its EntitiesChosen on its own, loose.
-                // Its own row, not the shared guessResult field: a pending guess of the human's must still reach its own history.
-                var result = new NativePowerHistory();
-                InsertGuessRow(result, entry.Guess.Value.Source, entry.Guess.Value.Target);
-                SendPowerHistory(result);
+                var entry = deferredOpposing[0];
+                deferredOpposing.RemoveAt(0);
+                SendChosen(entry.Choices, entry.Picks);
+                if (entry.Guess.HasValue)
+                {
+                    // The answer's Battlecry block went out already: the row follows its EntitiesChosen on its own, loose.
+                    var result = new NativePowerHistory();
+                    InsertGuessRow(result, entry.Guess.Value.Source, entry.Guess.Value.Target);
+                    SendPowerHistory(result);
+                }
+                RetireChosenChoiceActors(entry.Choices, entry.Picks, entry.Proxies, new HashSet<int>());
             }
-            RetireChosenChoiceActors(entry.Choices, entry.Picks, entry.Proxies, new HashSet<int>());
         }
+        finally { guessResult = pending; }
     }
 
     // After a history batch: retire a spent SETASIDE pick (Adapt, refresh token, proxy), then show a pending choice.

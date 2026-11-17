@@ -419,7 +419,7 @@ internal static partial class Program
         Console.WriteLine($"PASS NPC guess sources: {cases} forced picks, held and prompt EntitiesChosen, the result row follows the pick (Deck d5b8e205)");
     }
 
-    // Two NPC guesses held at once (the second queued behind the first even after its own receipt): each EntitiesChosen is
+    // Two NPC guesses held at once (the second received but queued behind the first, still unreceived): each EntitiesChosen is
     // released in order once the client has the first choice, and each result row follows its own EntitiesChosen.
     private static void NpcGuessTwoHeldNative()
     {
@@ -437,12 +437,14 @@ internal static partial class Program
             FlushFieldHistory(match);
             Check(bot.Choice != null, "two held guesses: " + card + " opens its choice");
             var shown = capture.Packets.Where(p => p.Id == 17).Select(p => (EntityChoices)p.Message).Last(c => c.PlayerId == bot.PlayerId && c.Source == source.Id);
+            // The second choice is already received: only the first one, still unreceived, can hold it.
+            if (shownChoices.Count == 1) received.Add(shown.Id);
             InvokeProcess(match, ChooseTask.Pick(bot, match.EngineReturnId(shown.Entities[0])));
             FlushFieldHistory(match);
             shownChoices.Add(shown); sources.Add(source.Id);
         }
         Check(match.DeferredOpposingChosen == 2 && !capture.Packets.Skip(cursor).Any(p => p.Id == 13), "two held guesses: both EntitiesChosen wait");
-        received.Add(shownChoices[1].Id); match.TickNpc();
+        match.TickNpc();
         Check(match.DeferredOpposingChosen == 2 && !capture.Packets.Skip(cursor).Any(p => p.Id == 13), "two held guesses: the second waits behind the first");
         received.Add(shownChoices[0].Id); match.TickNpc();
         Check(match.DeferredOpposingChosen == 0, "two held guesses: both released");
@@ -460,6 +462,53 @@ internal static partial class Program
         Check(game.CurrentPlayer == game.Player1 && game.State == State.RUNNING, "two held guesses: the NPC's turn hands back to the human");
         capture.SerializeAll();
         Console.WriteLine("PASS NPC guess sources: two held guesses release in order, each row after its own EntitiesChosen");
+    }
+
+    // A held NPC guess released by the human's own guess answer (SendHistory flushes it, not TickNpc): each row goes to its own
+    // packet. The NPC's row follows the NPC's EntitiesChosen; the human's row stays in the human's answer history, inside its block.
+    private static void NpcGuessHeldThenHumanGuessNative()
+    {
+        var (capture, match) = NpcGuessMatch();
+        var received = new HashSet<int>();
+        match.NativeOpposingChoiceReceived = id => received.Contains(id);
+        var game = match.Game; var bot = game.Player2; var player = game.Player1;
+        var npcSource = Generic.DrawCard(bot, Cards.FromId("TIME_041"));
+        FlushFieldHistory(match);
+        InvokeProcess(match, bot.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == npcSource.Id));
+        FlushFieldHistory(match);
+        var npcShown = capture.Packets.Where(p => p.Id == 17).Select(p => (EntityChoices)p.Message).Last(c => c.PlayerId == bot.PlayerId && c.Source == npcSource.Id);
+        InvokeProcess(match, ChooseTask.Pick(bot, match.EngineReturnId(npcShown.Entities[0])));
+        FlushFieldHistory(match);
+        Check(match.DeferredOpposingChosen == 1, "held NPC guess, then human guess: the NPC's EntitiesChosen waits");
+        InvokeProcess(match, EndTurnTask.Any(bot));
+        FlushFieldHistory(match);
+        Check(game.CurrentPlayer == player && match.DeferredOpposingChosen == 1, "held NPC guess, then human guess: the human's turn, NPC answer still held");
+        player.BaseMana = 10; player.UsedMana = 0;
+        var humanSource = Generic.DrawCard(player, Cards.FromId("TIME_041"));
+        FlushFieldHistory(match);
+        Invoke0(match, "SendHumanOptions");
+        var options = capture.Last<AllOptions>(14);
+        int play = options.Options.FindIndex(o => o.MainOption?.Id == match.WireReturnId(humanSource.Id) && o.MainOption.PowerKeyword == 0);
+        Check(play >= 0, "held NPC guess, then human guess: native play option");
+        match.SendOption(options.Id, play, 0, -1, 1);
+        var humanOffer = capture.Packets.Where(p => p.Id == 17).Select(p => (EntityChoices)p.Message).Last(c => c.PlayerId == player.PlayerId);
+        Check(player.Choice != null && humanOffer.Source == match.WireReturnId(humanSource.Id) && humanOffer.Entities.Count == 3, "held NPC guess, then human guess: the human's guess offered");
+        received.Add(npcShown.Id);
+        int cursor = capture.Packets.Count;
+        match.SendChoices(humanOffer.Id, new List<int> { humanOffer.Entities[0] });
+        Check(match.DeferredOpposingChosen == 0, "held NPC guess, then human guess: the human's answer releases the NPC's EntitiesChosen");
+        bool Names(PowerHistoryData r, EntityChoices c) => r.HasMetaData && r.MetaData.Type == HistoryMeta.Type.TARGET && r.MetaData.Info.Count == 1 && c.Entities.Contains(r.MetaData.Info[0]);
+        var packets = capture.Packets.Select((p, i) => (p, i)).Skip(cursor).Where(x => x.p.Id == 19).Select(x => (Index: x.i, List: ((PowerHistory)x.p.Message).List)).ToList();
+        var npcRows = packets.Where(x => x.List.Any(r => Names(r, npcShown))).ToList();
+        var humanRows = packets.Where(x => x.List.Any(r => Names(r, humanOffer))).ToList();
+        int npcChosen = capture.Packets.FindIndex(cursor, p => p.Id == 13 && ((EntitiesChosen)p.Message).ChooseEntities.Id == npcShown.Id);
+        Check(npcRows.Count == 1 && npcRows[0].List.Count(r => Names(r, npcShown)) == 1 && npcChosen >= 0 && npcRows[0].Index > npcChosen,
+            "held NPC guess, then human guess: one NPC row, after the NPC's EntitiesChosen");
+        Check(humanRows.Count == 1 && humanRows[0].List.Count(r => Names(r, humanOffer)) == 1, "held NPC guess, then human guess: one human row, found " + humanRows.Count);
+        Check(humanRows[0].Index != npcRows[0].Index && humanRows[0].List.Any(r => r.HasPowerStart && r.PowerStart.Source == humanOffer.Source),
+            "held NPC guess, then human guess: the human's row is in the human's own answer history, not the NPC's loose packet");
+        capture.SerializeAll();
+        Console.WriteLine("PASS NPC guess held until the human's own guess answer: each result row in its own packet");
     }
 
     // OpposingChoiceMatch with class cards in both decks: Glimmerroot offers a card from its opponent's starting deck only when
