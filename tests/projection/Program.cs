@@ -89,6 +89,13 @@ Check(!(bool)Call("CanCreateDraft",true,true,true,true,NativeUIProjection.Maximu
 Check((bool)Call("CanCreateDraft",true,true,true,true,NativeUIProjection.MaximumPersonalDecks-1,L(NativeUIProjection.MaximumPersonalDecks-1)),"raised capacity admits the 92nd personal deck");
 Check((bool)Call("CanCreateDraft",true,true,true,true,19,L(19)),"retail personal cap (19) no longer blocks native create");
 Check(!(bool)Call("CanCreateDraft",true,false,true,true,0,L(0)),"paste source blocks native create");
+// A failed import commit reaches the player: the failure callback builds its popup text without throwing (#140 review B1).
+{
+    string failure = null;
+    bool made = (bool)Call("TryCreateDraft", (Func<LocalCustomDeck>)(() => throw new IOException("disk full")),
+        (Action<Exception>)(error => failure = (string)Call("DeckWriteFailureMessage", "import", 7L, error.Message)), null!);
+    Check(!made && failure != null && failure.Contains("import failed") && failure.Contains("disk full"), "an import commit failure gets the deck-write failure text, not an exception");
+}
 // Deck-code import (#140): a pasted code is served only when the import planned it; every other source/hash mix is unchanged.
 foreach (var (normal, pasted, hasCode, planned, expected) in new[] {
     (true, false, false, false, true), (true, false, false, true, true), (true, false, true, false, false), (true, false, true, true, false),

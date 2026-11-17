@@ -853,7 +853,7 @@ internal static class NativeUIProjection
         + ErrorDetail(detail) + ". Resolve the error and retry.";
     internal static string DeckWriteFailureMessage(string operation, long id, string detail)
     {
-        if (operation != "create" && operation != "save" && operation != "delete")
+        if (operation != "create" && operation != "save" && operation != "delete" && operation != "import")
             throw new ArgumentException("Unknown deck operation.", nameof(operation));
         return "Local deck " + operation + " failed for " + id + ": "
             + ErrorDetail(detail) + ". Fix the deck and retry.";

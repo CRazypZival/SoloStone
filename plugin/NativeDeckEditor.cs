@@ -66,6 +66,12 @@ internal static partial class NativeUIProbe
             Profile.CustomDecks.Count, SessionLoanerKeys().Count());
         // The import never switches the format: the client's own format change on paste is coerced back by NativeFormatLock.
         if (import != null && hero != null && hero != import.Hero) allowed = false;
+        if (import != null && NativeUIProjection.OwnsCreateRequest(active, CurrentCollectionScene(), true, isHeroOverridden) && !allowed)
+        {
+            // A planned import the create gates refuse (deck cap, hero mismatch) is a refusal the player sees, not an exception in the client.
+            ReportImportRefused(ImportRefusalText(Profile.CustomDecks.Count), "refused:gate");
+            return false;
+        }
         if (!NativeUIProjection.OwnsCreateRequest(active, CurrentCollectionScene(), allowed, isHeroOverridden))
             throw new InvalidOperationException("Unsupported local deck creation request.");
 
@@ -76,7 +82,7 @@ internal static partial class NativeUIProbe
             out LocalCustomDeck saved)) return false;
         try
         {
-            if (import != null) RecordImport(saved, import);
+            if (import != null) importProjections[saved.Id] = import;
             decks.Add(saved.Id, LocalProfile.LedgerDeck(saved.Name, saved.Hero, saved.Cards, saved.Sideboards, false));
             var header = ExpectedHeader(saved.Id);
             editedDraftId = saved.Id;
@@ -85,6 +91,12 @@ internal static partial class NativeUIProbe
             MethodInfo created = Required(typeof(CollectionManager), "OnDeckCreated",
                 new[] { typeof(NetCache.DeckHeader), typeof(int?) });
             Processor.ScheduleCallback(0.5f, false, _ => created.Invoke(__instance, new object[] { header, null }));
+            if (import != null)
+            {
+                // Only the report: a throw here must not hide the saved deck.
+                try { RecordImport(saved, import); }
+                catch (Exception recordError) { log.LogError("NATIVE_DECK import record failed: " + recordError); }
+            }
         }
         catch (Exception error)
         {

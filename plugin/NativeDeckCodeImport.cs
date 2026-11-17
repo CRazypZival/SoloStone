@@ -29,16 +29,19 @@ internal static class NativeDeckCodeImport
 {
     // Owner 2026-11-16: Wild-only cards are dropped until PR #136 (Wild cards kept in drafts, unplayable in Standard) is on
     // main. When it lands, return true here: Wild-only cards then count as usable and are kept in the draft. Flipping it also
-    // needs Known() to require collectible cards that the profile ledger knows, or uncollectible tokens would pass.
+    // nothing else: Usable() then widens only its Standard test to collectible ledger cards.
     internal static bool KeepsWildOnlyCards => false;
 
     // 32 UTF-16 code units, the limit LocalShop.ValidateDeck puts on a saved deck name (not 32 visible characters).
     internal const int NameLength = 32;
     private const int MaximumCodeCopies = 200; // a real code holds at most 40 main cards plus a few sideboard cards
 
-    // The editor's universe: the legacy custom pool, or any Standard card the profile ledger knows (pack and shop cards).
-    internal static bool Usable(string id) => id != null && Known(id)
-        && (LocalDecks.IsCustomCard(id) || LocalProfile.KnownLedgerCard(id) && LocalShop.IsStandardCard(Cards.FromId(id)) || KeepsWildOnlyCards);
+    // The editor's universe: the legacy custom pool, or a card the profile ledger knows that is Standard. The Wild switch widens
+    // only that Standard test (to any collectible card): the ledger term stays, so tokens, uncollectible and hero cards never pass.
+    internal static bool Usable(string id) => Usable(id, KeepsWildOnlyCards);
+    internal static bool Usable(string id, bool keepsWild) => id != null && Known(id)
+        && (LocalDecks.IsCustomCard(id) || LocalProfile.KnownLedgerCard(id)
+            && (keepsWild ? Cards.FromId(id).Collectible : LocalShop.IsStandardCard(Cards.FromId(id))));
 
     private static bool Known(string id)
     {
@@ -46,9 +49,10 @@ internal static class NativeDeckCodeImport
         catch (KeyNotFoundException) { return false; }
     }
 
-    // The client fills a just-imported deck through the edit-mode paste: skipped (silently) only for that deck, once, while fresh.
-    internal static bool SkipNativeFill(long importedDeck, DateTime until, DateTime now, long editedDeck) =>
-        importedDeck != 0 && now <= until && editedDeck == importedDeck;
+    // The client fills a just-imported deck through the edit-mode paste: skipped (silently) only for that deck, once.
+    // Valid until that first paste for that deck, or until the Collection is left; no wall-clock window (slow machines, Steam Deck).
+    internal static bool SkipNativeFill(long importedDeck, bool inCollection, long editedDeck) =>
+        importedDeck != 0 && inCollection && editedDeck == importedDeck;
 
     internal static DeckCodePlan Plan(string hero, string codeName, string fallbackName,
         IEnumerable<(string id, int qty)> main, IEnumerable<(string owner, string id, int qty)> side)

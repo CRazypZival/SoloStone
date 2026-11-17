@@ -1012,6 +1012,8 @@ M	Assembly-CSharp	CollectionManager	OnDeckDeletedWhileOffline	*
 M	Assembly-CSharp	CollectionManager	OnInitialClientStateDeckContents	System.Void(NetCache+NetCacheDecks,System.Collections.Generic.List`1<PegasusUtil.DeckContents>)
 M	Assembly-CSharp	CollectionManager	OnInitialCollectionReceived	NetCache+NetCacheCollection(PegasusUtil.Collection)
 M	Assembly-CSharp	CollectionManager	OnMassDisenchantResponse	*
+M	Assembly-CSharp	CollectionManager	RegisterDeckCreatedListener	System.Void(CollectionManager+DelOnDeckCreated)
+M	Assembly-CSharp	CollectionManager	RemoveDeckCreatedListener	System.Boolean(CollectionManager+DelOnDeckCreated)
 M	Assembly-CSharp	CollectionManager	RequestDeckContentsForDecksWithoutContentsLoaded	*
 M	Assembly-CSharp	CollectionManager	SendCreateDeck	*
 M	Assembly-CSharp	CollectionManager	SetShowDeckTemplatePageForClass	System.Void(TAG_CLASS,System.Boolean)
@@ -1024,6 +1026,7 @@ M	Assembly-CSharp	CollectionManager+OnMassDisenchant	Invoke	System.Void(System.I
 M	Assembly-CSharp	CollectionManagerDisplay	CreateDeckFromClipboard	*
 M	Assembly-CSharp	CollectionManagerDisplay	Exit	*
 M	Assembly-CSharp	CollectionManagerDisplay	GetPhoneDeckTemplateTray	DeckTemplatePicker()
+M	Assembly-CSharp	CollectionManagerDisplay	OnDeckCreatedByPlayer	*
 M	Assembly-CSharp	CollectionManagerDisplay	OnDeckCreatedFromClipboard	*
 M	Assembly-CSharp	CollectionManagerDisplay	RejectDeckFromClipboard	*
 M	Assembly-CSharp	CollectionManagerDisplay	ShowDeck	*
@@ -2982,6 +2985,7 @@ T	Assembly-CSharp	CollectionManager
 T	Assembly-CSharp	CollectionManager+CardModification		
 T	Assembly-CSharp	CollectionManager+CardModification+ModificationType		
 T	Assembly-CSharp	CollectionManager+DelOnAllDeckContents		
+T	Assembly-CSharp	CollectionManager+DelOnDeckCreated		
 T	Assembly-CSharp	CollectionManager+OnMassDisenchant		
 T	Assembly-CSharp	CollectionManager+TemplateDeck		
 T	Assembly-CSharp	CollectionManagerDisplay		

@@ -144,10 +144,18 @@ internal static class DeckCodeChecks
         }
 
         // The native fill after an import is skipped silently, once, only for that deck and only while fresh; any other edit paste speaks.
-        var now = DateTime.UtcNow;
-        Check(NativeDeckCodeImport.SkipNativeFill(7, now.AddSeconds(5), now, 7) && !NativeDeckCodeImport.SkipNativeFill(7, now.AddSeconds(5), now, 8)
-            && !NativeDeckCodeImport.SkipNativeFill(7, now.AddSeconds(-1), now, 7) && !NativeDeckCodeImport.SkipNativeFill(0, now.AddSeconds(5), now, 0),
-            "the native fill is skipped only for the imported deck while fresh; a real edit paste is not");
+        Check(NativeDeckCodeImport.SkipNativeFill(7, true, 7) && !NativeDeckCodeImport.SkipNativeFill(7, true, 8)
+            && !NativeDeckCodeImport.SkipNativeFill(7, false, 7) && !NativeDeckCodeImport.SkipNativeFill(0, true, 0),
+            "the native fill is skipped only for the imported deck, in the Collection; a real edit paste is not");
+
+        // The Wild switch widens only the Standard test: tokens, uncollectible and hero cards stay unusable either way.
+        var junk = Cards.All.Where(card => card.Implemented && !card.Collectible).Select(card => card.Id).Take(200).ToArray();
+        var heroCard = Cards.All.Where(card => card.Type == CardType.HERO).Select(card => card.Id).FirstOrDefault() ?? junk[0];
+        Check(junk.Length > 0 && junk.Concat(new[] { heroCard }).All(id => !NativeDeckCodeImport.Usable(id, false) && !NativeDeckCodeImport.Usable(id, true)),
+            "tokens, uncollectible and hero cards are unusable with the Wild switch off and on");
+        Check(neutral.All(id => NativeDeckCodeImport.Usable(id, false) && NativeDeckCodeImport.Usable(id, true)) && pack.All(id => NativeDeckCodeImport.Usable(id, true)),
+            "Standard cards stay usable with the Wild switch on");
+
 
         // Refusals.
         Refuses(() => Plan("HERO_99", Main((neutral[0], 2))), DeckCodeRefusalReason.UnsupportedClass, "an unsupported class is refused");
