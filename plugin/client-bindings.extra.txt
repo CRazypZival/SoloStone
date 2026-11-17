@@ -566,3 +566,5 @@ site NativeBigCardWatchdog.ResolveBindings | Method | HistoryManager.m_showingBi
 
 # Code that tolerates a missing target. It must not block players; each line goes stale if the code stops reading the client.
 skip NativeShopTilePrices.Mirror # cosmetic: copies price text style, and skips any field a client lacks (field != null)
+skip NativeCreationPortrait.Install # cosmetic: patches Actor.UpdatePortraitTexture only if it exists (self-adapting, ClientChecks.NoteSelfAdapting); a miss leaves the stock Creation art
+skip NativeCreationPortrait.PortraitOf # cosmetic: CardDef.GetPortraitTexture and AssetHandle.Asset (AssetHandle is outside references/game) are found by name, any failure is caught and leaves the stock art

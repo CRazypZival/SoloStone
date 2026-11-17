@@ -18,8 +18,7 @@ internal static class NativeCreationPortrait
     // Kept alive for the session: the texture lease is released with its CardDef.
     private static readonly List<DefLoader.DisposableCardDef> Defs = new List<DefLoader.DisposableCardDef>();
     private static readonly List<object> Handles = new List<object>();
-    private static readonly MethodInfo GetPortraitTexture = typeof(CardDef).GetMethod("GetPortraitTexture",
-        new[] { typeof(TAG_PREMIUM), typeof(bool), typeof(bool) });
+    private static MethodInfo getPortraitTexture;
     private static readonly HashSet<int> Failed = new HashSet<int>();
 
     internal static void Install(Harmony harmony, ManualLogSource logger)
@@ -29,6 +28,8 @@ internal static class NativeCreationPortrait
         {
             var original = AccessTools.Method(typeof(Actor), "UpdatePortraitTexture") ?? throw new MissingMethodException("Actor", "UpdatePortraitTexture");
             harmony.Patch(original, postfix: new HarmonyMethod(typeof(NativeCreationPortrait), nameof(UseFirstDragonPortrait)));
+            // Cosmetic: a client rename must never refuse a launch over a portrait (the stock art stays).
+            ClientChecks.NoteSelfAdapting(original);
         }
         catch (Exception error) { log?.LogWarning("creation portrait hook unavailable: " + error.Message); }
     }
@@ -60,7 +61,8 @@ internal static class NativeCreationPortrait
             if (def?.CardDef == null) { def?.Dispose(); Fail(dbfId, new InvalidOperationException("part CardDef unavailable")); return null; }
             Defs.Add(def);
             // AssetHandle<Texture> lives in an assembly the plugin does not reference, so it is read by reflection.
-            object handle = GetPortraitTexture.Invoke(def.CardDef, new object[] { premium, true, false });
+            object handle = (getPortraitTexture ?? (getPortraitTexture = typeof(CardDef).GetMethod("GetPortraitTexture",
+                new[] { typeof(TAG_PREMIUM), typeof(bool), typeof(bool) }))).Invoke(def.CardDef, new object[] { premium, true, false });
             Handles.Add(handle);
             // Not op_Implicit: the handle has two (to the asset and to bool), so selecting one by its parameter is ambiguous.
             var texture = handle?.GetType().GetProperty("Asset", BindingFlags.Public | BindingFlags.Instance)?.GetValue(handle, null) as Texture;

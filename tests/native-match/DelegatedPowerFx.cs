@@ -28,15 +28,20 @@ internal static partial class Program
             var recipe = entry.Value; const BindingFlags any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
             spells.Add(((string)key[0], (string)recipe.GetType().GetField("Prefab", any).GetValue(recipe)));
         }
-        int compared = 0;
+        int compared = 0, repeated = 0;
         foreach (var (card, prefab) in spells.OrderBy(s => s.Card))
         {
             var plain = PlaySpell(card, prefab, false); var marked = PlaySpell(card, prefab, true);
             if (plain.Shots < 0 || marked.Shots < 0) continue; // not playable on this board
             compared++;
             if (marked.Damage > plain.Damage)
+            {
+                repeated++;
                 Check(marked.Shots > plain.Shots, $"{card}: the repeat from the mark's block shows its missiles too (plain {plain.Shots}, marked {marked.Shots})");
+            }
         }
+        // The repeat must really happen: if a mark stopped repeating, every comparison above would be skipped and the sweep would pass.
+        Check(repeated >= 50, "delegated-power sweep: only " + repeated + " spells repeated their damage under the mark");
         Check(Crashed.Count == 0, "delegated-power sweep: spells crashed: " + string.Join("; ", Crashed));
         Check(compared >= 50, "delegated-power sweep compared " + compared + " damage spells");
         Console.WriteLine("PASS delegated-power sweep: " + compared + " recipe spells, plain and repeated");
