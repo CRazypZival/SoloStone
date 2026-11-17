@@ -111,6 +111,7 @@ internal static partial class Program
             ChillmawHistory(args.Contains("--dump-chillmaw"), args.Contains("--require-no-empty-effect")); return;
         }
         if (args.Contains("--trigger-visual-only")) { NativeMatch.ClockFreeBot = true; TriggerVisualKeywordHistory(); return; }
+        if (args.Contains("--delegated-fx-only")) { NativeMatch.ClockFreeBot = true; DelegatedPowerFx(); return; }
         if (args.Contains("--wisp-fx-only")) { NativeMatch.ClockFreeBot = true; WispHeroPowerHistory(); return; }
         if (args.Contains("--godfrey-only")) { GodfreyPortalHistory(); return; }
         if (args.Contains("--coin-flip-only")) { CoinFlipTests(); return; }

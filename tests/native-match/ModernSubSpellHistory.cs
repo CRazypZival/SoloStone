@@ -21,6 +21,7 @@ internal static partial class Program
     private static void ModernSubSpellHistory()
     {
         WispHeroPowerHistory();
+        DelegatedPowerFx();
         VolcanoAndCannoneerVisuals();
         SleetStormVisual();
         DrinkBloodVisual();
