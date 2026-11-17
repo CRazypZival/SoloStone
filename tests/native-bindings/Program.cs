@@ -188,6 +188,28 @@ var hooks = new[] {
     ("Hearthstone.Progression.AchievementInspectionPopup", "UpdateAchievement", "NativeAchievements", "InspectionDetail")
 };
 var failures = new List<string>();
+// Creation portrait (#119): the plugin reads the texture of an AssetHandle<Texture> by reflection (its assembly is not referenced).
+// The handle has two implicit operators taking it (to the asset and to bool), so selecting one by parameter type is ambiguous; the
+// plugin must read the Asset property, which the client calls with the type argument as its return type.
+{
+    bool asset = false, toAsset = false, toBool = false;
+    foreach (var handle in gameMetadata.MemberReferences)
+    {
+        var member = gameMetadata.GetMemberReference(handle);
+        if (member.Parent.Kind != HandleKind.TypeSpecification) continue;
+        string parent = gameMetadata.GetTypeSpecification((TypeSpecificationHandle)member.Parent).DecodeSignature(signatures, (object)null);
+        if (!parent.StartsWith("AssetHandle`1<", StringComparison.Ordinal) || member.GetKind() != MemberReferenceKind.Method) continue;
+        var signature = member.DecodeMethodSignature(signatures, (object)null);
+        string name = gameMetadata.GetString(member.Name);
+        if (name == "get_Asset" && signature.ParameterTypes.Length == 0 && signature.ReturnType == "!0") asset = true;
+        if (name == "op_Implicit" && signature.ParameterTypes.Length == 1) { toAsset |= signature.ReturnType == "!0"; toBool |= signature.ReturnType == "Boolean"; }
+    }
+    if (!asset) failures.Add("AssetHandle<T>.Asset (returns T) is missing: the Creation portrait hook reads it");
+    if (!toAsset || !toBool) failures.Add("AssetHandle<T> implicit operators changed: re-check how NativeCreationPortrait converts a handle");
+    string creation = File.ReadAllText(Path.Combine(root, "plugin/NativeCreationPortrait.cs"));
+    if (creation.Contains("\"op_Implicit\"") && toBool) failures.Add("NativeCreationPortrait selects op_Implicit, ambiguous with the bool operator");
+    if (!creation.Contains("GetProperty(\"Asset\"")) failures.Add("NativeCreationPortrait must read the handle's Asset property");
+}
 if (pluginMetadata.TypeDefinitions.Select(pluginMetadata.GetTypeDefinition).SelectMany(type => type.GetMethods())
     .Select(pluginMetadata.GetMethodDefinition).Any(method => pluginMetadata.GetString(method.Name) == "BlockPersonalSuggestionCraft"))
     failures.Add("DeckHelper missing-card preview must retain native crafting; obsolete blocker still present");

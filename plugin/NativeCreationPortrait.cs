@@ -62,8 +62,8 @@ internal static class NativeCreationPortrait
             // AssetHandle<Texture> lives in an assembly the plugin does not reference, so it is read by reflection.
             object handle = GetPortraitTexture.Invoke(def.CardDef, new object[] { premium, true, false });
             Handles.Add(handle);
-            var convert = handle?.GetType().GetMethod("op_Implicit", BindingFlags.Public | BindingFlags.Static, null, new[] { handle.GetType() }, null);
-            var texture = convert?.Invoke(null, new[] { handle }) as Texture;
+            // Not op_Implicit: the handle has two (to the asset and to bool), so selecting one by its parameter is ambiguous.
+            var texture = handle?.GetType().GetProperty("Asset", BindingFlags.Public | BindingFlags.Instance)?.GetValue(handle, null) as Texture;
             if (texture == null) { Fail(dbfId, new InvalidOperationException("part has no portrait texture")); return null; }
             Textures[(dbfId, premium)] = texture;
             log?.LogInfo("creation portrait: part " + dbfId + " " + premium);
@@ -74,7 +74,7 @@ internal static class NativeCreationPortrait
 
     private static void Fail(int dbfId, Exception error)
     {
-        if (dbfId != 0 && !Failed.Add(dbfId)) return;
+        if (!Failed.Add(dbfId)) return;
         log?.LogWarning("creation portrait unavailable" + (dbfId == 0 ? "" : " for part " + dbfId) + ": " + error.Message);
     }
 }
