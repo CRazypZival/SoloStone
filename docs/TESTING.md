@@ -138,6 +138,7 @@ compiled hooks against your client. That needs `references/bepinex/BepInEx.dll` 
 | `goldens-rerecord` | `goldens rerecord` restores only the changed games and leaves the rest of a golden file byte-identical |
 | `fuzz` | 200 random games: no crash, the same result twice, no broken invariant |
 | `launcher` | The launcher and installer logic. The runner builds the release launcher first, so its scans run. Some checks skip without a Hearthstone client, and so does the scan of the release plugin (that build needs the client's libraries; `installer/test-all.sh` builds and scans it) |
+| `run-tool` | This runner: `--client` refuses `references/game` itself, a link to it, or files that link into it, and a failed copy keeps the earlier copy |
 | `installer-python` | The installer build tools (`installer/stage.py`, `installer/loader_inputs.py`). Not on Windows: these tests use unix paths and tools, so the runner skips them there and says so |
 
 ## The client suites
@@ -190,7 +191,7 @@ hero powers) are skipped in `engine-proof` even when the export is there, and ru
 | Native screens, the match flow or the client calls the plugin patches (`plugin/Native*.cs`, `plugin/client-bindings.txt`) | `native-bindings-logic`; with a client also `native-bindings`, `native-match`, `transport-invariants` |
 | Ranked ladder (`plugin/LadderRules.cs`) or rank rewards | `ladder-rules`, `tier-presentation`, `ladder`, `ladder-extended` |
 | The launcher, installer or their scripts (`installer/`) | `launcher`, `installer-python` |
-| The shared test code (`tests/shared/`, `tests/run.py`) | Everything |
+| The shared test code (`tests/shared/`, `tests/run.py`) | Everything (for `tests/run.py`, at least `run-tool`) |
 
 Test folders are named after their suite (`tests/ai-golden`, `tests/fair-packs`, `tests/dormant`, ...). Code that two suites compile
 lives in `tests/shared/`, linked into each suite (a few small test helpers are still duplicated between `native-match` and `native-match-logic`); test data that is not a suite's own is in `tests/fixtures/`.

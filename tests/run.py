@@ -146,6 +146,7 @@ SUITES = [
           commands=[['fuzz', '--games', '200', '--seed', '1']]),
     Suite('launcher', 'dotnet', 'the launcher and installer logic (some checks skip without a Hearthstone client)',
           'installer/SoloStone.Launcher.Tests/SoloStone.Launcher.Tests.csproj', artifacts='launcher', release_launcher=True),
+    Suite('run-tool', 'python', 'this runner: --client never loses the copy already in references/game', folder='tests/run-tool'),
     Suite('installer-python', 'python', 'the installer build tools (stage and loader checks; not on Windows)', folder='installer',
           unix_only=True),
 ]
@@ -233,10 +234,22 @@ def collect_client(given):
     if lacking:
         raise Usage(f'{managed} lacks: ' + ', '.join(lacking))
     GAME_REFERENCES.mkdir(parents=True, exist_ok=True)
+    # Removing the old copy before copying would delete the only copy when the source is references/game itself (or a
+    # link to it, or to one of its files), so refuse those before anything is touched.
+    if managed.resolve() == GAME_REFERENCES.resolve():
+        raise Usage(f'--client {given} is references/game itself: its libraries are already in place, run without --client')
     for name in CLIENT_FILES:
         target = GAME_REFERENCES / name
+        if target.exists() and os.path.samefile(managed / name, target):
+            raise Usage(f'--client {given}: {name} there is the copy in references/game itself; point --client at your '
+                        'Hearthstone folder')
+    for name in CLIENT_FILES:
+        target = GAME_REFERENCES / name
+        partial = target.with_name(target.name + '.partial')
+        partial.unlink(missing_ok=True)
+        shutil.copyfile(managed / name, partial)  # copy first, so a failed copy leaves the earlier copy in place
         target.unlink(missing_ok=True)  # a client file is often read-only, and so is an earlier copy of it
-        shutil.copyfile(managed / name, target)
+        partial.rename(target)
     return managed
 
 
