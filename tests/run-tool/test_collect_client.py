@@ -101,6 +101,27 @@ class CollectClient(unittest.TestCase):
         self.assertFalse(any((self.references / name).is_symlink() for name in FILES))
         self.assertTrue(all((self.client / name).is_file() for name in FILES))
 
+    def test_a_read_only_copy_refused_once_like_windows_is_made_writable_and_replaced(self):
+        self.collect_once()
+        (self.client / 'UnityEngine.dll').write_bytes(b'newer')
+        replace = Path.replace
+        refused = []
+
+        def windows_like(path, target):
+            if Path(target).name == 'UnityEngine.dll' and not refused:
+                refused.append(target)
+                raise PermissionError('read-only')
+            return replace(path, target)
+
+        Path.replace = windows_like
+        try:
+            self.run.collect_client(str(self.client))
+        finally:
+            Path.replace = replace
+        self.assertEqual(len(refused), 1)
+        self.assertEqual((self.references / 'UnityEngine.dll').read_bytes(), b'newer')
+        self.assertFalse((self.references / 'UnityEngine.dll.partial').exists())
+
     def test_a_failed_copy_keeps_the_earlier_copy(self):
         self.collect_once()
         copy = self.run.shutil.copyfile

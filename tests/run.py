@@ -34,6 +34,7 @@ import argparse
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -251,9 +252,11 @@ def collect_client(given):
         shutil.copyfile(managed / name, partial)  # copy first, so a failed copy leaves the earlier copy in place
         try:
             partial.replace(target)
-        except PermissionError:  # Windows will not replace a read-only file (a client file often is, and so its copy)
-            target.unlink(missing_ok=True)
-            partial.rename(target)
+        except PermissionError:  # Windows will not replace a read-only file, as a copy made by hand from the client can be
+            if target.is_symlink():  # chmod would follow the link and change the client's own file
+                raise
+            os.chmod(target, stat.S_IWRITE)
+            partial.replace(target)
     return managed
 
 
