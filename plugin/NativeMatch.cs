@@ -1042,9 +1042,10 @@ public sealed class NativeMatch
     private double opposingShownAt = -1, opposingRevealedAt = -1, opposingHoldStarted = -1;
     // EntitiesChosen waiting for the client to process its EntityChoices. GameState processes an EntitiesChosen at once
     // when no choice of that player is mapped; arriving before its EntityChoices it would leave that choice mapped
-    // forever and queue every later choice (the human's too) behind it. Each entry also retires its spent picks.
-    private readonly List<(PowerEntityChoices Choices, List<int> Picks, HashSet<int> Proxies)> deferredOpposing =
-        new List<(PowerEntityChoices Choices, List<int> Picks, HashSet<int> Proxies)>();
+    // forever and queue every later choice (the human's too) behind it. Each entry also retires its spent picks, and
+    // carries a guess's result row (NoteGuessResult), which must not reach the client before its EntitiesChosen.
+    private readonly List<(PowerEntityChoices Choices, List<int> Picks, HashSet<int> Proxies, (int Source, int Target)? Guess)> deferredOpposing =
+        new List<(PowerEntityChoices Choices, List<int> Picks, HashSet<int> Proxies, (int Source, int Target)? Guess)>();
     internal const double OpposingDealWaitMilliseconds = 3000;
     // Native ChoiceCardMgr has dealt (revealed) the opposing choice with this id. Null headless: shown counts as dealt.
     internal Func<int, bool> NativeOpposingChoiceRevealed { get; set; }
@@ -1094,7 +1095,10 @@ public sealed class NativeMatch
         if (Game.State == State.COMPLETE) { deferredOpposing.Clear(); return (null, null, null); }
         if (deferredOpposing.Count > 0 || !OpposingChoiceReceived(shown.Index))
         {
-            deferredOpposing.Add((shown, picks, proxies));
+            // Steam Deck, match d5b8e205: a slow client may not have this EntityChoices yet when the NPC answers. Sent with the
+            // answer's history, the result row could be replayed before the choice exists, and the conceal spell would never see it.
+            deferredOpposing.Add((shown, picks, proxies, guessResult));
+            guessResult = null;
             return (null, null, null);
         }
         SendChosen(shown, picks);
@@ -1112,6 +1116,14 @@ public sealed class NativeMatch
             var entry = deferredOpposing[0];
             deferredOpposing.RemoveAt(0);
             SendChosen(entry.Choices, entry.Picks);
+            if (entry.Guess.HasValue)
+            {
+                // The answer's Battlecry block went out already: the row follows its EntitiesChosen on its own, loose.
+                var result = new NativePowerHistory();
+                guessResult = entry.Guess;
+                PlaceGuessResult(result);
+                SendPowerHistory(result);
+            }
             RetireChosenChoiceActors(entry.Choices, entry.Picks, entry.Proxies, new HashSet<int>());
         }
     }
@@ -2865,7 +2877,7 @@ public sealed class NativeMatch
 #if ENGINE_SOURCE
         if (Game.State != State.COMPLETE && (deferredOpposing.Count > 0 || !OpposingChoiceReceived(choices.Index)))
         {
-            deferredOpposing.Add((choices, picks.ToList(), new HashSet<int>()));
+            deferredOpposing.Add((choices, picks.ToList(), new HashSet<int>(), null));
             return;
         }
 #endif

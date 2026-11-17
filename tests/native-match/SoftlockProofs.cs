@@ -7,6 +7,7 @@ using SabberStoneCore.Actions;
 using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
+using SabberStoneCore.Tasks.PlayerTasks;
 using EngineZone = SabberStoneCore.Enums.Zone;
 
 internal static partial class Program
@@ -335,6 +336,104 @@ internal static partial class Program
         }
         Check(found > 0, "the NPC played a Forefather in the seed search");
         Console.WriteLine($"PASS NPC Forefather guess: {found} games, the guess result follows the pick only (#115)");
+    }
+
+    // Steam Deck, match d5b8e205 (Arena build without the guess row): the NPC's Forefather picked, the client kept its three
+    // card backs and Curious Glimmerroot's conceal spell in ACTION (mustWaitForChoices) and the human's turn never started.
+    // Every NPC guess source, every pick (so right and wrong guesses both), an empty human hand (no correct offer), and the
+    // EntitiesChosen sent at once or held until the client has the EntityChoices: the offers stay card backs, nothing names
+    // an offer before the pick, one TARGET row names the result after the pick, and the NPC's turn hands back to the human.
+    private static void NpcGuessForcedPicksNative()
+    {
+        int cases = 0;
+        foreach (string card in new[] { "TIME_041", "UNG_035" })
+        foreach (int pick in new[] { 0, 1, 2 })
+        foreach (bool emptyHumanHand in new[] { false, true })
+        foreach (bool heldChosen in new[] { false, true })
+        {
+            if (card == "UNG_035" && emptyHumanHand) continue; // Glimmerroot reads the human's deck, not the hand.
+            string name = $"NPC {card} guess (pick {pick}, empty human hand {emptyHumanHand}, EntitiesChosen held {heldChosen})";
+            var (capture, match) = NpcGuessMatch();
+            var received = new HashSet<int>();
+            if (heldChosen) match.NativeOpposingChoiceReceived = id => received.Contains(id);
+            var game = match.Game; var bot = game.Player2;
+            if (emptyHumanHand) foreach (var held in game.Player1.HandZone.ToArray()) game.Player1.SetasideZone.Add(game.Player1.HandZone.Remove(held));
+            var source = Generic.DrawCard(bot, Cards.FromId(card));
+            FlushFieldHistory(match);
+            InvokeProcess(match, bot.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id));
+            FlushFieldHistory(match);
+            Check(bot.Choice != null && match.OpposingChoiceId >= 0, name + ": the NPC's guess is shown to the human");
+            var shown = capture.Packets.Where(p => p.Id == 17).Select(p => (EntityChoices)p.Message).Last(c => c.PlayerId == bot.PlayerId);
+            Check(shown.Id == match.OpposingChoiceId && shown.Source == source.Id && shown.Entities.Count == 3, name + ": three offers from the source");
+            Check(!GuessTargets(capture, 0).Any(), name + ": no guess result before the pick");
+            int engineOffer = match.EngineReturnId(shown.Entities[pick]);
+            int cursor = capture.Packets.Count;
+            InvokeProcess(match, ChooseTask.Pick(bot, engineOffer));
+            FlushFieldHistory(match);
+            if (heldChosen)
+            {
+                Check(!capture.Packets.Skip(cursor).Any(p => p.Id == 13) && match.DeferredOpposingChosen == 1, name + ": EntitiesChosen waits for the client's receipt");
+                received.Add(shown.Id); match.TickNpc();
+            }
+            Check(match.DeferredOpposingChosen == 0, name + ": EntitiesChosen released");
+            var chosen = capture.Packets.Skip(cursor).Where(p => p.Id == 13).Select(p => (EntitiesChosen)p.Message).ToList();
+            Check(chosen.Count == 1 && chosen[0].PlayerId == bot.PlayerId && chosen[0].ChooseEntities.Id == shown.Id
+                && chosen[0].ChooseEntities.Entities.SequenceEqual(new[] { shown.Entities[pick] }), name + ": EntitiesChosen names the NPC's pick");
+            // The client resolves the guess from a META_DATA TARGET in the current or a queued task list once it conceals the
+            // choice; the row must be queued behind the EntitiesChosen so it cannot be consumed before the choice exists.
+            int chosenAt = capture.Packets.FindIndex(cursor, p => p.Id == 13);
+            var targets = DeckDiscoverWireHistory(capture, cursor)
+                .Where(r => r.HasMetaData && r.MetaData.Type == HistoryMeta.Type.TARGET && r.MetaData.Info.Count == 1 && shown.Entities.Contains(r.MetaData.Info[0])).ToList();
+            Check(targets.Count == 1 && targets[0].MetaData.Data == source.Id, name + ": one TARGET row from the source names an offer, found " + targets.Count);
+            int rowPacket = capture.Packets.FindIndex(cursor, p => p.Id == 19 && ((PowerHistory)p.Message).List.Any(r => r.HasMetaData && r.MetaData.Type == HistoryMeta.Type.TARGET
+                && r.MetaData.Info.Count == 1 && shown.Entities.Contains(r.MetaData.Info[0])));
+            Check(rowPacket > chosenAt, name + ": the row follows EntitiesChosen (row packet " + rowPacket + ", EntitiesChosen " + chosenAt + ")");
+            int named = match.EngineReturnId(targets[0].MetaData.Info[0]);
+            var offers = shown.Entities.Select(match.EngineReturnId).ToList();
+            if (card == "TIME_041")
+            {
+                int correct = offers.FirstOrDefault(id => game.IdEntityDic[id][DiscoverRealRules.CorrectAnswer] == 1);
+                if (emptyHumanHand) Check(correct == 0 && named != engineOffer, name + ": with no correct offer the row names an unchosen offer");
+                else Check(correct != 0 && named == correct, name + ": the row names the correct offer " + correct + ", not " + named);
+                Check((named == engineOffer) == (((Minion)source).Health == 8), name + ": the row agrees with the engine's guess result");
+            }
+            else
+            {
+                var deck = game.Player1.DeckCards.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+                Check(deck.Contains(game.IdEntityDic[named].Card.Id), name + ": the row names the offer from the human's deck");
+            }
+            // Card backs throughout: no wire row ever gives an offer a card id, before or after the pick.
+            var namedRows = DeckDiscoverWireHistory(capture, 0).Where(r => r.HasFullEntity && shown.Entities.Contains(r.FullEntity.Entity) && !string.IsNullOrEmpty(r.FullEntity.Name)
+                    || r.HasShowEntity && shown.Entities.Contains(r.ShowEntity.Entity) && !string.IsNullOrEmpty(r.ShowEntity.Name)).ToList();
+            Check(namedRows.Count == 0, name + ": the offers stay nameless to the human: "
+                + string.Join(" | ", namedRows.Select(r => r.HasFullEntity ? "FULL " + r.FullEntity.Entity + " " + r.FullEntity.Name : "SHOW " + r.ShowEntity.Entity + " " + r.ShowEntity.Name)));
+            Check(bot.Choice == null, name + ": engine choice settled");
+            InvokeProcess(match, EndTurnTask.Any(bot));
+            FlushFieldHistory(match);
+            Check(game.CurrentPlayer == game.Player1 && game.State == State.RUNNING, name + ": the NPC's turn hands back to the human");
+            capture.SerializeAll();
+            cases++;
+        }
+        Console.WriteLine($"PASS NPC guess sources: {cases} forced picks, held and prompt EntitiesChosen, the result row follows the pick (Deck d5b8e205)");
+    }
+
+    // OpposingChoiceMatch with class cards in both decks: Glimmerroot offers a card from its opponent's starting deck only when
+    // that deck holds cards of the opponent's class.
+    private static (Capture, NativeMatch) NpcGuessMatch()
+    {
+        var capture = new Capture();
+        var deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 20).Concat(Enumerable.Repeat(Cards.FromId("CS2_023"), 10)).ToList();
+        var match = new NativeMatch(capture.Send, Cards.HeroCard(CardClass.MAGE), deck, 1337);
+        match.Start();
+        match.SendChoices(capture.Packets.Where(p => p.Id == 17).Select(p => (EntityChoices)p.Message).Last(c => c.PlayerId == 1).Id, new List<int>());
+        InvokeProcess(match, EndTurnTask.Any(match.Game.Player1));
+        FlushFieldHistory(match);
+        var bot = match.Game.Player2;
+        Check(match.Game.CurrentPlayer == bot, "NPC turn");
+        bot.BaseMana = 10; bot.UsedMana = 0;
+        foreach (var old in bot.HandZone.ToArray()) bot.SetasideZone.Add(old.Zone.Remove(old));
+        FlushFieldHistory(match);
+        return (capture, match);
     }
 
     // Curious Glimmerroot shares the guess's client conceal spell: the same TARGET row, naming the offer that started in the opponent's deck.
