@@ -5780,7 +5780,7 @@ public sealed class NativeMatch
             if (!list[start].HasPowerStart || (int)list[start].PowerStart.Type != (int)BlockType.PLAY) continue;
             int source = list[start].PowerStart.Source;
             if (!wireEntities.TryGetValue(source, out var played) || played.Controller != HumanPlayerId
-                || played.CardType is 1 or 2 or 3 or 6) continue;
+                || played.CardType is 1 or 2 or 6) continue;
             // The block's own task lists: rows outside nested blocks and sub-spells, split at each of them and after metadata 21.
             var lists = new List<List<int>>();
             List<int> open = null;
@@ -5808,14 +5808,18 @@ public sealed class NativeMatch
                     var snapshot = row.HasFullEntity ? row.FullEntity : row.HasShowEntity ? row.ShowEntity : row.HasChangeEntity ? row.ChangeEntity : null;
                     if (snapshot != null)
                     {
-                        if (snapshot.Tags.Any(t => t.Name == (int)GameTag.CARDTYPE && t.Value is 1 or 2 or 6)) cardless.Add(snapshot.Entity);
+                        if (snapshot.Tags.Any(t => t.Name == (int)GameTag.CARDTYPE && (t.Value is 1 or 2 or 6 || t.Value == 3 && played.CardType == (int)CardType.HERO))) cardless.Add(snapshot.Entity);
                         if (snapshot.Entity == source && snapshot.Tags.Any(t => t.Name == (int)GameTag.ZONE && t.Value == (int)EngineZone.PLAY)) entersPlay = true;
                     }
                     if (row.HasTagChange && row.TagChange.Entity == source && row.TagChange.Tag == (int)GameTag.ZONE
                         && row.TagChange.Value == (int)EngineZone.PLAY) entersPlay = true;
                 }
                 if (!entersPlay) continue;
-                bool Cardless(int id) => cardless.Contains(id) || wireEntities.TryGetValue(id, out var known) && known.CardType is 1 or 2 or 6;
+                // A hero card's swap rows (the old and the new hero) stay in PLAY: the client handles the retiring hero there even
+                // during a predicted drop. Its power rows do not: the retired primary power's zone change and the replacement power's
+                // FULL (in that order) go to a processed child list, or the old power actor stays and the new one is never placed.
+                bool Cardless(int id) => cardless.Contains(id) || wireEntities.TryGetValue(id, out var known)
+                    && (known.CardType is 1 or 2 or 6 || known.CardType == 3 && played.CardType == (int)CardType.HERO);
                 var moved = new HashSet<int>();
                 foreach (int at in rows)
                 {

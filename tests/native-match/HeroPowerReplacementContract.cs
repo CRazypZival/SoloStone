@@ -73,6 +73,7 @@ internal static partial class Program
             var source = Generic.DrawCard(owner, Cards.FromId(id));
             source[GameTag.COST] = 0; // Leave mana for an immediate power click, without another card/turn refreshing options.
             FlushFieldHistory(match);
+            var drag = new DragClient(owner, source.Id, predicted: !bot);
             int cursor = capture.Packets.Count;
             Play(source);
             var history = History(capture, cursor);
@@ -87,17 +88,29 @@ internal static partial class Program
             int retirement = history.FindIndex(e => IsZone(e, oldPower, SabberStoneCore.Enums.Zone.SETASIDE));
             Check(retirement >= 0 && retirement < history.IndexOf(full), label + " retires primary before replacement admission");
             Check(SnapshotTag(full, BasicHeroPowerRules.SecondaryIndex) == 0, label + " replacement primary uses slot zero");
-            if (id != "CORE_EX1_323")
+            var scopes = new Dictionary<PowerHistoryData, PowerHistoryStart>();
+            var blocks = new Stack<PowerHistoryStart>();
+            foreach (var row in history)
             {
-                var blocks = new Stack<PowerHistoryStart>();
-                foreach (var row in history)
-                {
-                    if (row.HasPowerStart) blocks.Push(row.PowerStart);
-                    if (ReferenceEquals(row, full)) Expect(blocks.Peek().Type == HistoryBlock.Type.PLAY
-                        && blocks.Peek().Source == source.Id, label + " power admission stays in hero PLAY scope");
-                    if (row.HasPowerEnd) blocks.Pop();
-                }
+                if (row.HasPowerStart) blocks.Push(row.PowerStart);
+                if (blocks.Count > 0) scopes[row] = blocks.Peek();
+                if (row.HasPowerEnd) blocks.Pop();
             }
+            bool OwnPlay(PowerHistoryData row) => scopes.TryGetValue(row, out var scope)
+                && scope.Type == HistoryBlock.Type.PLAY && scope.Source == source.Id;
+            bool PlayerTrigger(PowerHistoryData row) => scopes.TryGetValue(row, out var scope)
+                && scope.Type == HistoryBlock.Type.TRIGGER && scope.Source == game.Player1.Id && scope.EffectIndex == -1;
+            Expect(bot ? OwnPlay(history[retirement]) : PlayerTrigger(history[retirement]),
+                label + " old power retirement " + (bot ? "stays in NPC PLAY" : "runs in player TRIGGER"));
+            foreach (var row in history.Where(e => SnapshotEntity(e) == oldHero || SnapshotEntity(e) == source.Id
+                || e.HasTagChange && (e.TagChange.Entity == oldHero || e.TagChange.Entity == source.Id)))
+                Expect(!PlayerTrigger(row), label + " hero rows never move into power retirement TRIGGER");
+            Expect(history.Any(e => IsZone(e, oldHero, SabberStoneCore.Enums.Zone.SETASIDE) && OwnPlay(e))
+                && history.Any(e => IsZone(e, source.Id, SabberStoneCore.Enums.Zone.PLAY) && OwnPlay(e)),
+                label + " old hero retirement and new hero move stay in PLAY");
+            if (id != "CORE_EX1_323")
+                Expect(bot ? OwnPlay(full) : PlayerTrigger(full), label + " power FULL "
+                    + (bot ? "stays in NPC PLAY" : "runs in player TRIGGER"));
             else
             {
                 int effect = history.FindIndex(e => e.HasPowerStart && e.PowerStart.Type == HistoryBlock.Type.POWER
@@ -110,6 +123,19 @@ internal static partial class Program
                 Check(history.IndexOf(full) > effect && history.IndexOf(full) < end,
                     label + " replacement power FULL stays inside Jaraxxus effect list");
             }
+            var admission = NativeAdmission.ValidatePackets(capture.HistorySnapshots().Select(p => (IReadOnlyList<PowerHistoryData>)p.List));
+            foreach (var fault in admission.Where(f => f.Rule == "R7")) Expect(false, label + " " + fault);
+            drag.Apply(capture.HistorySnapshots(cursor));
+            Expect(bot ? drag.IgnoredLists == 0 : drag.IgnoredLists > 0, label + " prediction applies only to human PLAY");
+            var primaryActors = drag.PowersInSlot(owner.PlayerId, 0);
+            var secondaryActors = drag.PowersInSlot(owner.PlayerId, 1);
+            Expect(primaryActors.SequenceEqual(new[] { power }), label + " predicted slot 0 expected [" + power
+                + "] actual [" + string.Join(",", primaryActors) + "] old=" + oldPower);
+            Expect(secondaryActors.SequenceEqual(second == 0 ? Array.Empty<int>() : new[] { second }),
+                label + " predicted slot 1 preserves secondary only");
+            Expect(drag.CardZone.GetValueOrDefault(oldHero) == (int)SabberStoneCore.Enums.Zone.SETASIDE
+                && drag.CardZone.GetValueOrDefault(hero.Id) == (int)SabberStoneCore.Enums.Zone.PLAY,
+                label + " predicted hero replacement still places new hero and removes old hero");
             Check(second == 0 || owner.SecondaryHeroPower?.Id == second, label + " preserves secondary entity");
             var faults = TransportFixtures::TransportInvariants.HeroPowerSlotInvariant.Validate(capture.HistorySnapshots());
             Check(faults.Count == 0, label + " native slots: " + string.Join("; ", faults.Take(3)));

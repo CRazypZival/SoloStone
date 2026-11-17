@@ -70,6 +70,23 @@ internal static partial class Program
             .Any(f => f.Rule == "R1" && f.Entity == 30), "rewritten object cannot conceal missing target in bytes already sent"); cases++;
         Assert("unknown FX accepts hidden authored target", new[] { Full(10, "JAIL_407", 4), Start(10), Target(id: 20), end }, "R1", 0);
         Assert("unknown FX still rejects missing authored target", new[] { Full(10, "JAIL_407", 4), Start(10), Target(id: 999), end }, "R1", 1);
+        foreach (bool npc in new[] { false, true })
+        {
+            int owner = npc ? 2 : 1;
+            var heroPrefix = new[] { Full(100, "CATA_190h", 3, 3, owner), Full(101, "HERO_07", 3, 1, owner),
+                Full(102, "CS2_056", 10, 1, owner), Start(100, BlockType.PLAY), Tag(100, GameTag.ZONE, 1) };
+            Assert("old hero alone is prediction-exempt " + owner,
+                heroPrefix.Concat(new[] { Tag(101, GameTag.ZONE, 6), end }), "R7", 0);
+            Assert("a newly created hero is not the old hero " + owner,
+                heroPrefix.Concat(new[] { Full(104, "TLC_513t", 3, 1, owner), end }), "R7", npc ? 0 : 1);
+            Assert("hero power retirement is not prediction-exempt " + owner,
+                heroPrefix.Concat(new[] { Tag(102, GameTag.ZONE, 6), end }), "R7", npc ? 0 : 1);
+            Assert("hero power FULL is not prediction-exempt " + owner,
+                heroPrefix.Concat(new[] { Full(103, "CATA_190p", 10, 1, owner), end }), "R7", npc ? 0 : 1);
+            Assert("child processes retirement then replacement " + owner,
+                heroPrefix.Concat(new[] { Tag(101, GameTag.ZONE, 6), Start(1, BlockType.TRIGGER),
+                    Tag(102, GameTag.ZONE, 6), Full(103, "CATA_190p", 10, 1, owner), end, end }), "R7", 0);
+        }
         Console.WriteLine($"PASS native admission controls: {cases} positive/negative cases");
     }
 }

@@ -169,7 +169,6 @@ internal static partial class NativeAdmission
             var start = segment.Block.Start;
             if ((int)start.Type != (int)BlockType.PLAY || !state.TryGetValue(start.Source, out var played)
                 || played.Controller != 1 || played.Zone != (int)SabberStoneCore.Enums.Zone.HAND || played.Type is 1 or 2 or 6) return;
-            if (played.Type == (int)CardType.HERO) return; // a hero card replaces the old hero in this list by design (IsOldHero)
             int ZoneTag(PowerHistoryData data, int id)
             {
                 var shown = data.HasShowEntity ? data.ShowEntity : data.HasChangeEntity ? data.ChangeEntity : null;
@@ -180,6 +179,11 @@ internal static partial class NativeAdmission
                     && t.Data.TagChange.Tag == (int)GameTag.ZONE && t.Data.TagChange.Value == (int)SabberStoneCore.Enums.Zone.PLAY
                 || ZoneTag(t.Data, start.Source) == (int)SabberStoneCore.Enums.Zone.PLAY);
             if (!entersPlay) return;
+            // Only the retiring hero is exempt from prediction suppression; hero powers still need a processed child list.
+            var oldHeroes = state.Where(p => played.Type == (int)CardType.HERO && p.Key != start.Source
+                && p.Value.Type == (int)CardType.HERO && p.Value.Controller == played.Controller
+                && p.Value.Zone == (int)SabberStoneCore.Enums.Zone.PLAY
+                && !segment.Tasks.Any(t => t.Data.HasFullEntity && t.Data.FullEntity.Entity == p.Key)).Select(p => p.Key).ToHashSet();
             var zones = new Dictionary<int, int>();
             int Zone(int id) => zones.TryGetValue(id, out int z) ? z : state.TryGetValue(id, out var known) ? known.Zone : -1;
             // An enchantment's FULL_ENTITY carries no CARDTYPE (its SHOW does), so judge it by any snapshot in the list.
@@ -190,6 +194,8 @@ internal static partial class NativeAdmission
             {
                 var data = task.Data;
                 var snapshot = data.HasFullEntity ? data.FullEntity : data.HasShowEntity ? data.ShowEntity : data.HasChangeEntity ? data.ChangeEntity : null;
+                int entity = snapshot?.Entity ?? (data.HasTagChange ? data.TagChange.Entity : data.HasHideEntity ? data.HideEntity.Entity : 0);
+                if (oldHeroes.Contains(entity)) continue;
                 if (data.HasFullEntity && data.FullEntity.Entity != start.Source)
                 {
                     if (!Cardless(data.FullEntity.Entity))
