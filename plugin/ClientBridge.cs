@@ -154,6 +154,7 @@ internal static class ClientBridge
             catch (Exception) { return null; }
         };
         Patch(harmony, typeof(Card), "OnActorChanged", nameof(RepairNullToPlayActor), new[] { typeof(Actor) });
+        NativeCreationPortrait.Install(harmony, log);
         NativeNpcPresence.Install(harmony, log, () => staged ? match : null);
         StartupTiming.Mark("bridge-npc-presence");
         try

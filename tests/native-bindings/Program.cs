@@ -86,6 +86,7 @@ var hooks = new[] {
     ("PackOpeningDirector", "FinishMassPackOpen", "NativeUIProbe", "BeforeMassDone"),
     ("Gameplay", "OnBoardLoaded", "ClientBridge", "RetryBoardLoad"),
     ("ThinkEmoteManager", "Update", "ClientBridge", "AllowIdleThinkEmotes"),
+    ("Actor", "UpdatePortraitTexture", "NativeCreationPortrait", "UseFirstDragonPortrait"),
     ("GameEntity", "NotifyOfMulliganInitialized", "NativeNpcPresence", "LoadEnemyEmoteHandler"),
     ("RemoteActionHandler", "CanReceiveEnemyEmote", "NativeNpcPresence", "CanReceiveEnemyEmote"),
     ("Player", "UpdateName", "NativeNpcPresence", "UpdateOpponentName"),
