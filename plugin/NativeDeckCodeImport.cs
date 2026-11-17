@@ -28,19 +28,27 @@ internal sealed class DeckCodePlan
 internal static class NativeDeckCodeImport
 {
     // Owner 2026-11-16: Wild-only cards are dropped until PR #136 (Wild cards kept in drafts, unplayable in Standard) is on
-    // main. When it lands, return true here: Wild-only cards then count as usable and are kept in the draft. Nothing else changes.
+    // main. When it lands, return true here: Wild-only cards then count as usable and are kept in the draft. Flipping it also
+    // needs Known() to require collectible cards that the profile ledger knows, or uncollectible tokens would pass.
     internal static bool KeepsWildOnlyCards => false;
 
+    // 32 UTF-16 code units, the limit LocalShop.ValidateDeck puts on a saved deck name (not 32 visible characters).
     internal const int NameLength = 32;
     private const int MaximumCodeCopies = 200; // a real code holds at most 40 main cards plus a few sideboard cards
 
-    internal static bool Usable(string id) => id != null && (LocalDecks.IsCustomCard(id) || KeepsWildOnlyCards && Known(id));
+    // The editor's universe: the legacy custom pool, or any Standard card the profile ledger knows (pack and shop cards).
+    internal static bool Usable(string id) => id != null && Known(id)
+        && (LocalDecks.IsCustomCard(id) || LocalProfile.KnownLedgerCard(id) && LocalShop.IsStandardCard(Cards.FromId(id)) || KeepsWildOnlyCards);
 
     private static bool Known(string id)
     {
         try { return Cards.FromId(id) != null; }
         catch (KeyNotFoundException) { return false; }
     }
+
+    // The client fills a just-imported deck through the edit-mode paste: skipped (silently) only for that deck, once, while fresh.
+    internal static bool SkipNativeFill(long importedDeck, DateTime until, DateTime now, long editedDeck) =>
+        importedDeck != 0 && now <= until && editedDeck == importedDeck;
 
     internal static DeckCodePlan Plan(string hero, string codeName, string fallbackName,
         IEnumerable<(string id, int qty)> main, IEnumerable<(string owner, string id, int qty)> side)
@@ -62,7 +70,12 @@ internal static class NativeDeckCodeImport
         foreach (var row in mainRows)
             for (int copy = 0; copy < row.qty; copy++)
             {
-                if (row.id != null && LocalDecks.IsFabledCompanion(row.id)) continue;
+                // A companion rides with its primary; one listed without its primary is dropped and counted.
+                if (row.id != null && LocalDecks.IsFabledCompanion(row.id))
+                {
+                    if (!mainRows.Any(other => other.id != null && other.qty > 0 && LocalDecks.FabledBundle(other.id).Contains(row.id))) plan.Unusable++;
+                    continue;
+                }
                 if (!Usable(row.id) || LocalDecks.IsUnsupportedSideboardOwner(row.id)) { plan.Unusable++; continue; }
                 if (!LocalDecks.IsAllowedInDeck(Cards.FromId(row.id), heroClass)) { plan.WrongClass++; continue; }
                 legal.Add(row.id);
@@ -138,7 +151,7 @@ internal static class NativeDeckCodeImport
         {
             var elements = StringInfo.GetTextElementEnumerator(name);
             var cut = new System.Text.StringBuilder();
-            for (int count = 0; count < NameLength && elements.MoveNext(); count++) cut.Append(elements.GetTextElement());
+            while (elements.MoveNext() && cut.Length + elements.GetTextElement().Length <= NameLength) cut.Append(elements.GetTextElement());
             name = cut.ToString().Trim();
             if (ValidName(hero, name)) return name;
         }

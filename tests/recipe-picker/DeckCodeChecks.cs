@@ -118,6 +118,37 @@ internal static class DeckCodeChecks
         Check(unsupported.Cards.SequenceEqual(new[] { neutral[0], neutral[0] }) && unsupported.Sideboards.Count == 0
             && unsupported.SideboardCardsDropped == 3 && unsupported.Unusable == 2, "E.T.C. and Zilliax owners are dropped with their sideboards");
 
+        // Expansion pack cards (not in the legacy custom pool) are usable: the editor and the profile accept them (#140 review B1).
+        var pack0 = Cards.All.Where(card => LocalShop.IsStandardCard(card) && LocalProfile.KnownLedgerCard(card.Id) && !LocalDecks.IsCustomCard(card.Id) && card.Rarity != Rarity.LEGENDARY
+            && (card.Class == SabberStoneCore.Enums.CardClass.NEUTRAL || card.Class == MageClass) && LocalDecks.FabledBundle(card.Id).Count == 0
+            && !LocalDecks.HasModelledSideboard(card.Id) && !LocalDecks.IsUnsupportedSideboardOwner(card.Id) && LocalDecks.DeckSize(new[] { card.Id }) == 30).GroupBy(card => card.Set).OrderBy(group => group.Key.ToString(), StringComparer.Ordinal)
+            .SelectMany(group => group.OrderBy(card => card.Id, StringComparer.Ordinal).Take(3)).Select(card => card.Id).Distinct().ToArray();
+        Console.WriteLine("pack candidates " + pack0.Length);
+        var pack = pack0.Take(15).ToArray();
+        Check(pack.Length == 15 && pack.Select(id => Cards.FromId(id).Set).Distinct().Count() >= 4, "fixture: fifteen pack cards across at least four sets: " + string.Join(",", pack));
+        var packPlan = Plan(Mage, Main(pack.Select(id => (id, 2)).ToArray()));
+        Check(packPlan.Cards.Count == 30 && packPlan.Dropped == 0 && NativeDeckCodeImport.StatusMessage(packPlan, 0) == null, "a full thirty-card pack-card deck imports with nothing dropped");
+        Check(Plan(Mage, Main((pack[0], 2), (pack[1], 2), (warriorOnly, 1), ("NOT_A_CARD", 1))).Cards.Count == 4, "pack cards mix with the rest of a code");
+
+        // Names fit the saved-deck limit in UTF-16 code units: emoji (surrogate pairs) cannot fail the commit.
+        string emoji = string.Concat(Enumerable.Repeat("\U0001F600", 20));
+        var emojiPlan = Plan(Mage, Main((neutral[0], 2)), name: emoji);
+        Check(emojiPlan.Name.Length <= 32 && emojiPlan.Name.Length > 0 && emojiPlan.Name != "New deck", "an emoji name is cut to 32 UTF-16 code units");
+        Check(NativeDeckCodeImport.Name(Mage, "a" + string.Concat(Enumerable.Repeat("\U0001F600", 16)), "New deck").Length <= 32, "a name never splits a surrogate pair");
+
+        // A Fabled companion listed without its primary is dropped and counted.
+        if (fabled != null)
+        {
+            var orphan = Plan(Mage, Main((LocalDecks.FabledBundle(fabled.Id)[0], 1), (neutral[0], 2)));
+            Check(orphan.Cards.Count == 2 && orphan.Unusable == 1, "a Fabled companion without its primary is dropped and counted");
+        }
+
+        // The native fill after an import is skipped silently, once, only for that deck and only while fresh; any other edit paste speaks.
+        var now = DateTime.UtcNow;
+        Check(NativeDeckCodeImport.SkipNativeFill(7, now.AddSeconds(5), now, 7) && !NativeDeckCodeImport.SkipNativeFill(7, now.AddSeconds(5), now, 8)
+            && !NativeDeckCodeImport.SkipNativeFill(7, now.AddSeconds(-1), now, 7) && !NativeDeckCodeImport.SkipNativeFill(0, now.AddSeconds(5), now, 0),
+            "the native fill is skipped only for the imported deck while fresh; a real edit paste is not");
+
         // Refusals.
         Refuses(() => Plan("HERO_99", Main((neutral[0], 2))), DeckCodeRefusalReason.UnsupportedClass, "an unsupported class is refused");
         Refuses(() => Plan(null, Main((neutral[0], 2))), DeckCodeRefusalReason.UnsupportedClass, "an unknown hero is refused");
@@ -147,11 +178,11 @@ internal static class DeckCodeChecks
         // Garbage never reaches the profile.
         Refuses(() => NativeDeckCodeImport.Plan(Mage, new string('z', 5000), "New deck", Main(("!!", 1), ("", 1)), null), DeckCodeRefusalReason.NoUsableCards, "garbage card ids are refused");
 
-        return Profile(neutral, mageOnly, legendary);
+        return Profile(neutral, mageOnly, legendary, pack);
     }
 
     // The atomic profile create: one commit holds the draft, its cards, sideboards and name; a refused or failed create leaves nothing.
-    private static int Profile(string[] neutral, string mageOnly, string legendary)
+    private static int Profile(string[] neutral, string mageOnly, string legendary, string[] pack)
     {
         string root = Path.Combine(Path.GetTempPath(), "deck-code-" + Guid.NewGuid());
         Directory.CreateDirectory(root);
@@ -177,16 +208,24 @@ internal static class DeckCodeChecks
             Rejects(() => profile.CreateDraftFromCode("", Mage, ids, null), "an empty name is refused by the profile");
             Check(profile.CustomDecks.Count == count && profile.NextCustomDeckId == nextId, "refused creates leave the profile untouched");
 
+            var ownedBefore = profile.StoredCollection.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Key + "=" + pair.Value).ToList();
+            var ownedPackBefore = pack.Select(id => profile.OwnedCount(id)).ToArray();
+            string packName = "Pack " + string.Concat(Enumerable.Repeat("\U0001F600", 14));
+            var packIds = pack.SelectMany(id => new[] { id, id }).ToList();
+            var packDeck = profile.CreateDraftFromCode(NativeDeckCodeImport.Name(Mage, packName, "New deck"), Mage, packIds, null);
+            Check(packDeck.Cards.SequenceEqual(packIds) && profile.MissingDeckSlotCount(packDeck.Id) > 0 && packDeck.Name.Length <= 32,
+                "a pack-card deck with an emoji name is saved, its unowned pack cards as missing slots");
+            Check(ownedPackBefore.SequenceEqual(pack.Select(id => profile.OwnedCount(id))), "importing pack cards grants none");
             var saved = profile.CreateDraftFromCode("Imported deck", Mage, ids, null);
-            Check(profile.CustomDecks.Count == count + 1 && profile.NextCustomDeckId == nextId + 1 && saved.Id == nextId
+            Check(profile.CustomDecks.Count == count + 2 && saved.Id == nextId + 1
                 && saved.Name == "Imported deck" && saved.Hero == Mage && saved.Cards.SequenceEqual(ids), "one create adds exactly one deck with its cards and name");
             int missing = profile.MissingDeckSlotCount(saved.Id);
             Check(missing > 0 && !profile.IsDeckComplete(saved.Id), "cards the player does not own stay in the deck as missing slots and the deck cannot be played");
-            Check(profile.CustomDecks.Count == count + 1 && profile.StoredCollection.All(pair => profile.OwnedCount(pair.Key) >= 0)
-                && ids.Distinct().All(id => profile.OwnedCount(id) <= 2), "import grants no card");
+            Check(ownedBefore.SequenceEqual(profile.StoredCollection.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Key + "=" + pair.Value)),
+                "import grants no card: every owned count is the same before and after");
             profile.CommitFailure = null;
             var again = profile.CreateDraftFromCode("Imported deck", Mage, ids, null);
-            Check(again.Id != saved.Id && profile.CustomDecks.Count == count + 2, "pasting the same code twice makes two decks");
+            Check(again.Id != saved.Id && profile.CustomDecks.Count == count + 3, "pasting the same code twice makes two decks");
             // Sideboards land in the same commit and survive a restart.
             pickId = LocalDecks.CustomCards.Where(card => LocalDecks.IsCustomCard(card.Id) && LocalDecks.SideboardEligible("JAIL_397", card.Id) && card.Id != "JAIL_397"
                 && !neutral.Contains(card.Id)).OrderBy(card => card.Id, StringComparer.Ordinal).First().Id;

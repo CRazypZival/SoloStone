@@ -1025,6 +1025,7 @@ M	Assembly-CSharp	CollectionManagerDisplay	CreateDeckFromClipboard	*
 M	Assembly-CSharp	CollectionManagerDisplay	Exit	*
 M	Assembly-CSharp	CollectionManagerDisplay	GetPhoneDeckTemplateTray	DeckTemplatePicker()
 M	Assembly-CSharp	CollectionManagerDisplay	OnDeckCreatedFromClipboard	*
+M	Assembly-CSharp	CollectionManagerDisplay	RejectDeckFromClipboard	*
 M	Assembly-CSharp	CollectionManagerDisplay	ShowDeck	*
 M	Assembly-CSharp	CollectionPageManager	GetDeckTemplatePicker	DeckTemplatePicker()
 M	Assembly-CSharp	CollectionPageManager	UpdateFiltersForDeck	System.Void(CollectionDeck,System.Collections.Generic.List`1<TAG_CLASS>,System.Boolean,BookPageManager+DelOnPageTransitionComplete,System.Object)

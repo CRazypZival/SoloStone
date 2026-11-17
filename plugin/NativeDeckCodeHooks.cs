@@ -14,6 +14,9 @@ internal static partial class NativeUIProbe
 
     private sealed class PendingImport { internal DeckCodePlan Plan; internal DateTime Created = DateTime.UtcNow; }
     private static PendingImport pendingImport;
+    // The client fills a new deck from its cached code through the edit-mode paste right after it opens: skip that one call.
+    private static long nativeFillSkipDeck;
+    private static DateTime nativeFillSkipUntil;
     private static readonly Dictionary<long, DeckCodePlan> importProjections = new Dictionary<long, DeckCodePlan>();
 
     // What the last import did, for the status file and test control.
@@ -27,6 +30,8 @@ internal static partial class NativeUIProbe
     private static bool PlanDeckCodeImport(ShareableDeck __0)
     {
         if (!active) return true;
+        // The edit-mode branch (overwrite prompt, paste while editing) is the blocked edit paste's: it speaks alone.
+        if (CollectionManager.Get()?.IsInEditMode() == true) return true;
         pendingImport = null;
         try
         {
@@ -104,7 +109,7 @@ internal static partial class NativeUIProbe
 
     // Prefix of CollectionManagerDisplay.OnDeckCreatedFromClipboard: the client now holds an empty deck for the committed
     // draft; fill it from the profile (missing cards as ghosts, sideboards, versions) before its editor opens.
-    private static bool ProjectImportedDeck(long __0)
+    private static bool ProjectImportedDeck(CollectionManagerDisplay __instance, long __0)
     {
         if (!active || !importProjections.TryGetValue(__0, out DeckCodePlan plan)) return true;
         importProjections.Remove(__0);
@@ -133,6 +138,7 @@ internal static partial class NativeUIProbe
             lastDeckOperation = "import:" + __0;
             lastDeckError = "";
             LastImportStage = "projected";
+            nativeFillSkipDeck = __0; nativeFillSkipUntil = DateTime.UtcNow.AddSeconds(PlanLifetimeSeconds);
             string message = LastImportMessage;
             if (message.Length > 0)
                 Processor.ScheduleCallback(0.8f, false, _ => { try { UIStatus.Get()?.AddInfo(message); } catch (Exception) { } });
@@ -142,6 +148,8 @@ internal static partial class NativeUIProbe
         {
             LastImportStage = "projection-failed:" + stage; LastImportError = error.GetBaseException().Message;
             log.LogError("NATIVE_DECK import projection failed deck=" + __0 + " stage=" + stage + ": " + error);
+            // Put the client's paste callbacks and cached code back, so the next New Deck is an ordinary one and the code is not offered again.
+            NativeRecipeSafety.OrDefault(() => { Invoke(__instance, "RejectDeckFromClipboard"); return true; }, false, LogRecipeFailure);
             NativeRecipeSafety.OrDefault(() => {
                 NativeRecipeGuide.ShowError("DECK SAVED", "Your deck is saved locally. Restart the game to reload it.");
                 return true;
@@ -155,6 +163,13 @@ internal static partial class NativeUIProbe
     private static bool BlockDeckEditPaste()
     {
         if (!active) return true;
+        long edited = CollectionManager.Get()?.GetEditedDeck()?.ID ?? 0;
+        if (NativeDeckCodeImport.SkipNativeFill(nativeFillSkipDeck, nativeFillSkipUntil, DateTime.UtcNow, edited))
+        {
+            log.LogInfo("NATIVE_DECK import native fill skipped deck=" + edited);
+            nativeFillSkipDeck = 0;
+            return false;
+        }
         log.LogWarning("NATIVE_DECK blocked edit paste");
         LastImportStage = "edit-paste-blocked"; LastImportError = NativeDeckCodeImport.EditPasteMessage;
         try { UIStatus.Get()?.AddInfo(NativeDeckCodeImport.EditPasteMessage); }

@@ -41,6 +41,10 @@ internal sealed partial class NativeTestControl
                     {
                         var popup = AccessTools.Field(typeof(DialogManager), "m_currentDialog")?.GetValue(DialogManager.Get()) as AlertPopup
                             ?? throw new InvalidOperationException("No prompt is shown.");
+                        var button = request.Text("answer") == "yes" ? popup.m_confirmButton : popup.m_cancelButton;
+                        if (button == null || !button.gameObject.activeInHierarchy)
+                            throw new InvalidOperationException("The prompt's " + request.Text("answer") + " button is not visible.");
+                        operation.Detail["buttonVisible"] = true;
                         var press = AccessTools.Method(typeof(AlertPopup), "ButtonPress") ?? throw new MissingMethodException("AlertPopup", "ButtonPress");
                         press.Invoke(popup, new object[] { request.Text("answer") == "yes" ? AlertPopup.Response.CONFIRM : AlertPopup.Response.CANCEL });
                         operation.Detail["answer"] = request.Text("answer");
@@ -48,7 +52,8 @@ internal sealed partial class NativeTestControl
                     }
                     else
                     {
-                        if (CollectionManager.Get().IsInEditMode()) throw new InvalidOperationException("Close the open deck first.");
+                        // A prompt needs the deck list; the paste button is also the edit-mode check (blocked, with a message).
+                        if (CollectionManager.Get().IsInEditMode() && !request.Has("mode") ) throw new InvalidOperationException("Close the open deck first.");
                         string mode = request.Has("mode") ? request.Text("mode") : "prompt";
                         var method = AccessTools.Method(typeof(CollectionManagerDisplay),
                             mode == "paste" ? "PasteFromClipboardIfValidOrShowStatusMessage" : "CheckClipboardAndPromptPlayerToPaste")

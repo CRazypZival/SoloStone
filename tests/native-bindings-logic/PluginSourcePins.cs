@@ -98,6 +98,8 @@ internal static class PluginSourcePins
                 failures.Add("deck-code import must never touch the server, the format or grants: " + forbidden);
         if (System.Text.RegularExpressions.Regex.Matches(profile, @"\bCommit\(").Count != 1 || profile.Contains("CreateDraft(", StringComparison.Ordinal))
             failures.Add("CreateDraftFromCode must write through exactly one commit, with no empty draft first");
+        foreach (string required in new[] { "IsInEditMode() == true) return true;", "NativeDeckCodeImport.SkipNativeFill(", "nativeFillSkipDeck = __0;", "Invoke(__instance, \"RejectDeckFromClipboard\")" })
+            if (!hooks.Contains(required, StringComparison.Ordinal)) failures.Add("deck-code hooks lost a review fix: " + required);
         if (!plan.Contains("internal static bool KeepsWildOnlyCards => false;", StringComparison.Ordinal))
             failures.Add("Wild-only cards are dropped until PR #136 is on main (KeepsWildOnlyCards)");
     }
