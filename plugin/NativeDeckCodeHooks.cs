@@ -148,7 +148,8 @@ internal static partial class NativeUIProbe
         {
             LastImportStage = "projection-failed:" + stage; LastImportError = error.GetBaseException().Message;
             log.LogError("NATIVE_DECK import projection failed deck=" + __0 + " stage=" + stage + ": " + error);
-            // Put the client's paste callbacks and cached code back, so the next New Deck is an ordinary one and the code is not offered again.
+            // Clear the cached code and the clipboard, as the client does when the player answers No, so the code is not offered
+            // again. The client's swapped deck-created callback stays until the next New Deck, which then skips the recipe page once.
             NativeRecipeSafety.OrDefault(() => { Invoke(__instance, "RejectDeckFromClipboard"); return true; }, false, LogRecipeFailure);
             NativeRecipeSafety.OrDefault(() => {
                 NativeRecipeGuide.ShowError("DECK SAVED", "Your deck is saved locally. Restart the game to reload it.");
