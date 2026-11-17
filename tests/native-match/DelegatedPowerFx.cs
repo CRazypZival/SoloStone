@@ -37,9 +37,12 @@ internal static partial class Program
             if (marked.Damage > plain.Damage)
                 Check(marked.Shots > plain.Shots, $"{card}: the repeat from the mark's block shows its missiles too (plain {plain.Shots}, marked {marked.Shots})");
         }
+        Check(Crashed.Count == 0, "delegated-power sweep: spells crashed: " + string.Join("; ", Crashed));
         Check(compared >= 50, "delegated-power sweep compared " + compared + " damage spells");
         Console.WriteLine("PASS delegated-power sweep: " + compared + " recipe spells, plain and repeated");
     }
+
+    private static readonly List<string> Crashed = new List<string>();
 
     private static (int Shots, int Damage) PlaySpell(string card, string prefab, bool mark)
     {
@@ -57,6 +60,6 @@ internal static partial class Program
             return (rows.Count(e => e.HasSubSpellStart && e.SubSpellStart.SpellPrefabGuid == prefab),
                 rows.Count(e => e.HasMetaData && (int)e.MetaData.Type == 1));
         }
-        catch (Exception) { return (-2, 0); }
+        catch (Exception error) { Crashed.Add(card + (mark ? " (marked)" : "") + ": " + error.GetType().Name + " " + error.Message); return (-2, 0); }
     }
 }

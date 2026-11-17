@@ -78,14 +78,27 @@ internal static partial class PoweredUpGlowTests
     // #124: the changed offer's stat must not be coloured, so the client's printed baseline for it is the shown value.
     internal static void WatfinOfferDefTags()
     {
-        int changedStat = 0, offersChecked = 0;
+        int changedStat = 0, offersChecked = 0, hiddenChecked = 0;
+        foreach (bool enemy in new[] { false, true })
         for (int seed = 1; seed <= 60; seed++)
         {
-            var f = new Fixture(); var g = f.Game; var p = g.CurrentPlayer;
+            var f = new Fixture(); var g = f.Game;
+            if (enemy) f.Process(EndTurnTask.Any(f.Player));
+            var p = g.CurrentPlayer;
             foreach (var held in p.HandZone.ToArray()) p.SetasideZone.Add(p.HandZone.Remove(held));
             p.BaseMana = 10; p.UsedMana = 0; g.SetRandomSeed(seed);
             f.Process(PlayCardTask.Any(p, Generic.DrawCard(p, Cards.FromId("JAIL_EVENT_100"))));
             int custom = p.Choice.Choices.Single(i => g.IdEntityDic[i].Card.Id == "JAIL_EVENT_100t");
+            if (enemy)
+            {
+                // The opponent's offers stay hidden from the human: no identity, and no override that could leak the changed one.
+                foreach (var row in f.Entries.Where(e => e.HasFullEntity && p.Choice.Choices.Contains(e.FullEntity.Entity)).Select(e => e.FullEntity))
+                {
+                    hiddenChecked++;
+                    Check(string.IsNullOrEmpty(row.Name) && row.DefTags.Count == 0, "NPC Watfin offers carry no identity or DefTags: seed " + seed);
+                }
+                continue;
+            }
             var rows = f.Entries.Where(e => e.HasFullEntity && e.FullEntity.Entity == custom).Select(e => e.FullEntity).ToArray();
             Check(rows.Length > 0, "Watfin offer is sent as a FULL_ENTITY: seed " + seed);
             foreach (var row in rows)
@@ -101,13 +114,13 @@ internal static partial class PoweredUpGlowTests
             }
             f.Process(ChooseTask.Pick(p, custom));
             var picked = g.IdEntityDic[custom];
-            // A snapshot of the picked card in the hand shows its real stats and carries no definition override.
-            foreach (var e in f.Entries.Where(e => e.HasShowEntity && e.ShowEntity.Entity == custom).Select(e => e.ShowEntity)
-                .Where(e => e.Tags.Any(t => t.Name == (int)GameTag.ZONE && t.Value == (int)SabberStoneCore.Enums.Zone.HAND)))
-                Check(e.DefTags.Count == 0, "Watfin card keeps its real stats once picked: seed " + seed);
             Check(picked.Zone == p.HandZone, "Watfin pick reaches the hand");
+            // The picked card keeps its real (changed) stats: what the match publishes for it is the engine's own values.
+            var visible = f.Match.SnapshotVisibleTransportTags(picked);
+            Check(visible.GetValueOrDefault((int)GameTag.ATK) == picked.Card.ATK && visible.GetValueOrDefault((int)GameTag.HEALTH) == picked.Card.Health
+                && visible.GetValueOrDefault((int)GameTag.COST) == picked.Card.Cost, "Watfin card keeps its real stats once picked: seed " + seed);
         }
-        Check(offersChecked >= 60 && changedStat > 0, "Watfin DefTags test saw changed stats (" + changedStat + ")");
+        Check(offersChecked >= 60 && changedStat > 0 && hiddenChecked > 0, "Watfin DefTags test saw changed stats (" + changedStat + ") and hidden offers (" + hiddenChecked + ")");
     }
     private static void EvHooksNativeChooseOne()
     {
