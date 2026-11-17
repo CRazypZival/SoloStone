@@ -14,8 +14,8 @@ internal static partial class Program
     // FIR_909 live cleanup clears direct spell missiles; non-spell/death routes still need live acceptance.
     // FIR_902/END_024 delayed (Sigil, Secret) routes were re-admitted after a live cleanup check, human and NPC.
     // CATA_582/JAIL_307 keep area pulses; their single-target fallback uses the admitted missile.
-    private static readonly HashSet<string> QuarantinedFireRoutes = new HashSet<string>(("CATA_586 CORE_WC_701 "
-        + "FIR_778 JAIL_007 TLC_249 JAIL_458t2 FIR_955 TLC_220 FIR_904").Split(' '));
+    private static readonly HashSet<string> QuarantinedFireRoutes = new HashSet<string>(
+        "JAIL_458t2 FIR_955 TLC_220 FIR_904".Split(' '));
     private static bool FireQuarantined(string id) => QuarantinedFireRoutes.Contains(id);
 
     private static void ModernSubSpellHistory()
@@ -449,13 +449,15 @@ internal static partial class Program
             var body = entries.Skip(begin + 1).Take(end - begin - 2).ToArray();
             var shots = body.Where(e => e.HasSubSpellStart).Select(e => e.SubSpellStart).ToArray();
             var damage = body.Where(e => e.HasMetaData && (int)e.MetaData.Type == 1).Select(e => e.MetaData.Info.Single()).ToArray();
-            bool group = id == "JAIL_398";
+            bool group = id is "JAIL_398" or "FIR_778" or "JAIL_007" or "CORE_WC_701";
             string prefab = id switch {
                 "CAP_803" => "ReuseFX_Holy_Missile_Smite_Medium_Super_Quick_FastActorTriggers:30caf938696e3224bb610c73b35469e6",
                 "EDR_110" => "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1",
                 "EDR_421" => "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0",
                 "TLC_401" => "ReuseFX_Frost_Missile_Snowball_Medium_Fast_Super_Simultaneous:4fecda861d7d78b4186c3a3c3091c1e5",
-                "JAIL_398" => "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341",
+                "JAIL_398" or "FIR_778" or "JAIL_007" or "CORE_WC_701" => "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341",
+                // Owner 2026-11-16: the client authors no Cinder / Destructive Blaze effect; a small Fireblast missile per hit.
+                "TLC_249" or "CATA_586" => "ReuseFX_Missile_Fire_Fireball_Small_Super:b8e7bb6e0944d204297efdc937967085",
                 _ => "ReuseFX_Fire_Missile_Fireball_Medium_Super_Simultaneous:161d5760bd9de1e41baf4c5611e61eed" };
             bool quarantined = FireQuarantined(id);
             Check(damage.Length > 0 && shots.Length == (quarantined ? 0 : group ? 1 : damage.Length), id + " Deathrattle cue count");

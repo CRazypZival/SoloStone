@@ -91,6 +91,11 @@ namespace SabberStoneCore.Presentation
             Add("EDR_110", VisualPhase.Damage, "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
             Add("EDR_421", VisualPhase.Damage, "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
             Add("TLC_401", VisualPhase.Damage, "ReuseFX_Frost_Missile_Snowball_Medium_Fast_Super_Simultaneous:4fecda861d7d78b4186c3a3c3091c1e5", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
+            // Quarantined Deathrattle damage, re-admitted (owner 2026-11-16): the client authors no effect for any of these (census: empty),
+            // so each shows a substitute like the other Deathrattle routes above. One small Fireblast missile per hit from the public hero
+            // (Sizzling Cinder, Destructive Blaze); one fire pulse for the whole enemy side (Avatar of Destruction, Sewer Imp, Felrattler).
+            Add("TLC_249 CATA_586", VisualPhase.Damage, "ReuseFX_Missile_Fire_Fireball_Small_Super:b8e7bb6e0944d204297efdc937967085", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
+            Add("FIR_778 JAIL_007 CORE_WC_701", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("JAIL_398", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("EDR_842", VisualPhase.Damage, "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1", block: BlockType.TRIGGER);
             Add("TLC_478", VisualPhase.Damage, "ReuseFX_Physical_DemonHunter_AE_Whirlwind_BothSides_Small_Super_Quick:bc23f3d70f7ba4a4aa4ec2f8b4163e46", VisualTargets.None, block: BlockType.TRIGGER, group: true);
