@@ -1,12 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Xml.Linq;
-using SabberStoneCore.Config;
 using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Decisions;
@@ -15,8 +9,10 @@ using SabberStoneCore.Tasks.PlayerTasks;
 // Guards the capped-pass fix: a search stopped by the live clock or node cap left an unfinished line, the planner completed it
 // with a synthetic END_TURN, and later decisions that turn reused the cached pass (the NPC ended its turn with a 5/9 Taunt
 // still standing). Fixed by never completing an unfinished line with END_TURN and by validating a capped pass with an
-// independent 7,000-node search (ValidationNodeCap). Synthetic cases below guard it: Generic, ValidationLethal, SolverClockLethal,
-// WorkerLethalAtValidationBoundary, EliteSecret, WrappedDeadline and PricingAtReplyLimitZero.
+// independent 7,000-node search (ValidationNodeCap). Two halves, two groups of cases:
+//   - the validation half: ValidationLethal and friends (SolverClockLethal, WorkerLethalAtValidationBoundary, WrappedDeadline,
+//     EliteSecret, Generic, PricingAtReplyLimitZero);
+//   - the no-synthetic-END_TURN half: CappedLineNeverEndsWithSyntheticEndTurn.
 // The recorded playtest game (a Mage deck against the Hunter "Magmaw" NPC deck, turn 22) that first showed the bug was removed
 // on 2026-11-18 (owner ruling): the no-duplicate rule for Tricksy Improviser (#179) changes that game from its row 29, and a
 // recording of a real human player's game with a clock-capped search cannot be re-recorded.
@@ -246,5 +242,29 @@ internal static class CappedPassSuite
             "mistake pricing at replyLimit 0 completes and is accepted");
         Console.WriteLine("PASS mistake pricing at replyLimit 0 keeps END_TURN on a released best: " + string.Join(";", reference.Line));
     }
-    internal static void Run() { PricingAtReplyLimitZero(); WorkerLethalAtValidationBoundary(); SolverClockLethal(); ValidationLethal(); WrappedDeadline(); EliteSecret(); Generic(); }
+    // A search cut short by its node cap must not finish its line with a synthetic END_TURN: the line is a prefix and the turn goes on.
+    private static void CappedLineNeverEndsWithSyntheticEndTurn()
+    {
+        int capped = 0;
+        foreach (bool allocation in new[] { true, false }) {
+            
+            for (int cap = 3; cap <= 400; cap += 7) {
+                var game = PassivitySuite.Fixture(10, "CS2_182", "CS2_182");
+                RoundTwoSuite.Body(game, true, 3, 3); RoundTwoSuite.Body(game, true, 2, 4); RoundTwoSuite.Body(game, true, 4, 2);
+                RoundTwoSuite.Body(game, false, 2, 2, true); RoundTwoSuite.Body(game, false, 3, 1); RoundTwoSuite.Body(game, false, 1, 5);
+                var run = RoundTwoSuite.Profile(cap: cap);
+                if (!allocation) run = run.WithFixes(new AiFixes(new[] { "starved-replies", "attack-allocation" }));
+                var job = TurnPlanner.Job(PassivitySuite.View(game), run, PassivitySuite.Plan(), 71, cap);
+                while (!job.IsDone) job.StepNode();
+                var result = job.Result;
+                if (!result.Interrupted || result.Line.Count == 0 || result.Line[0].Type == PlayerTaskType.END_TURN) continue;
+                capped++;
+                Program.Require(result.Line.Last().Type != PlayerTaskType.END_TURN,
+                    "a capped line is not completed with a synthetic END_TURN (cap " + cap + ", allocation " + allocation + "): " + string.Join(";", result.Line));
+            }
+        }
+        Program.Require(capped > 20, "the sweep reaches capped lines: " + capped);
+        Console.WriteLine("PASS capped lines are never completed with a synthetic END_TURN: " + capped + " capped lines");
+    }
+    internal static void Run() { CappedLineNeverEndsWithSyntheticEndTurn(); PricingAtReplyLimitZero(); WorkerLethalAtValidationBoundary(); SolverClockLethal(); ValidationLethal(); WrappedDeadline(); EliteSecret(); Generic(); }
 }
