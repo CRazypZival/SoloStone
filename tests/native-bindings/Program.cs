@@ -58,6 +58,18 @@ foreach (string field in new[] { "m_leftMouseButtonIsDown", "m_touchDraggingCard
 if (Field(gameMetadata, "InputManager", "m_lastObjectMousedDown").DecodeSignature(signatures, (object)null) != "GameObject")
     throw new Exception("Drag cleanup pressed-object contract changed");
 Console.WriteLine("PASS gameplay drag native Update/pointer/cleanup and spell ChangeStateImpl contracts");
+// Deck-code import (#140): the members the plugin reads to plan a pasted code and to show its result.
+foreach (var contract in new[] {
+    ("ShareableDeck", "get_HeroCardDbId", Array.Empty<string>(), "Int32"),
+    ("ShareableDeck", "get_DeckName", Array.Empty<string>(), "String"),
+    ("GameUtils", "TranslateDbIdToCardId", new[] { "Int32", "Boolean" }, "String"),
+    ("CollectionManagerDisplay", "OnDeckCreatedFromClipboard", new[] { "Int64", "String" }, "Void"),
+    ("CollectionManagerDisplay", "CreateDeckFromClipboard", new[] { "ShareableDeck" }, "Void"),
+    ("CollectionInputMgr", "PasteDeckInEditModeFromShareableDeck", new[] { "ShareableDeck" }, "Void"),
+    ("UIStatus", "AddInfo", new[] { "String" }, "Void")
+}) MethodSignature(gameMetadata, contract.Item1, contract.Item2, contract.Item3, contract.Item4, signatures);
+Method(gameMetadata, "ShareableDeck", "get_DeckContents");
+Console.WriteLine("PASS deck-code import client members");
 MethodSignature(gameMetadata, "Actor", "GetPremium", Array.Empty<string>(), "TAG_PREMIUM", signatures);
 Console.WriteLine("PASS Actor.GetPremium(): TAG_PREMIUM pack reveal contract");
 MethodSignature(gameMetadata, "GameMgr", "ShowTransitionPopup", new[] { "String", "Int32" }, "Void", signatures);
@@ -111,8 +123,9 @@ var hooks = new[] {
     ("DeckTrayReorderableContent", "StopDragToReorder", "NativeUIProbe", "ReorderLocalDrafts"),
     ("CollectionManager", "AddPendingDeckRename", "NativeUIProbe", "ReadOnly"),
     ("CollectionManager", "AddPendingDeckEdit", "NativeUIProbe", "ReadOnly"),
-    ("CollectionManagerDisplay", "CreateDeckFromClipboard", "NativeUIProbe", "BlockDeckImport"),
-    ("CollectionInputMgr", "PasteDeckInEditModeFromShareableDeck", "NativeUIProbe", "BlockDeckImport"),
+    ("CollectionManagerDisplay", "CreateDeckFromClipboard", "NativeUIProbe", "PlanDeckCodeImport"),
+    ("CollectionManagerDisplay", "OnDeckCreatedFromClipboard", "NativeUIProbe", "ProjectImportedDeck"),
+    ("CollectionInputMgr", "PasteDeckInEditModeFromShareableDeck", "NativeUIProbe", "BlockDeckEditPaste"),
     ("DeckTrayDeckListContent", "ShouldDeckBoxesBeLocked", "NativeUIProbe", "UnlockLocalDeckBoxSlots"),
     ("CollectionDeckBoxVisual", "SetDeckID", "NativeUIProbe", "LockLoanerBox"),
     ("CollectionDeckBoxVisual", "ShowDeleteButton", "NativeUIProbe", "HideLoanerDeleteButton"),

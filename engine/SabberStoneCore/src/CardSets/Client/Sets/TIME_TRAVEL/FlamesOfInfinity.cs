@@ -24,7 +24,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
                     new ConditionTask(EntityType.SOURCE, SelfCondition.IsOpTurn,
                         new SelfCondition(me => me.Controller.Opponent.BoardZone.Any(m => !m.Untouchable))),
                     new FlagTask(true, ComplexTask.Secret(new CustomTask((g,c,s,t,stack) => {
-                        var candidates = c.Opponent.BoardZone.Where(m => !m.Untouchable).ToArray();
+                        var candidates = c.Opponent.BoardZone.Where(m => !m.Untouchable && !m.IsDead).ToArray();
                         if (candidates.Length == 0) return;
                         int health = candidates.Max(m => m.Health);
                         var tied = candidates.Where(m => m.Health == health).ToArray();

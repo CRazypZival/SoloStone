@@ -81,6 +81,9 @@ internal static partial class Program
         foreach (string moved in new[] { "--rematch-only", "--canonical-privacy-assertions-only" })
             if (args.Contains(moved)) throw new ArgumentException(moved + " moved to the native-match-logic suite");
         ControllerAdmissionInvariant.Install();
+        if (args.Contains("--choice-timeout-only")) { NativeMatch.ClockFreeBot = true; TimedChoiceCompletionNative(); return; }
+        if (args.Contains("--softlock-only")) { NativeMatch.ClockFreeBot = true; ForefatherGuessNative(); AnnouncerRewindDeathKnightNative(); ForefatherFromDiscoverNative(); ForefatherNpcGuessNative(); NpcGuessForcedPicksNative(); NpcGuessTwoHeldNative(); NpcGuessHeldThenHumanGuessNative(); GlimmerrootGuessNative(); TimedChoiceCompletionNative(); return; }
+        if (args.Contains("--ledgerline-only")) { NativeMatch.ClockFreeBot = true; NpcWorldIntegrationTests.LedgerlineForefatherGuess(); return; }
         if (args.Contains("--match-event-log-review-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogReview(); return; }
         if (args.Contains("--match-event-log-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogNative(); return; }
         if (args.Contains("--held-form-overlay-only")) { NativeMatch.ClockFreeBot = true; HeldFormOverlayHistory(); return; }
@@ -97,12 +100,16 @@ internal static partial class Program
         if (args.Contains("--locations-only")) { NativeMatch.ClockFreeBot = true; LocationActivationHistory(); LocationOptions(); return; }
         if (args.Contains("--plague-only")) { NativeMatch.ClockFreeBot = true; PlagueAttackShuffle(); FreshDeckShuffleHistory(); ArrivalCastsWhenDrawn(); return; }
         if (args.Contains("--shuffle-choice-only")) { NativeMatch.ClockFreeBot = true; DiscoveredShuffleCompletion(); return; }
+        if (args.Contains("--adaptive-tag-only")) { NativeMatch.ClockFreeBot = true; AdaptiveTagHistory(); return; }
         if (args.Contains("--shuffle-only")) { NativeMatch.ClockFreeBot = true; GeneratedShuffleHistory(); return; }
         if (args.Contains("--shuffle-batch-only")) { NativeMatch.ClockFreeBot = true; ShuffleBatchHistory(); return; }
         if (args.Contains("--hero-skin-only")) { HeroSkinPresentationTests(); return; }
         if (args.Contains("--board-identity-only")) { NativeMatch.ClockFreeBot = true; BoardIdentityHistory(); return; }
         if (args.Contains("--rewind-presentation-only")) { RewindPresentationTags(); return; }
         if (args.Contains("--announcer-rewind-only")) { NativeMatch.ClockFreeBot = true; AnnouncerRewindHistory(); return; }
+        if (args.Contains("--hidden-hand-only")) { NativeMatch.ClockFreeBot = true; HiddenHandCardHistory(); return; }
+        if (args.Contains("--morchie-rewind-only")) { NativeMatch.ClockFreeBot = true; MorchieRewindChoices(); return; }
+        if (args.Contains("--rewind-settlement-only")) { NativeMatch.ClockFreeBot = true; RewindSettlementNoOp(args.ElementAtOrDefault(1)); return; }
         if (args.Contains("--king-llane-only")) { NativeMatch.ClockFreeBot = true; KingLlanePlayHistory(); return; }
         if (args.Contains("--vanguard-only")) { NativeMatch.ClockFreeBot = true; VanguardDrawHistory(); return; }
         if (args.Contains("--broxigar-only")) { NativeMatch.ClockFreeBot = true; BroxigarReturnHistory(); return; }
@@ -116,7 +123,8 @@ internal static partial class Program
         if (args.Contains("--wisp-fx-only")) { NativeMatch.ClockFreeBot = true; WispHeroPowerHistory(); return; }
         if (args.Contains("--godfrey-only")) { GodfreyPortalHistory(); return; }
         if (args.Contains("--coin-flip-only")) { CoinFlipTests(); return; }
-        if (args.Contains("--hero-replacement-only")) { NativeMatch.ClockFreeBot = true; HeroReplacementHistory(args.Contains("--dump-hero-replacement")); return; }
+        if (args.Contains("--hero-power-contract-only")) { NativeMatch.ClockFreeBot = true; HeroPowerReplacementContract(args.Contains("--dump-hero-replacement")); return; }
+        if (args.Contains("--hero-replacement-only")) { NativeMatch.ClockFreeBot = true; HeroReplacementHistory(args.Contains("--dump-hero-replacement")); HeroPowerReplacementContract(args.Contains("--dump-hero-replacement")); return; }
         if (args.Length == 2 && args[0] == "--admission-card") { NativeMatch.ClockFreeBot = true; NativeAdmissionSweep(args[1]); return; }
         if (args.Contains("--admission-only")) { NativeMatch.ClockFreeBot = true; NativeAdmissionSweep(); return; }
         if (args.Contains("--empty-triggers-only")) { EmptyTriggerPresentation(); return; }
@@ -222,6 +230,8 @@ internal static partial class Program
         AutomaticSecretHistory();
         FacelessEnigmaHistory();
         HeroReplacementHistory();
+        HiddenHandCardHistory();
+        HeroPowerReplacementContract();
         EnchantmentVisibilityHistory();
         BoardPositionContract();
         DiscoverSpellLifecycle("CORE_WON_350",scheduledRepeat:true);
@@ -234,6 +244,7 @@ internal static partial class Program
         ChaosStrikeHistory();
         CthunNativeProof();
         HolyBolaHistory();
+        AdaptiveTagHistory();
         GeneratedShuffleHistory();
         ShuffleBatchHistory();
         ModernSubSpellHistory();
@@ -250,6 +261,15 @@ internal static partial class Program
         BroxigarReturnHistory();
         KingLlanePlayHistory();
         AnnouncerRewindHistory();
+        ForefatherGuessNative();
+        AnnouncerRewindDeathKnightNative();
+        ForefatherFromDiscoverNative();
+        ForefatherNpcGuessNative();
+        NpcGuessForcedPicksNative(); NpcGuessTwoHeldNative(); NpcGuessHeldThenHumanGuessNative();
+        GlimmerrootGuessNative();
+        TimedChoiceCompletionNative();
+        MorchieRewindChoices();
+        RewindSettlementNoOp();
         GroupProofs.Run(ProofKind.Native);
         if (args.Contains("--hand-buff-only")) return;
         OverloadManaParity();
@@ -1622,7 +1642,9 @@ internal static partial class Program
                 var discoverOwner = discoverGame.CurrentPlayer;
                 Check(new DiscoverTask().Process(discoverGame, discoverOwner, discoverGame.IdEntityDic[source.Id], null) == TaskState.COMPLETE
                     && discoverOwner.Choice?.Choices.Count > 0
-                    && discoverOwner.Choice.Choices.All(entity => discoverOwner.Wild.Contains(discoverGame.IdEntityDic[entity].Card)),
+                    // Discover reads the match's pool (the Standard policy), not the frozen legacy lists.
+                    && discoverOwner.Choice.Choices.All(entity => Cards.RandomPool(discoverGame, PoolDestination.Hand)
+                        .ClassAndNeutral(discoverOwner.HeroClass).Contains(discoverGame.IdEntityDic[entity].Card)),
                     "INVALID source Discover resolves controller class: " + id + "/" + loaner.Hero);
                 // Quest spells are deliberately absent from random pools; admitted dual-class cards use export membership.
                 bool admitted = game.OfflinePools.Standard.Any(member => member.CardId == id);
@@ -1663,6 +1685,7 @@ internal static partial class Program
                     int pick = owner.Choice.ChoiceAction == SabberStoneCore.Model.ChoiceAction.REWIND
                         ? owner.Choice.Choices.First(c => c != game.Rewind.RewindEntityId) : owner.Choice.Choices[0];
                     InvokeProcess(match, ChooseTask.Pick(owner, pick)); FlushFieldHistory(match);
+                    owner = game.ControllerById(owner.Id);
                 }
             }
             else
@@ -1698,8 +1721,10 @@ internal static partial class Program
                 {
                     var choice = capture.Last<EntityChoices>(17);
                     match.SendChoices(choice.Id, choice.Entities.Take(Math.Max(1, choice.CountMin)).ToList());
+                    owner = game.ControllerById(owner.Id);
                 }
             }
+            source = game.IdEntityDic[source.Id];
             Check(owner.Choice == null && !game.Resolution.HasSuspendedEffect, "Standard play resolves pending choices: " + id);
             Check(!owner.HandZone.Contains(source), "Standard option accepted by engine: " + id);
             if (dualIds.Contains(id))
