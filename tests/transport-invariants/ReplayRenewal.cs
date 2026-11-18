@@ -77,19 +77,20 @@ internal static class ReplayRenewal
         if (fromStep == null)
         {
             // Probe: the recorded actions as they are, wherever they are still legal. A game that comes out identical needs no tail.
-            var probe = Fresh(); var probePlan = new RenewPlan();
-            new Runner().Run(probe, renew: probePlan);
+            var probe = Fresh(); var probePlan = new RenewPlan(); var probeRunner = new Runner();
+            probeRunner.Run(probe, renew: probePlan);
             bool gameSame = probePlan.Divergence < 0 && probe.Game.Actions.Count == stored.Count && probe.Game.Turns == stored.Turns && probe.Game.Winner == stored.Winner
                 && (stored.Fingerprint != null ? probePlan.Fingerprint == stored.Fingerprint : probePlan.FirstHashDrift < 0);
             if (gameSame && probePlan.FirstHashDrift >= 0)
                 return new(Kind.HashOnly, null, before, before, -1, stored.Count, probePlan.FirstHashDrift, replay, stored.Findings, probe.FindingsSha, 0, Array.Empty<string>());
             if (gameSame)
             {
-                // Same game; only the transport findings hash may have moved (a presentation change): substitute it, touch nothing else.
-                string same = text;
+                // Same game. A moved transport findings hash is no presentation-only change to substitute: it means the fake client's picture or
+                // the history-shape findings differ (the proofs need none), so it needs a look and an explicit --from-step.
                 if (stored.Findings != null && probe.FindingsSha != stored.Findings)
-                    same = text.Replace($"\"findingsSha\":\"{stored.Findings}\"", $"\"findingsSha\":\"{probe.FindingsSha}\"", StringComparison.Ordinal);
-                return new(Kind.Unchanged, same, before, before, -1, stored.Count, -1, replay, stored.Findings, probe.FindingsSha, 0, Array.Empty<string>());
+                    throw new ArgumentException($"the game is unchanged but the transport findings changed ({probeRunner.ViolationCount} violations; findings hash {stored.Findings} -> {probe.FindingsSha}): "
+                        + "look at them before renewing; pass --from-step N to re-record from a step");
+                return new(Kind.Unchanged, text, before, before, -1, stored.Count, -1, replay, stored.Findings, probe.FindingsSha, probeRunner.ViolationCount, Array.Empty<string>());
             }
         }
 
@@ -98,7 +99,9 @@ internal static class ReplayRenewal
         var runner = new Runner();
         var tail = Fresh();
         var history = runner.Run(tail, renew: plan);
-        if (plan.Divergence < 0) throw new InvalidOperationException("no tail was started (the game is unchanged); nothing to renew");
+        if (plan.Divergence < 0)
+            throw new ArgumentException($"the game changed ({before} -> {Summary(tail)}) but no legal-move hash drifted and every recorded action is still legal, so there is no step to start from: "
+                + "pass --from-step N to re-record the tail from a step you choose");
         (tail.Renewals ??= new()).Add(new TailRenewal { FromStep = plan.Divergence, Seed = tailSeed });
         string renewed = JsonSerializer.Serialize(tail, Program.Json);
         // Pinned files predate the golden-only decisionsSha field and do not carry it; do not add a null one.

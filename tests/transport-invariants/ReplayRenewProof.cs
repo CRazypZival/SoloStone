@@ -61,6 +61,13 @@ internal static class ReplayRenewProof
             "a changed game with drifted legal moves renews from the first drift (here " + moved.Divergence + ")");
         SelfChecks.Check(Throws(() => ReplayRenewal.Renew(Dump(drifted), drift + 5, null)), "--from-step later than the first legal-move drift is refused");
 
+        // A changed game with no drifted hash and no illegal action has no step to start from: say so and ask for --from-step.
+        var tampered = JsonSerializer.Deserialize<TransportReplay>(text, Program.Json);
+        tampered.EngineFingerprint = new string('0', 64);
+        SelfChecks.Check(ThrowsWith(() => ReplayRenewal.Renew(Dump(tampered), null, null), "--from-step"), "a changed game with no step to start from asks for --from-step");
+        tampered.EngineFingerprint = original.EngineFingerprint; tampered.FindingsSha = new string('1', 64);
+        SelfChecks.Check(ThrowsWith(() => ReplayRenewal.Renew(Dump(tampered), null, null), "transport findings changed"), "a moved findings hash on an identical game is not 'nothing drifted'");
+
         // A renewed file replays and verifies as an ordinary pinned replay, is its own renewal, and a second tail keeps the first one's record.
         new Runner().Run(JsonSerializer.Deserialize<TransportReplay>(renewed.Text, Program.Json), verify: true);
         SelfChecks.Check(true, "a renewed replay passes the verifying replay");
@@ -88,5 +95,6 @@ internal static class ReplayRenewProof
         Console.WriteLine("PASS replay tail renewal");
     }
 
+    private static bool ThrowsWith(Action action, string part) { try { action(); return false; } catch (ArgumentException error) { return error.Message.Contains(part, StringComparison.Ordinal); } }
     private static bool Throws(Action action) { try { action(); return false; } catch (ArgumentException) { return true; } }
 }

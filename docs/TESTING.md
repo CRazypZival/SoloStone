@@ -305,7 +305,7 @@ legal-move hashes, the fingerprint, the findings hash, the turns and the winner.
 stay. Each tail's start step and seed are appended to `renewals` in the file, so it can be redone. It prints the before and
 after (turns, winner, actions, fingerprint), the first drifted legal-move hash, the count of unchanged steps, the findings
 hash and the transport and history-shape findings of the new tail, and writes nothing unless `--write` (replace the file) or
-`--out FILE` (write a copy) is given. A replay that still plays as recorded writes nothing. A game that plays identically with
+`--out FILE` (write a copy) is given. A replay that still plays as recorded writes nothing. A changed game with no drifted hash and no illegal action (a different fingerprint, a game that ends early), or an identical game whose transport findings changed, is refused with a message asking for `--from-step N`. A game that plays identically with
 only its legal-move hashes drifted is refused: the engine-proof renewal tool (`EngineProof.dll --renew-replay`) re-records those,
 with its guards.
 
