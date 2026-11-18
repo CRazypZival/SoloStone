@@ -482,6 +482,7 @@ public sealed class NativeMatch
 #if !ENGINE_SOURCE
     internal int WireReturnId(int id) => id;
     internal int EngineReturnId(int id) => id;
+    internal bool IsGhostActor(int wireId) => false;
 #endif
 
     public NativeMatch(Action<int, IProtoBuf> send)
@@ -5987,6 +5988,8 @@ public sealed class NativeMatch
             }
         }
     };
+    // A client actor whose engine card now has another wire actor (a retired return or a burned card's old actor): a ghost.
+    internal bool IsGhostActor(int wireId) => WireReturnId(EngineReturnId(wireId)) != wireId;
     internal int WireReturnId(int id) => privateReturnIds.TryGetValue(id, out int alias) ? alias : id;
     internal int EngineReturnId(int id) => privateReturnOriginals.TryGetValue(id, out int original) ? original : id;
 
@@ -6037,6 +6040,8 @@ public sealed class NativeMatch
                 {
                     // A reconnect can start with snapshots instead of replaying the return pulses.
                     retainedOverdrawEntities.UnionWith(Game.PowerHistory.Full.OfType<PowerHistoryRetainedOverdraw>().Select(burn => burn.Entity.Id));
+                    // Only a client with no alias at all reconstructs the returns; burn aliases alone must not re-alias a returned card.
+                    if (privateReturnIds.Count == 0)
                     foreach (int original in Game.PowerHistory.Full.OfType<SabberStoneCore.Kettle.PowerHistorySubSpellStart>()
                         .Where(s => s.SpellPrefabGuid == SabberStoneCore.Actions.DrawReplacementRules.ReturnPrefab
                             && Game.IdEntityDic.TryGetValue(s.Source, out var source) && source.Controller.PlayerId != HumanPlayerId)

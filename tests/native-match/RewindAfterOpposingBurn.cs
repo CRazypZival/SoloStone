@@ -60,7 +60,6 @@ internal static partial class Program
             }
             Check(game.Rewind != null && game.Player1.Choice?.ChoiceAction == ChoiceAction.REWIND, name + ": Rewind offered");
             match.SendChoices(capture.Last<EntityChoices>(17).Id, new List<int> { game.Rewind.RewindEntityId });
-            FlushFieldHistory(match);
             Check(game.Rewind == null && game.Player1.Choice == null, name + ": Rewind settled");
             var faults = RewindMillFaults(capture);
             Check(faults.Count == 0, name + ": the burned opposing card never moves again: " + string.Join("; ", faults.Take(3)));
@@ -97,12 +96,19 @@ internal static partial class Program
             int burned = BurnedCards(capture, cursor);
             if (burned > 0) burning++;
             match.SendChoices(capture.Last<EntityChoices>(17).Id, new List<int> { game.Rewind.RewindEntityId });
-            FlushFieldHistory(match);
             Check(game.Rewind == null && game.Player1.Choice == null, name + ": Rewind settled");
             var faults = RewindMillFaults(capture);
             Check(faults.Count == 0, name + " (attempt burns " + burned + "): the burned opposing card never moves again: " + string.Join("; ", faults.Take(3)));
             var after = capture.Last<AllOptions>(14);
             Check(after.Options.Any(o => o.Type_ == PegasusGame.Option.Type.END_TURN), name + ": End Turn offered after Rewind");
+            // The live audit (TestControlVisibleDiff) maps each named client actor to its engine card; it must still find every
+            // actor that is not a ghost revealed, or it reports `unrevealed:` and holds canAct false.
+            foreach (var (id, named, zone, controller) in TransportFixtures::TransportInvariants.BoardActorInvariant.ClientCards(capture.HistorySnapshots()))
+            {
+                if (zone != 1 && zone != 4 && !(zone == 3 && controller == 1) || match.IsGhostActor(id)) continue;
+                try { match.SnapshotVisibleTransportTags(game.IdEntityDic[match.EngineReturnId(id)]); }
+                catch (TransportEntityNotVisibleException) { Check(false, name + ": unrevealed:" + id + ":" + named + " zone=" + zone + " engine=" + game.IdEntityDic[match.EngineReturnId(id)].Zone?.Type + " wire=" + match.WireReturnId(match.EngineReturnId(id)) + " after the Rewind"); }
+            }
             capture.SerializeAll();
         }
         Check(burning > 0, "at least one seed burns an opposing card during the attempt");

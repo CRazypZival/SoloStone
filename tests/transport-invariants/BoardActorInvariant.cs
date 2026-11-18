@@ -30,6 +30,15 @@ public static class BoardActorInvariant
         return faults;
     }
 
+    // What the client holds after these packets: named actors with their zone and controller (the live audit's input).
+    public static IReadOnlyList<(int Id, string Card, int Zone, int Controller)> ClientCards(IEnumerable<PowerHistory> packets)
+    {
+        var client = new ClientModel();
+        foreach (var history in packets) client.Apply(history);
+        return client.Entities.Where(pair => pair.Value.CardId.Length > 0)
+            .Select(pair => (pair.Key, pair.Value.CardId, pair.Value.CardZone, pair.Value.CardController)).ToList();
+    }
+
     internal static IEnumerable<string> Inspect(ClientModel client) => InspectBoard(client).Concat(client.MillFaults);
 
     private static IEnumerable<string> InspectBoard(ClientModel client)
