@@ -27,6 +27,11 @@ internal static partial class Program
             try { body(); Console.WriteLine("PASS event-log review: " + name); }
             catch (Exception error) { failed++; Console.WriteLine("FAIL event-log review: " + name + "\n  " + error.Message.Replace("\n", "\n  ") + (error is InvalidOperationException && error.Message.StartsWith("TEST:") ? "" : "\n  at " + (error.StackTrace ?? "").Split('\n').FirstOrDefault(l => l.Contains("MatchEventLogReviewTests"))?.Trim())); }
         }
+        Case("health labels: real damage and heal stay DAMAGE and HEAL", HealthLabelsRealDamageAndHeal);
+        Case("health labels: Hunter's Mark is HEALTH_SET", HealthLabelsHuntersMarkIsHealthSet);
+        Case("health labels: Garona halving is not damage", HealthLabelsHalvingIsHealthSet);
+        Case("health labels: a DAMAGE write without a hit is HEALTH_SET", HealthLabelsDamageWriteWithoutHitIsHealthSet);
+        Case("health labels: Reborn is REBORN", HealthLabelsRebornIsReborn);
         Case("F1 bounce + replay clears damage (no phantom HEAL)", BounceReplayDamage);
         Case("F1 polymorph resets tracked stats", PolymorphThenPing);
         Case("F1 cross-type hand transform updates the card type", CrossTypeTransform);
