@@ -22,8 +22,8 @@ namespace SabberStoneCore.CardSets.Client.Sets
 
         internal static void Fire(Minion cannon)
         {
-            int shots = 1 + cannon.Controller.BoardZone.GetAll().Count(m => m.Card.Id == "CAP_106"
-                && !m.IsSilenced && !m.IsDormant && !m.IsDead);
+            int shots = 1 + cannon.Controller.BoardZone.Interactable.Count(m => m.Card.Id == "CAP_106"
+                && !m.IsSilenced && !m.IsDead);
             for (int i = 0; i < shots; i++)
             {
                 var stack = new TaskStack();
