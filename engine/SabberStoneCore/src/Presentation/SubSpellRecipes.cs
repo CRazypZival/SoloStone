@@ -91,6 +91,14 @@ namespace SabberStoneCore.Presentation
             Add("EDR_110", VisualPhase.Damage, "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
             Add("EDR_421", VisualPhase.Damage, "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
             Add("TLC_401", VisualPhase.Damage, "ReuseFX_Frost_Missile_Snowball_Medium_Fast_Super_Simultaneous:4fecda861d7d78b4186c3a3c3091c1e5", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
+            // Quarantined Deathrattle damage, re-admitted (owner 2026-11-16): the client authors no effect for any of these (census: empty),
+            // so each shows a substitute like the other Deathrattle routes above. One small Fireblast missile per hit from the public hero
+            // (Sizzling Cinder, Destructive Blaze); one enemy-side pulse (the Flamestrike/Explosive Trap OpponentSide flood; fel for Felrattler) (Avatar of Destruction, Sewer Imp, Felrattler).
+            Add("TLC_249 CATA_586", VisualPhase.Damage, "ReuseFX_Missile_Fire_Fireball_Small_Super:b8e7bb6e0944d204297efdc937967085", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
+            Add("FIR_778 JAIL_007", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
+            // Felrattler (Fel, "all enemy minions"): the client authors no fel one-side area prefab that works as a sub-spell (Fel_AE_OpponentArea_FX,
+            // the Exploding Bloatbat trigger effect, washed the whole board in the live check), so it shares the proven enemy-side flood (owner call: fel colour). As for every area cue, it plays only when damage lands (B14PresentationProof), so an empty enemy side shows nothing.
+            Add("CORE_WC_701", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("JAIL_398", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("EDR_842", VisualPhase.Damage, "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1", block: BlockType.TRIGGER);
             Add("TLC_478", VisualPhase.Damage, "ReuseFX_Physical_DemonHunter_AE_Whirlwind_BothSides_Small_Super_Quick:bc23f3d70f7ba4a4aa4ec2f8b4163e46", VisualTargets.None, block: BlockType.TRIGGER, group: true);
@@ -188,6 +196,10 @@ namespace SabberStoneCore.Presentation
                 "ReuseFX_Necrotic_DeathKnight_OverrideSpawn_FromGround_Super:18936aca8a333214ba05320a8816a173", VisualTargets.None);
             return result;
         }
+
+        /// <summary>The recipe a power has when it resolves in its own POWER block.</summary>
+        internal static SubSpellRecipe FindOwnPower(string sourceCard, VisualPhase phase) =>
+            Recipes.TryGetValue((sourceCard, BlockType.POWER, 0, -1, 0, phase), out var recipe) ? recipe : null;
 
         internal static SubSpellRecipe Find(PowerHistoryBlockStart block, string sourceCard, VisualPhase phase)
         {
