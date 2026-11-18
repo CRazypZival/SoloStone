@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"ptBR","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":["DALA_BOSS_45h","EX1_124","EX1_408","NEW1_008"],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"ptBR","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":["DALA_BOSS_45h","EX1_124","EX1_408","NEW1_008"],"text":{
 "AT_001":["96100494","Cause $8 de dano a um lacaio."],
 "AT_002":["c9f5cde4","<b>Segredo:</b> Quando um lacaio aliado morrer, evoque outro lacaio aleatório com o mesmo Custo."],
 "AT_003":["50797490","Seu Poder Heroico causa 1 de dano extra."],
@@ -4285,6 +4285,7 @@
 "LOOT_383":["7f48e8a1","<b>Provocar</b> \n<b>Grito de Guerra:</b> \nEvoque um lacaio aleatório com_2_de custo para o seu oponente."],
 "LOOT_388":["020d9eca","<b>Grito de Guerra:</b> Restaure #2 de Vida de todos os personagens aliados."],
 "LOOT_389":["b2c1e043","<b>Grito de Guerra:</b> Devolva uma de suas armas destruídas à sua mão."],
+"LOOT_392":["be227910","<b>Último Suspiro:</b> Receba 10 Cristais de Mana."],
 "LOOT_394":["9a5da29d","No final do seu turno, evoque um lacaio aleatório com 1 de custo."],
 "LOOT_398":["443ae5bc","No final do seu turno, restaure #3 de Vida do seu herói."],
 "LOOT_410":["52c4829a","<b>Grito de Guerra</b>: Se tiver um Dragão na mão, cause 3 de dano a todos os outros lacaios."],

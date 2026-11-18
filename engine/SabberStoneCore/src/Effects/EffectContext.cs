@@ -230,9 +230,7 @@ namespace SabberStoneCore.EffectSystem
         public Card PickRandomCard(OfflinePoolFilter filter, Func<Card, bool> exclude, int? recipeDbfId = null)
         {
             filter = ResolvePoolFilter(filter, PoolCostBinding.None, recipeDbfId, out var destination);
-            var candidates = OfflineCardPools.Candidates(_game, Controller.HeroClass, filter, Source.Card.AssetId, destination)
-                .Where(card => !exclude(card)).ToArray();
-            return candidates.Length == 0 ? null : candidates[_game.Random.Next(candidates.Length)];
+            return OfflineCardPools.Pick(_game, filter, Controller.HeroClass, Source.Card.AssetId, destination, exclude);
         }
 
         public Card PickAffordableSpell(OfflinePoolFilter filter, int? recipeDbfId = null)

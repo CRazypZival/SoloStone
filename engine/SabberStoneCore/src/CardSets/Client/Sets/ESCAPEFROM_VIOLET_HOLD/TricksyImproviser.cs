@@ -29,8 +29,8 @@ namespace SabberStoneCore.CardSets.Client.Sets
                 {
                     var chosen = new EffectContext(g, c.Id, s.Id).PickRandomCard(EscapeFromVioletHoldPools.MageSecret(),
                         card => picked.Contains(card.Id) || c.SecretZone.Any(active => active.Card.Id == card.Id), DbfId);
-                    if (chosen != null) picked.Add(chosen.Id);
                     if (chosen == null) continue;
+                    picked.Add(chosen.Id);
                     var spell = Entity.FromCard(c, chosen, new EntityData { [GameTag.CREATOR] = s.Id, [GameTag.DISPLAYED_CREATOR] = s.Id });
                     new PlayTask(PlayType.SPELL, true).Process(g, c, s, null, new TaskStack { Playables = new[] { spell } });
                 }

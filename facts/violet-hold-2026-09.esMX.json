@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"esMX","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":["DALA_BOSS_45h","ULDA_BOSS_55p"],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"esMX","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":["DALA_BOSS_45h","ULDA_BOSS_55p"],"text":{
 "AT_001":["96100494","Inflige $8 de daño a un esbirro."],
 "AT_002":["c9f5cde4","<b>Secreto:</b> cuando un esbirro aliado muere, invoca un esbirro aleatorio del mismo costo."],
 "AT_003":["50797490","Tu Poder de héroe inflige 1 más de daño."],
@@ -4287,6 +4287,7 @@
 "LOOT_383":["7f48e8a1","<b>Provocación</b>\n<b>Grito de batalla:</b> invoca un esbirro aleatorio de costo 2 para tu adversario."],
 "LOOT_388":["020d9eca","<b>Grito de batalla:</b> restaura\n#2 de Salud a todos los personajes aliados."],
 "LOOT_389":["b2c1e043","<b>Grito de batalla:</b> devuelve una de tus armas destruidas a tu mano."],
+"LOOT_392":["be227910","<b>Estertor:</b> obtienes 10 Cristales de maná."],
 "LOOT_394":["9a5da29d","Al final de tu turno, invoca un esbirro aleatorio de_costo 1."],
 "LOOT_398":["443ae5bc","Al final de tu turno, restaura #3 de Salud a_tu_héroe."],
 "LOOT_410":["52c4829a","<b>Grito de batalla:</b> si tienes un Dragón en la mano, inflige 3 de daño a todos los demás esbirros."],

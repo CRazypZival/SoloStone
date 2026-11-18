@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"plPL","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":["DALA_BOSS_45h","DALA_BOSS_59t2","EX1_097","ULD_239"],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"plPL","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":["DALA_BOSS_45h","DALA_BOSS_59t2","EX1_097","ULD_239"],"text":{
 "AT_001":["96100494","Zadaj $8 pkt. obrażeń stronnikowi."],
 "AT_002":["c9f5cde4","<b>Sekret:</b> Gdy zginie przyjazny stronnik, przyzwij losowego stronnika o takim samym koszcie."],
 "AT_003":["50797490","Twoja moc specjalna zadaje 1 pkt. dodatkowych obrażeń."],
@@ -4285,6 +4285,7 @@
 "LOOT_383":["7f48e8a1","<b>Prowokacja</b>\n<b>Okrzyk bojowy:</b> Przyzwij losowego stronnika o koszcie (2) twojemu przeciwnikowi."],
 "LOOT_388":["020d9eca","<b>Okrzyk bojowy:</b>\nPrzywróć #2 pkt. zdrowia wszystkim przyjaznym postaciom."],
 "LOOT_389":["b2c1e043","<b>Okrzyk bojowy:</b> Przywróć jedną z twoich zniszczonych broni do twojej ręki."],
+"LOOT_392":["be227910","<b>Agonia:</b> Otrzymujesz 10 kryształów many."],
 "LOOT_394":["9a5da29d","Na koniec twojej tury przyzwij losowego stronnika o koszcie (1)."],
 "LOOT_398":["443ae5bc","Na koniec twojej tury przywraca #3 pkt. zdrowia twojemu_bohaterowi."],
 "LOOT_410":["52c4829a","<b>Okrzyk bojowy:</b> Zadaj\n3 pkt. obrażeń wszystkim pozostałym stronnikom, jeśli masz w ręce Smoka."],

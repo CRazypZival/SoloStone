@@ -17,7 +17,7 @@ internal static class Unpinned_TwigSecretsDormantProof
     internal static void Run()
     {
         var failures = new List<string>();
-        foreach (var test in new Action[] { TwigRefreshesAndGainsNone, TwigKeepsOverload, TwigText, TricksySkipsActiveAndPicked, TricksyDoesNotDisturbRealPool,
+        foreach (var test in new Action[] { TwigRefreshesAndGainsNone, TwigKeepsOverload, TwigText, TricksySkipsActiveAndPicked, TricksyDoesNotDisturbRealPool, TricksySecondSeat, TricksyFullSecretZone, ZombeastThroughStormTheGates,
             ZombeastDormantBothPaths, ZombeastWithoutDormantPartIsAwake })
             try { test(); } catch (Exception e) { failures.Add(test.Method.Name + ": " + e.Message); }
         Verify(failures.Count == 0, string.Join("; ", failures));
@@ -58,8 +58,8 @@ internal static class Unpinned_TwigSecretsDormantProof
     }
 
     // Three real Mage Secrets from the catalog's Tricksy pool.
-    internal static string[] PoolOf(Game g, string id) => OfflineCardPools.Candidates(g, g.Player1.HeroClass, LostCityPoolProof.Filter(id), Cards.FromId(id).AssetId)
-        .Select(c => c.Id).Take(3).ToArray();
+    internal static string[] PoolOf(Game g, string id, int count = 3) => OfflineCardPools.Candidates(g, g.Player1.HeroClass, LostCityPoolProof.Filter(id), Cards.FromId(id).AssetId)
+        .Select(c => c.Id).Take(count).ToArray();
 
     // The same Standard fixture StandardSetsProof.Case builds (that helper allows one proof per card; Tricksy already has one).
     private static Game StandardGame(int seed)
@@ -104,6 +104,56 @@ internal static class Unpinned_TwigSecretsDormantProof
             var ids = player.SecretZone.Select(s => s.Card.Id).ToArray();
             Verify(ids.Length == 2 && ids.Distinct().Count() == 2, $"seed {seed}: two different Secrets from the real pool, got {string.Join(",", ids)}");
         }
+    }
+
+    private static void TricksySecondSeat()
+    {
+        var g = StandardGame(1); const string id = "JAIL_321"; var pool = PoolOf(g, id); End(g);
+        var player = g.Player2; Verify(g.CurrentPlayer == player, "second seat's turn");
+        AutomaticCastProof.Cast(g, (Spell)Entity.FromCard(player, Cards.FromId("GAME_005")));
+        LostCityPoolProof.WithPool(g, id, pool, () => {
+            var active = (Spell)Entity.FromCard(player, Cards.FromId(pool[1])); AutomaticCastProof.Cast(g, active);
+            PlayEntity(g, player, Add(player, id));
+            Verify(player.SecretZone.Select(x => x.Card.Id).OrderBy(x => x).SequenceEqual(pool.OrderBy(x => x)), "second seat: Tricksy adds the two Secrets not active, none twice");
+            Verify(g.Player1.SecretZone.Count == 0, "the other seat is untouched");
+        });
+    }
+
+    private static void TricksyFullSecretZone()
+    {
+        var g = StandardGame(1); const string id = "JAIL_321"; var five = PoolOf(g, id, 5); var p = g.Player1;
+        Verify(five.Length == 5, "five catalog Secrets");
+        AutomaticCastProof.Cast(g, (Spell)Entity.FromCard(p, Cards.FromId("GAME_005")));
+        foreach (string secret in five) AutomaticCastProof.Cast(g, (Spell)Entity.FromCard(p, Cards.FromId(secret)));
+        Verify(p.SecretZone.Count == 5, "Secret zone full");
+        LostCityPoolProof.WithPool(g, id, five.Take(3).ToArray(), () => {
+            PlayEntity(g, p, Add(p, id));
+            Verify(p.SecretZone.Count == 5 && p.BoardZone.Any(m => m.Card.Id == id), "full Secret zone: Tricksy plays and casts nothing, no error");
+        });
+    }
+
+    // The real Storm the Gates chain: Sidequest completes, two crafting offers, the second one answered with Cyborg Patriarch.
+    private static void ZombeastThroughStormTheGates()
+    {
+        bool found = false;
+        for (int seed = 1; seed <= 150 && !found; seed++)
+        {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1; g.SetRandomSeed(seed);
+            var quest = (Spell)Play(g, p, "TLC_EVENT_400");
+            QuestRules.Advance(quest, 3);
+            if (p.Choice == null) continue;
+            EvHooksCardsProof.Pick(g);
+            var patriarch = p.Choice?.Choices.FirstOrDefault(i => g.IdEntityDic[i].Card.Id == "TIME_046") ?? 0;
+            if (patriarch == 0) continue;
+            found = true;
+            EvHooksCardsProof.Pick(g, patriarch);
+            var made = p.HandZone.OfType<Minion>().Single(m => m.Card.Id == "ICC_828t");
+            Verify(made.Card.Dormant != null && made.Card.Dormant.Turns == 3, "Storm Zombeast built with Cyborg Patriarch carries the Dormant definition");
+            PlayEntity(g, p, made);
+            var onBoard = p.BoardZone.OfType<Minion>().Single(m => m.Card.Id == "ICC_828t");
+            Verify(onBoard.IsDormant && DormantRules.TurnsRemaining(onBoard) == 3, "Storm Zombeast with Cyborg Patriarch sleeps for 3 turns");
+        }
+        Verify(found, "some seed offers Cyborg Patriarch in the second Storm choice");
     }
 
     private static void ZombeastDormantBothPaths()

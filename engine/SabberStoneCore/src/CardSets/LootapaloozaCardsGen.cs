@@ -207,7 +207,7 @@ namespace SabberStoneCore.CardSets
 			cards.Add("LOOT_392", new CardDef(new Power
 			{
 				DeathrattleTask = new SetControllerGameTagTask(GameTag.RESOURCES_USED, 0)
-			}));
+			}) { Configure = card => card.Text = "<b>Deathrattle:</b> Refresh your Mana Crystals." }); // current retail text; the card file keeps the 38377 base text
 
 		}
 

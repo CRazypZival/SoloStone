@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"koKR","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":["DALA_BOSS_45h","TLC_901"],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"koKR","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":["DALA_BOSS_45h","TLC_901"],"text":{
 "AT_001":["96100494","하수인에게 피해를 $8 줍니다."],
 "AT_002":["c9f5cde4","<b>비밀:</b>\n아군 하수인이 죽으면, 같은 비용의 무작위 하수인을 소환합니다."],
 "AT_003":["50797490","[x]내 영웅 능력의\n피해량이 1 증가합니다."],
@@ -4287,6 +4287,7 @@
 "LOOT_383":["7f48e8a1","<b>도발</b>, <b>전투의 함성:</b> 상대편에게 비용이 2인 무작위 하수인을\n소환해 줍니다."],
 "LOOT_388":["020d9eca","<b>전투의 함성:</b> 모든 아군 캐릭터의 생명력을\n#2 회복시킵니다."],
 "LOOT_389":["b2c1e043","<b>전투의 함성:</b> 파괴된 내 무기 중 하나를 내 손으로 다시 가져옵니다."],
+"LOOT_392":["be227910","<b>죽음의 메아리:</b>\n마나 수정을 10개 얻습니다."],
 "LOOT_394":["9a5da29d","내 턴이 끝날 때, 비용이 1인 무작위 하수인을 소환합니다."],
 "LOOT_398":["443ae5bc","내 턴이 끝날 때,\n내 영웅의 생명력을\n#3 회복시킵니다."],
 "LOOT_410":["52c4829a","[x]<b>전투의 함성:</b>\n내 손에 용족이 있으면,\n다른 <b>모든</b> 하수인에게\n피해를 3 줍니다."],

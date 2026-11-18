@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"frFR","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":[],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"frFR","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":[],"text":{
 "AT_001":["96100494","Inflige $8 |4(point,points) de dégâts à un serviteur."],
 "AT_002":["c9f5cde4","<b>Secret :</b> quand un serviteur allié meurt, invoque un serviteur aléatoire de même coût."],
 "AT_003":["50797490","Votre pouvoir héroïque inflige 1 point de dégâts supplémentaire."],
@@ -4288,6 +4288,7 @@
 "LOOT_383":["7f48e8a1","<b>Provocation</b>\n<b>Cri de guerre_:</b> invoque un serviteur aléatoire coûtant 2_cristaux pour votre adversaire."],
 "LOOT_388":["020d9eca","<b>Cri de guerre_:</b> rend #2_PV à tous les personnages alliés."],
 "LOOT_389":["b2c1e043","<b>Cri de guerre_:</b> renvoie une de vos armes détruites dans votre main."],
+"LOOT_392":["be227910","<b>Râle d’agonie_:</b> vous gagnez 10_cristaux de_mana."],
 "LOOT_394":["9a5da29d","À la fin de votre tour, invoque un serviteur aléatoire coûtant 1_cristal."],
 "LOOT_398":["443ae5bc","À la fin de votre tour, rend #3_PV à votre héros."],
 "LOOT_410":["52c4829a","<b>Cri de guerre_:</b> inflige 3_points de dégâts à tous les autres serviteurs si vous avez un Dragon en main."],
