@@ -16,6 +16,7 @@ internal static class LocationCooldownProof
             try { OwnerTurnCycle(id); } catch (Exception e) { failures.Add(id + ": " + e.Message); }
         L.Check(failures.Count == 0, "cooldown " + string.Join(" | ", failures));
         Registry();
+        WelcomeHomeSlotAfterSameBatchDeaths();
         Console.WriteLine("PASS location cooldown (#193)");
     }
 
@@ -56,6 +57,21 @@ internal static class LocationCooldownProof
         L.End(g); L.End(g);
         L.Check(!location.IsExhausted && location[GameTag.EXHAUSTED] == 0 && location[GameTag.LOCATION_ACTION_COOLDOWN] == 0
             && p.Options().OfType<ActivateLocationTask>().Any(t => t.Source == location), "owner turn after next: open again");
+    }
+
+    // Exposed by the cooldown change in the transport corpus (standard-batch-1-39-vs-45-s8): Welcome Home's Deathrattle summoned at the
+    // location's last slot even when minions that died in the same batch had already shrunk the board (ZoneException: Invalid board insertion).
+    private static void WelcomeHomeSlotAfterSameBatchDeaths()
+    {
+        var g = L.Game(); var p = g.Player1;
+        var a = L.Minion(p); var b = L.Minion(p);
+        var location = L.Location(p);
+        var spell = Entity.FromCard(p, Cards.FromId("TIME_EVENT_997"), zone: p.SetasideZone);
+        SabberStoneCore.Actions.Generic.AddEnchantmentBlock(g, Cards.FromId("TIME_EVENT_997e"), spell, location);
+        L.Check(location.ZonePosition == 2, "location is the third slot");
+        a.Destroy(); b.Destroy(); location.Destroy();
+        g.DeathProcessingAndAuraUpdate();
+        L.Check(p.BoardZone.Count == 1 && p.BoardZone.GetSlot(0).Card.Cost == 3, "Welcome Home summons into the shrunk board (count " + p.BoardZone.Count + ")");
     }
 
     // Catches future locations: any implemented activation location with a non-final charge must be on cooldown after use.
