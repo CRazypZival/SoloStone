@@ -54,9 +54,9 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 
 			IList<IPlayable> entities = IncludeTask.GetEntities(Type, in controller, source, target, stack?.Playables);
             if (game.History) game.PowerHistory.TargetRange(entities, Type);
-            using var visual = game.History ? (entities.Count != 1
-                ? game.PowerHistory.VisualFor(game, Presentation.VisualPhase.DamageGroup, source as IPlayable, null, entities.Count == 0)
-                    ?? game.PowerHistory.VisualFor(game, Presentation.VisualPhase.Damage, source as IPlayable, null, entities.Count == 0)
+            using var visual = game.History ? (entities.Count > 1
+                ? game.PowerHistory.Visual(game, Presentation.VisualPhase.DamageGroup, source as IPlayable)
+                    ?? game.PowerHistory.Visual(game, Presentation.VisualPhase.Damage, source as IPlayable)
                 : game.PowerHistory.Visual(game, Presentation.VisualPhase.Damage, source as IPlayable)) : null;
 
             bool collectLifesteal = HealingRules.BeginDamage(source as IPlayable);

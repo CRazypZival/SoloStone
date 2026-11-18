@@ -97,7 +97,7 @@ namespace SabberStoneCore.Presentation
             Add("TLC_249 CATA_586", VisualPhase.Damage, "ReuseFX_Missile_Fire_Fireball_Small_Super:b8e7bb6e0944d204297efdc937967085", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
             Add("FIR_778 JAIL_007", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             // Felrattler (Fel, "all enemy minions"): the client authors no fel one-side area prefab that works as a sub-spell (Fel_AE_OpponentArea_FX,
-            // the Exploding Bloatbat trigger effect, washed the whole board in the live check), so it shares the proven enemy-side flood (owner call: fel colour).
+            // the Exploding Bloatbat trigger effect, washed the whole board in the live check), so it shares the proven enemy-side flood (owner call: fel colour). As for every area cue, it plays only when damage lands (B14PresentationProof), so an empty enemy side shows nothing.
             Add("CORE_WC_701", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("JAIL_398", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("EDR_842", VisualPhase.Damage, "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1", block: BlockType.TRIGGER);

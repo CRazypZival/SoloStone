@@ -661,10 +661,7 @@ namespace SabberStoneCore.Kettle
         /// </summary>
         internal int DelegatedPowerSource { get; set; }
 
-        internal IDisposable Visual(Game game, VisualPhase phase, IPlayable source = null, IEntity target = null) => VisualFor(game, phase, source, target, false);
-
-        // noTargets: the damage task resolved no target at all, so an area recipe still plays once (an empty side).
-        internal IDisposable VisualFor(Game game, VisualPhase phase, IPlayable source, IEntity target, bool noTargets)
+        internal IDisposable Visual(Game game, VisualPhase phase, IPlayable source = null, IEntity target = null)
         {
             if (!_enabled || CurrentBlock == null) return null;
             if (phase == VisualPhase.Damage && target != null && source?.Id == CurrentBlock.Source && _damageGroups.Contains(CurrentBlock)) return null;
@@ -697,7 +694,7 @@ namespace SabberStoneCore.Kettle
                 : recipe.Targets == VisualTargets.Resolved && target == null)) return null;
             int visualSource = recipe.Source == VisualSource.Inherit ? 0
                 : recipe.Source == VisualSource.Hero ? source.Controller.Hero.Id : source.Id;
-            return new VisualScope(this, game, recipe, phase, visualSource, target, requirePublicOrigin, noTargets);
+            return new VisualScope(this, game, recipe, phase, visualSource, target, requirePublicOrigin);
         }
 
         private sealed class VisualScope : IDisposable
@@ -708,11 +705,10 @@ namespace SabberStoneCore.Kettle
             private readonly VisualPhase _phase;
             private readonly PowerHistoryBlockStart _block;
             private readonly int _full, _last, _source, _target, _attack, _health, _rush;
-            private readonly bool _requirePublicOrigin, _noTargets;
+            private readonly bool _requirePublicOrigin;
             private bool _disposed;
-            internal VisualScope(PowerHistory history, Game game, SubSpellRecipe recipe, VisualPhase phase, int source, IEntity target, bool requirePublicOrigin, bool noTargets)
+            internal VisualScope(PowerHistory history, Game game, SubSpellRecipe recipe, VisualPhase phase, int source, IEntity target, bool requirePublicOrigin)
             {
-                _noTargets = noTargets;
                 _history = history; _game = game; _recipe = recipe; _phase = phase; _source = source; _target = target?.Id ?? 0;
                 _requirePublicOrigin = requirePublicOrigin;
                 if (phase == VisualPhase.BoardBuff && target != null)
@@ -750,8 +746,7 @@ namespace SabberStoneCore.Kettle
                         else if (groupDepth == 0 && entry is PowerHistoryMetaData meta
                             && meta.Type == MetaDataType.DAMAGE && meta.Data > 0) hit = true;
                     }
-                    // An area effect plays on an empty side as well (retail Flamestrike on an empty board): the damage task found no target.
-                    if (!hit && !_noTargets) return;
+                    if (!hit) return;
                     // A pulse before the hits avoids replaying the full-board effect after nested reactions.
                     var pulse = new IPowerHistoryEntry[] {
                         new PowerHistorySubSpellStart { Source = _source, SpellPrefabGuid = _recipe.Prefab },
