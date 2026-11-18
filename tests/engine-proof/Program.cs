@@ -160,6 +160,8 @@ if (args.Length == 2 && args[0] == "--quest-child") { QuestSnapshotProof.Child(a
 if (args.Contains("--quests-only")) { QuestLifecycleProof.Run(); QuestOpeningProof.Run(); QuestSnapshotProof.Run(); return; }
 if (args.Length == 2 && args[0] == "--pool-evidence")
 {
+    // offline_pools.py needs the client export anyway; the Past variety receipts come from its client-tier scenarios (#40).
+    ClientExport.ClientTier = true;
     CoreReprintsProof.Run();
     Core2026Proof.CardProofs();
     StandardSetsProof.Run();
