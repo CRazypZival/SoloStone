@@ -381,6 +381,15 @@ namespace SabberStoneCore.Model.Zones
 		}
 
 		/// <summary>
+		/// The minions an effect may see: every board minion that is not Untouchable, so not Dormant and not a permanent such as
+		/// Nether Portal, in board order. Use it for every effect that picks, affects or counts board minions (retail: Untouchable
+		/// minions cannot be targeted, including random picks, and per-minion scalers do not count them). Occupancy still reads the
+		/// raw zone (Count, IsFull, FreeSpace, SlotCount): an Untouchable minion takes a board slot. A card text that names Dormant
+		/// itself, or a card's own body, may check the minion directly and says why with an "untouchable-ok:" comment.
+		/// </summary>
+		public Minion[] Interactable => GetAll();
+
+		/// <summary>
 		/// Gets all board minions except untouchables(dormant).
 		/// </summary>
 		/// <returns></returns>

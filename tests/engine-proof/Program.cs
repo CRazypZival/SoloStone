@@ -113,6 +113,14 @@ if (args.Contains("--enemy-board-copy-only")) { EnemyBoardCopyProof.Run(); retur
 if (args.Contains("--forced-attack-only")) { ForcedAttackBudgetProof.Run(); return; }
 if (args.Contains("--poisonous-only")) { PoisonousDamageProof.Run(); return; }
 if (args.Contains("--targeting-only")) { TargetingRulesProof.Run(); return; }
+if (args.Contains("--untouchable-only"))
+{
+    var untouchableFailures = new List<string>();
+    foreach (var step in new Action[] { UntouchableBoardProof.Run, UntouchableBoardSourceCheck.Run })
+        try { step(); } catch (Exception e) { untouchableFailures.Add(e.Message); }
+    if (untouchableFailures.Count != 0) throw new Exception(string.Join("\n", untouchableFailures));
+    return;
+}
 if (args.Contains("--floop-taunt-only")) { FloopTauntProof.Run(); return; }
 if (args.Contains("--weapon-keywords-only")) { WeaponKeywordProof.Run(); return; }
 if (args.Contains("--weapon-damage-only")) { DamageWeaponTaskProof.Run(); return; }
