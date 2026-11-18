@@ -1035,6 +1035,27 @@ namespace SabberStoneCore.Kettle
 			Last.Add(entry);
 		}
 
+        // Moves the anonymous DECK FULL_ENTITYs recorded from fullFrom/lastFrom on (the deck preparations) in front of the opening
+        // block start, in order, in both lists. The client creates entities that precede the first block during game creation, as
+        // it does the original deck; one created inside the block is placed at the deck zone's transform, and a copy drawn into the
+        // opening hand is then shown face up there until the mulligan deal moves it. The match event log's per-entry RNG draw
+        // stamps (diagnostics) move with their entries, so the preparation's draws show before the block.
+        internal void HoistOpeningDeckEntities(PowerHistoryBlockStart opening, int fullFrom, int lastFrom)
+        {
+            if (!_enabled) return;
+            foreach (var (list, from) in new[] { (Full, fullFrom), (Last, lastFrom) })
+            {
+                int at = list.FindIndex(e => ReferenceEquals(e, opening));
+                if (at < 0 || from <= at) continue;
+                var deck = list.Skip(from).Where(e => e is PowerHistoryFullEntity full && string.IsNullOrEmpty(full.Entity.Name)
+                    && full.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone) && zone == (int)Zone.DECK).ToList();
+                if (deck.Count == 0) continue;
+                var moved = new HashSet<IPowerHistoryEntry>(deck);
+                list.RemoveAll(moved.Contains);
+                list.InsertRange(at, deck);
+            }
+        }
+
         // The enclosing block's effect flag before a child opens.
         internal bool CurrentBlockHasEffects => _blocks.Count > 0 && _blocks.Peek().HasEffects;
 

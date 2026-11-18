@@ -806,8 +806,9 @@ namespace SabberStoneCore.Model
 			_players.ToList().ForEach(p => p.PlayState = PlayState.PLAYING);
 
 			// starting mulligan draw block
+			PowerHistoryBlockStart opening = null;
 			if (History)
-				PowerHistory.Add(PowerHistoryBuilder.BlockStart(BlockType.TRIGGER, Id, "", -1, 0, effectIndex: -1));
+				PowerHistory.Add(opening = PowerHistoryBuilder.BlockStart(BlockType.TRIGGER, Id, "", -1, 0, effectIndex: -1));
 
 			// getting first player
 			FirstPlayer = _gameConfig.StartPlayer < 0
@@ -823,8 +824,13 @@ namespace SabberStoneCore.Model
 
 			HistoryFacts.FreezeInitial(this);
             Actions.PayloadRules.CaptureTracking(this);
+            // PowerHistory is null when History is off; opening is set only when it is on.
+            int preparedFull = opening != null ? PowerHistory.Full.Count : 0, preparedLast = opening != null ? PowerHistory.Last.Count : 0;
             CardSets.Client.Sets.AzalinaSoulsever.PrepareDecks(this);
             DeckbuildingRules.Prepare(this);
+            // Deckbuilding cards (Azalina's copies, Beatrix's sideboard copies) are starting deck cards: the client must create
+            // them with the game, before the opening block, or a copy dealt into the opening hand shows face up at the deck.
+            if (opening != null) PowerHistory.HoistOpeningDeckEntities(opening, preparedFull, preparedLast);
 
 			// Capture restrictions before any opening card leaves its deck.
 			StartOfGameRules.Capture(this);
