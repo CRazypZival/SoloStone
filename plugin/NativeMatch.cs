@@ -6551,9 +6551,24 @@ public sealed class NativeMatch
                 : changedOffer && !hidden && name.Length > 0
                 ? new[] { GameTag.ATK, GameTag.HEALTH, GameTag.COST }.Select(tag => new NativeTag { Name = (int)tag,
                     Value = tags.FirstOrDefault(shown => shown.Name == (int)tag)?.Value ?? 0 }).ToList()
-                : new List<NativeTag>(),
+                : CreationBuilderDefTags(name, hidden, tags),
             Tags = tags.OrderBy(tag => tag.Name).ToList()
         };
+    }
+
+    // Nefarian's Creation's text (#119): the client picks a card's text builder from its EntityDef (EntityDef.GetCardTextBuilder reads the
+    // definition's tag 782, else the card database), never from the entity's own tags, and only a FULL_ENTITY or CHANGE_ENTITY DefTags
+    // list reaches the definition. The engine's builder tag (Zombeast, which formats both parts from tags 471/472) therefore goes out
+    // as a definition tag too; without it the Creation keeps its database builder and shows an empty text box.
+    internal static List<NativeTag> CreationBuilderDefTags(string name, bool hidden, IEnumerable<NativeTag> tags)
+    {
+        var result = new List<NativeTag>();
+        if (hidden || name != "CATA_470t1") return result;
+        var list = tags.ToList();
+        var builder = list.FirstOrDefault(tag => tag.Name == 782);
+        if (builder != null && list.Any(tag => tag.Name == (int)GameTag.MODULAR_ENTITY_PART_1 && tag.Value != 0))
+            result.Add(new NativeTag { Name = builder.Name, Value = builder.Value });
+        return result;
     }
 
     internal static void ValidateHistoryEntityIdentity(PegasusGame.PowerHistoryEntity entity)

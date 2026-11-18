@@ -23,7 +23,7 @@ internal static partial class PoweredUpGlowTests
                 .Where(e => e != null && e.Entity == card.Id).ToArray();
             bool Hidden(int tag) => tag == 50 || tag == 49 || tag == 53 || tag == 263;
             if (opponent) {
-                Check(actors.All(e => string.IsNullOrEmpty(e.Name) && e.Tags.All(t => Hidden(t.Name))),
+                Check(actors.All(e => string.IsNullOrEmpty(e.Name) && e.DefTags.Count == 0 && e.Tags.All(t => Hidden(t.Name))),
                     "opponent generated hand hides identity, components, stats and text builder");
                 Check(f.Entries.Where(e => e.HasTagChange && e.TagChange.Entity == card.Id)
                     .All(e => Hidden(e.TagChange.Tag)), "hidden generated changes never leak component IDs");
@@ -32,6 +32,10 @@ internal static partial class PoweredUpGlowTests
                     && e.Tags.Any(t => t.Name == 471 && t.Value == definition[GameTag.MODULAR_ENTITY_PART_1])
                     && e.Tags.Any(t => t.Name == 472 && t.Value == definition[GameTag.MODULAR_ENTITY_PART_2])),
                     "owner gets pinned builder and ordered component dbfIds in initial definition: "+string.Join(";",actors.Select(e=>e.Name+":"+string.Join(",",e.Tags.Select(t=>t.Name+"="+t.Value)))));
+                // #119: the client reads a card's text builder from its definition (DefTags of a FULL/CHANGE_ENTITY), not from the
+                // entity's own tags, so the Creation's builder must also be a definition tag or its text box stays empty.
+                if (!potion)
+                    Check(actors.Any(e => e.Name == definition.Id && e.DefTags.Any(t => t.Name == 782 && t.Value == 14)), "owner's Creation carries the Zombeast builder as a definition tag (DefTags 782 = 14)");
             }
             Check(f.Entries.All(e => !e.HasTagChange || !PayloadRules.IsInternalTag((GameTag)e.TagChange.Tag)),
                 "private controller Coin policy never reaches native history");
