@@ -728,6 +728,7 @@ M	Assembly-CSharp	Actor	GetPremium	TAG_PREMIUM()
 M	Assembly-CSharp	Actor	GetSpell	*
 M	Assembly-CSharp	Actor	IsColliderEnabled	System.Boolean()
 M	Assembly-CSharp	Actor	IsShown	System.Boolean()
+M	Assembly-CSharp	Actor	SetPortraitMaterial	System.Void(UnityEngine.Material,System.Int32)
 M	Assembly-CSharp	Actor	SetPortraitTexture	System.Void(UnityEngine.Texture)
 M	Assembly-CSharp	AlertPopup	ButtonPress	*
 M	Assembly-CSharp	AlertPopup	GetInfo	AlertPopup+PopupInfo()

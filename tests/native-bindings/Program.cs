@@ -209,6 +209,15 @@ var failures = new List<string>();
     string creation = File.ReadAllText(Path.Combine(root, "plugin/NativeCreationPortrait.cs"));
     if (creation.Contains("\"op_Implicit\"") && toBool) failures.Add("NativeCreationPortrait selects op_Implicit, ambiguous with the bool operator");
     if (!creation.Contains("GetProperty(\"Asset\"")) failures.Add("NativeCreationPortrait must read the handle's Asset property");
+    // Golden Creation: a premium actor shows the CardDef's portrait material, which SetPortraitTexture leaves alone, so the plugin
+    // swaps in the part's material. It reads these by name; the hook is optional (a miss keeps the template's golden art), so a
+    // change here is a failure of this check, not of a launch.
+    try { if (Field(gameMetadata, "Actor", "m_usingInitialPortraitMaterial").DecodeSignature(signatures, (object)null) != "Boolean") failures.Add("Actor.m_usingInitialPortraitMaterial is no longer Boolean: re-check the golden Creation material hook"); }
+    catch (Exception error) { failures.Add("Actor.m_usingInitialPortraitMaterial is missing: re-check the golden Creation material hook (" + error.Message + ")"); }
+    try { MethodSignature(gameMetadata, "CardDef", "GetPortraitMaterial", new[] { "TAG_PREMIUM" }, "AssetHandle`1<Material>", signatures); }
+    catch (Exception error) { failures.Add("CardDef.GetPortraitMaterial(TAG_PREMIUM) returning AssetHandle<Material> is missing: re-check the golden Creation material hook (" + error.Message + ")"); }
+    foreach (string required in new[] { "\"m_usingInitialPortraitMaterial\"", "\"GetPortraitMaterial\"", "SetPortraitMaterial(material, -1)", "TAG_PREMIUM.DIAMOND ? TAG_PREMIUM.GOLDEN" })
+        if (!creation.Contains(required)) failures.Add("NativeCreationPortrait golden material hook lost: " + required);
 }
 if (pluginMetadata.TypeDefinitions.Select(pluginMetadata.GetTypeDefinition).SelectMany(type => type.GetMethods())
     .Select(pluginMetadata.GetMethodDefinition).Any(method => pluginMetadata.GetString(method.Name) == "BlockPersonalSuggestionCraft"))

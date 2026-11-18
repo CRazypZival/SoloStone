@@ -21,7 +21,12 @@ internal static class NativeCreationPortrait
     // Kept alive for the session: the texture lease is released with its CardDef.
     private static readonly List<DefLoader.DisposableCardDef> Defs = new List<DefLoader.DisposableCardDef>();
     private static readonly List<object> Handles = new List<object>();
-    private static MethodInfo getPortraitTexture;
+    private static MethodInfo getPortraitTexture, getPortraitMaterial;
+    // A golden, diamond or signature actor shows its CardDef's premium portrait MATERIAL, which SetPortraitTexture leaves alone
+    // (Actor.UpdatePortraitMaterials loads it and clears m_usingInitialPortraitMaterial), so the part's material is swapped in too.
+    private static FieldInfo usingInitialMaterial;
+    private static readonly Dictionary<(int, TAG_PREMIUM), Material> Materials = new Dictionary<(int, TAG_PREMIUM), Material>();
+    private static readonly HashSet<(int, TAG_PREMIUM)> FailedMaterials = new HashSet<(int, TAG_PREMIUM)>();
     private static readonly HashSet<(int, TAG_PREMIUM)> Failed = new HashSet<(int, TAG_PREMIUM)>();
     private static readonly HashSet<int> Warned = new HashSet<int>();
 
@@ -36,6 +41,9 @@ internal static class NativeCreationPortrait
             ClientChecks.NoteSelfAdapting(original);
         }
         catch (Exception error) { log?.LogWarning("creation portrait hook unavailable: " + error.Message); }
+        // Optional like the hooks: without the field a golden Creation keeps the template's golden art and logs this once.
+        try { usingInitialMaterial = AccessTools.Field(typeof(Actor), "m_usingInitialPortraitMaterial") ?? throw new MissingFieldException("Actor", "m_usingInitialPortraitMaterial"); }
+        catch (Exception error) { log?.LogWarning("creation premium portrait hook unavailable: " + error.Message); }
         InstallTile(harmony);
     }
 
@@ -85,8 +93,47 @@ internal static class NativeCreationPortrait
             if (entity == null) return;
             var texture = FirstDragonPortrait(entity, __instance.GetPremium());
             if (texture != null) __instance.SetPortraitTexture(texture);
+            UseFirstDragonPremiumMaterial(__instance, entity);
         }
         catch (Exception error) { Fail(0, TAG_PREMIUM.NORMAL, error); }
+    }
+
+    // A premium actor drawing the CardDef's golden material (not the initial one) gets the first part's golden material of the same
+    // premium. Diamond asks for the golden material, as Actor.UpdatePortraitMaterials does.
+    private static void UseFirstDragonPremiumMaterial(Actor actor, Entity entity)
+    {
+        var premium = actor.GetPremium();
+        if (premium == TAG_PREMIUM.NORMAL || usingInitialMaterial == null || (bool)usingInitialMaterial.GetValue(actor)) return;
+        int part = PartDbfId(entity.GetCardId(), id => entity.GetTag((GAME_TAG)id));
+        if (part == 0) return;
+        var material = MaterialOf(part, premium == TAG_PREMIUM.DIAMOND ? TAG_PREMIUM.GOLDEN : premium);
+        if (material != null) actor.SetPortraitMaterial(material, -1);
+    }
+
+    private static Material MaterialOf(int dbfId, TAG_PREMIUM premium)
+    {
+        var key = (dbfId, premium);
+        if (Materials.TryGetValue(key, out var known)) { if (known != null) return known; Materials.Remove(key); }
+        if (FailedMaterials.Contains(key)) return null;
+        try
+        {
+            var def = DefLoader.Get()?.GetCardDef(dbfId);
+            if (def?.CardDef == null) { def?.Dispose(); throw new InvalidOperationException("part CardDef unavailable"); }
+            Defs.Add(def);
+            object handle = (getPortraitMaterial ?? (getPortraitMaterial = typeof(CardDef).GetMethod("GetPortraitMaterial", new[] { typeof(TAG_PREMIUM) }))).Invoke(def.CardDef, new object[] { premium });
+            Handles.Add(handle);
+            var material = handle?.GetType().GetProperty("Asset", BindingFlags.Public | BindingFlags.Instance)?.GetValue(handle, null) as Material;
+            if (material == null) throw new InvalidOperationException("part has no " + premium + " portrait material");
+            Materials[key] = material;
+            log?.LogInfo("creation premium portrait: part " + dbfId + " " + premium);
+            return material;
+        }
+        catch (Exception error)
+        {
+            FailedMaterials.Add(key);
+            log?.LogWarning("creation premium portrait unavailable for part " + dbfId + " " + premium + ": " + error.Message);
+            return null;
+        }
     }
 
     private static Texture PortraitOf(int dbfId, TAG_PREMIUM premium)
