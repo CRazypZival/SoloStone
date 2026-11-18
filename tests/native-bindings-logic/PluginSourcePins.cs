@@ -66,9 +66,19 @@ internal static class PluginSourcePins
         string uiTree = File.ReadAllText(Path.Combine(root, "plugin/NativeUiTree.cs"));
         if (!uiTree.Contains("NativeShopOpenText.DialogButtonId(popupId, \"okay\")"))
             failures.Add("Unfinished reveal OK must have its semantic control id");
+        // #119: Nefarian's Creation draws the first-picked dragon's art; the hook must stay installed and read the part tag.
+        string creationPath = Path.Combine(root, "plugin/NativeCreationPortrait.cs");
+        string creation = File.Exists(creationPath) ? File.ReadAllText(creationPath) : "";
+        foreach (string required in new[] { "\"CATA_470t1\"", "FirstPartTag = 471", "\"UpdatePortraitTexture\"", "SetPortraitTexture(texture)", "\"HistoryCard\"", "\"LoadTile\"", "\"m_portraitTexture\"",
+            "\"m_usingInitialPortraitMaterial\"", "\"GetPortraitMaterial\"", "SetPortraitMaterial(material, -1)",
+            "TAG_PREMIUM.DIAMOND ? TAG_PREMIUM.GOLDEN",
+            "UseFirstDragonPremiumMaterial(__instance, entity, texture)", "material.mainTexture == null", "material.mainTexture = partTexture" })
+            if (!creation.Contains(required)) failures.Add("Creation portrait hook lost: " + required);
+        if (!File.ReadAllText(Path.Combine(root, "plugin/ClientBridge.cs")).Contains("NativeCreationPortrait.Install(harmony, log)"))
+            failures.Add("Creation portrait hook is not installed by ClientBridge");
         DeckImportPins(root, failures);
         if (failures.Count != 0) throw new Exception(string.Join("\n", failures));
-        Console.WriteLine("PASS plugin source-text pins (achievement toast, reward UI, format lock, shop open, deck-code import)");
+        Console.WriteLine("PASS plugin source-text pins (achievement toast, reward UI, format lock, shop open, creation portrait, deck-code import)");
     }
     // Deck-code import (#140): the clipboard import is served, never granting and never touching the server or the format.
     private static void DeckImportPins(string root, List<string> failures)
