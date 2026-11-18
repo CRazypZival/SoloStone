@@ -93,21 +93,33 @@ internal static class NativeCreationPortrait
             if (entity == null) return;
             var texture = FirstDragonPortrait(entity, __instance.GetPremium());
             if (texture != null) __instance.SetPortraitTexture(texture);
-            UseFirstDragonPremiumMaterial(__instance, entity);
+            UseFirstDragonPremiumMaterial(__instance, entity, texture);
         }
         catch (Exception error) { Fail(0, TAG_PREMIUM.NORMAL, error); }
     }
 
     // A premium actor drawing the CardDef's golden material (not the initial one) gets the first part's golden material of the same
     // premium. Diamond asks for the golden material, as Actor.UpdatePortraitMaterials does.
-    private static void UseFirstDragonPremiumMaterial(Actor actor, Entity entity)
+    private static void UseFirstDragonPremiumMaterial(Actor actor, Entity entity, Texture partTexture)
     {
         var premium = actor.GetPremium();
         if (premium == TAG_PREMIUM.NORMAL || usingInitialMaterial == null || (bool)usingInitialMaterial.GetValue(actor)) return;
         int part = PartDbfId(entity.GetCardId(), id => entity.GetTag((GAME_TAG)id));
         if (part == 0) return;
         var material = MaterialOf(part, premium == TAG_PREMIUM.DIAMOND ? TAG_PREMIUM.GOLDEN : premium);
-        if (material != null) actor.SetPortraitMaterial(material, -1);
+        if (material == null) return;
+        // As Actor.TryApplyPremiumPortraitTexture: a material authored without a texture takes the CardDef's premium portrait texture
+        // (the actor's premium). With neither, the template's golden art stays rather than a blank portrait.
+        if (material.mainTexture == null)
+        {
+            if (partTexture == null)
+            {
+                if (Warned.Add(part * 8 + (int)premium + 4096)) log?.LogWarning("creation premium portrait: part " + part + " has no golden texture, keeping the template art");
+                return;
+            }
+            material.mainTexture = partTexture;
+        }
+        actor.SetPortraitMaterial(material, -1);
     }
 
     private static Material MaterialOf(int dbfId, TAG_PREMIUM premium)

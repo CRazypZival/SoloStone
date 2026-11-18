@@ -216,7 +216,7 @@ var failures = new List<string>();
     catch (Exception error) { failures.Add("Actor.m_usingInitialPortraitMaterial is missing: re-check the golden Creation material hook (" + error.Message + ")"); }
     try { MethodSignature(gameMetadata, "CardDef", "GetPortraitMaterial", new[] { "TAG_PREMIUM" }, "AssetHandle`1<Material>", signatures); }
     catch (Exception error) { failures.Add("CardDef.GetPortraitMaterial(TAG_PREMIUM) returning AssetHandle<Material> is missing: re-check the golden Creation material hook (" + error.Message + ")"); }
-    foreach (string required in new[] { "\"m_usingInitialPortraitMaterial\"", "\"GetPortraitMaterial\"", "SetPortraitMaterial(material, -1)", "TAG_PREMIUM.DIAMOND ? TAG_PREMIUM.GOLDEN" })
+    foreach (string required in new[] { "\"m_usingInitialPortraitMaterial\"", "\"GetPortraitMaterial\"", "SetPortraitMaterial(material, -1)", "TAG_PREMIUM.DIAMOND ? TAG_PREMIUM.GOLDEN", "material.mainTexture == null" })
         if (!creation.Contains(required)) failures.Add("NativeCreationPortrait golden material hook lost: " + required);
 }
 if (pluginMetadata.TypeDefinitions.Select(pluginMetadata.GetTypeDefinition).SelectMany(type => type.GetMethods())

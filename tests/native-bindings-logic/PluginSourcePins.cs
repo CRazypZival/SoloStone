@@ -71,7 +71,8 @@ internal static class PluginSourcePins
         string creation = File.Exists(creationPath) ? File.ReadAllText(creationPath) : "";
         foreach (string required in new[] { "\"CATA_470t1\"", "FirstPartTag = 471", "\"UpdatePortraitTexture\"", "SetPortraitTexture(texture)", "\"HistoryCard\"", "\"LoadTile\"", "\"m_portraitTexture\"",
             "\"m_usingInitialPortraitMaterial\"", "\"GetPortraitMaterial\"", "UseFirstDragonPremiumMaterial(__instance, entity)", "SetPortraitMaterial(material, -1)",
-            "TAG_PREMIUM.DIAMOND ? TAG_PREMIUM.GOLDEN" })
+            "TAG_PREMIUM.DIAMOND ? TAG_PREMIUM.GOLDEN",
+            "UseFirstDragonPremiumMaterial(__instance, entity, texture)", "material.mainTexture == null", "material.mainTexture = partTexture" })
             if (!creation.Contains(required)) failures.Add("Creation portrait hook lost: " + required);
         if (!File.ReadAllText(Path.Combine(root, "plugin/ClientBridge.cs")).Contains("NativeCreationPortrait.Install(harmony, log)"))
             failures.Add("Creation portrait hook is not installed by ClientBridge");
