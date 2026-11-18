@@ -50,14 +50,16 @@ internal static class UntouchableBoardSourceCheck
             foreach (var kv in perFile) Console.WriteLine($"  {kv.Key}: {kv.Value}");
     }
 
-    private static string EngineSrc()
+    private static string EngineSrc([System.Runtime.CompilerServices.CallerFilePath] string here = "")
     {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
-        {
-            string candidate = Path.Combine(dir.FullName, "engine", "SabberStoneCore", "src");
-            if (Directory.Exists(candidate)) return candidate;
-        }
-        throw new Exception("UntouchableBoardSourceCheck: cannot find engine/SabberStoneCore/src above " + AppContext.BaseDirectory);
+        // The build output may live outside the repository, so also start from this source file and the working directory.
+        foreach (string start in new[] { Path.GetDirectoryName(here), Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+            for (var dir = string.IsNullOrEmpty(start) ? null : new DirectoryInfo(start); dir != null; dir = dir.Parent)
+            {
+                string candidate = Path.Combine(dir.FullName, "engine", "SabberStoneCore", "src");
+                if (Directory.Exists(candidate)) return candidate;
+            }
+        throw new Exception("UntouchableBoardSourceCheck: cannot find engine/SabberStoneCore/src from " + here + ", the working directory or " + AppContext.BaseDirectory);
     }
 
     private static string Rel(string path)
