@@ -2109,6 +2109,10 @@ public sealed class NativeMatch
     internal IGoldenDecisionJob BeginNpcDecision(GoldenContext context)
     {
         var tasks = NpcTasks();
+#if ENGINE_SOURCE
+        var scripted = DebugScenario?.NextNpcPlay(Game, tasks, DebugScenarioLog);
+        if (scripted != null) return new ReadyNpcDecision(DriverTrace.Forced("npc-play-next-scenario", scripted));
+#endif
         if (DebugScenario?.HeroAttack == "npc")
         {
             var attack = tasks.FirstOrDefault(t => t.PlayerTaskType == PlayerTaskType.HERO_ATTACK && t.Target == Game.Player1.Hero);
@@ -2415,6 +2419,10 @@ public sealed class NativeMatch
     private PlayerTask ChooseBotTask(List<PlayerTask> tasks)
     {
         npcDiagnosticDecision = null;
+#if ENGINE_SOURCE
+        var scripted = DebugScenario?.NextNpcPlay(Game, tasks, DebugScenarioLog);
+        if (scripted != null) return scripted;
+#endif
         if (DebugScenario?.HeroAttack == "npc")
         {
             var attack = tasks.FirstOrDefault(t => t.PlayerTaskType == PlayerTaskType.HERO_ATTACK && t.Target == Game.Player1.Hero);

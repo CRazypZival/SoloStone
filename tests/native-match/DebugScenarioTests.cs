@@ -22,6 +22,7 @@ internal static partial class Program
         DebugScenarioSummonStats();
         DebugScenarioHandMods();
         DebugScenarioManaRawAndClear();
+        DebugScenarioNpcPlayNext();
         Console.WriteLine("PASS debug scenario: validation, one-shot file, hidden NPC first draw, mana, no settlement");
     }
 
@@ -172,6 +173,49 @@ internal static partial class Program
         var bound = DebugScenario.Parse("runId=0b5e3a7e-2f64-4a43-8c3f-4f8b8d2f9a10\nnpcMana=5");
         Check(bound.BoundRunId == "0b5e3a7e-2f64-4a43-8c3f-4f8b8d2f9a10" && bound.Canonical() == "npcMana=5",
             "runId binds the file to a launch and stays out of the recorded canonical text");
+    }
+
+    // npcPlayNext: the NPC plays the listed cards first, through its normal play path, then the AI carries on; an impossible card warns.
+    private static void DebugScenarioNpcPlayNext()
+    {
+        var parsed = DebugScenario.Parse("npcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182, CS2_189@self");
+        Check(parsed.NpcPlayNext.Select(p => p.ToString()).SequenceEqual(new[] { "CS2_182", "CS2_189@self" })
+            && parsed.Canonical() == "npcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182,CS2_189@self", "npcPlayNext parses and round-trips");
+        RejectsScenario("npcPlayNext=CS2_189@moon", "unknown target");
+        RejectsScenario("npcPlayNext=NOPE_000", "unknown card");
+        RejectsScenario("npcPlayNext=CS2_182", "no client definition", id => false);
+        RejectsScenario("npcPlayNext=" + string.Join(",", Enumerable.Repeat("CS2_182", DebugScenario.MaxHand + 1)), "too many plays");
+        RejectsScenario("npcPlayNext=HERO_08", "hero portrait is not playable");
+
+        foreach (bool profile in new[] { false, true })
+        {
+            string Run(string scenarioText, out SabberStoneCore.Model.Game game, out List<string> logs, out Capture run)
+            {
+                run = new Capture();
+                logs = new List<string>();
+                var match = profile
+                    ? new NativeMatch(run.Send, "mage", "showcase-demon-hunter-outcast", 7) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = logs.Add, BotTrace = _ => { }, SynchronousNpc = true }
+                    : new NativeMatch(run.Send, "mage", "warrior", 4242) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = logs.Add };
+                match.Start();
+                match.SendChoices(run.Last<EntityChoices>(17).Id, new List<int>());
+                game = match.Game;
+                SendEndTurn(match, run);
+                return profile ? "profile" : "plain";
+            }
+            string path = profile ? "profile path" : "plain path";
+            Run("npcMana=10\nhumanMana=10\nnpcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182,CS2_189@self", out var game, out var logs, out var run);
+            Check(game.Turn >= 3 && game.State != State.COMPLETE, path + ": the NPC turn ran");
+            var plays = logs.Where(l => l.Contains("npcPlayNext playing")).ToList();
+            Check(plays.Count == 2 && plays[0].EndsWith("CS2_182") && plays[1].EndsWith("CS2_189@self"), path + ": both scripted plays ran in order: " + string.Join(" | ", logs));
+            Check(!logs.Any(l => l.Contains("warning")), path + ": no warning when both plays are legal");
+            Check(game.Player2.Hero.Damage == 1 && game.Player2.GraveyardZone.All(c => c.Card.Id != "CS2_182"), path + ": Elven Archer hit its own hero (target self)");
+            Check(game.Player2.BoardZone.Any(m => m.Card.Id == "CS2_182"), path + ": Chillwind Yeti was played to the NPC's board");
+            run.SerializeAll();
+
+            Run("npcMana=3\nhumanMana=10\nnpcHand=CS2_182\nnpcPlayNext=CS2_182,CS2_189,CS2_189", out game, out logs, out run);
+            var warnings = logs.Where(l => l.Contains("npcPlayNext warning")).ToList();
+            Check(warnings.Count == 3 && warnings.All(w => w.Contains("not played:")) && !logs.Any(l => l.Contains("playing")), path + ": unplayable cards warn and are skipped: " + string.Join(" | ", logs));
+        }
     }
 
     private const string RunA = "0b5e3a7e-2f64-4a43-8c3f-4f8b8d2f9a10", RunB = "1c6f4b8f-3a75-4b54-9d40-5a9c9e3ab021";

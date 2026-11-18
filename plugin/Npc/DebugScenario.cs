@@ -29,6 +29,12 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 //       Knight Herald Soldier's gift does: a payment override, no enchantment. Needs humanSeat=first; every id must be in humanHand.
 //       Capture-only.)
 //   humanHandHealthWing=CARDID,...   (the same, as Onyxia's Wing's gift does: the Health cost hangs on a CATA_155e2 enchantment.)
+//   npcPlayNext=ID[@TARGET],...   (the NPC plays these cards as its first actions on its next turn(s), one per decision, through its normal
+//       play path (same engine task, history and transport as the AI's own plays), then the AI carries on. TARGET is hero (the human's
+//       hero), self (the NPC's hero), enemy (the human's first minion) or friend (the NPC's first minion); with none the human hero is
+//       preferred, then any legal target. A card that cannot be played (not in hand, mana, no legal target) logs a
+//       "DEBUG_SCENARIO npcPlayNext warning" and is skipped. The card must already be in the NPC's hand (npcHand, its deck, an opening hand).
+//       Up to 5 cards. Capture-only.)
 //   humanHandClear=1   (discards the cards dealt to the human's hand, Coin kept, before humanHand places its own)
 //   humanManaRaw=CUR,MAX  npcManaRaw=CUR,MAX   (0..999: the mana counter's tags written directly after main-begin, past the engine's
 //       10 cap, for a counter gag such as 32/333. Needs humanSeat=first; excludes humanMana/npcMana; npcManaRaw CUR <= 10 (its own
@@ -59,11 +65,40 @@ public sealed class DebugScenario
     public static Outcome LastOutcome { get; private set; }
     internal static void RecordOutcome(string status, string detail, string runId) =>
         LastOutcome = new Outcome { Status = status, Detail = detail, RunId = runId };
-    private static readonly string[] Keys = { "npcDeckTop", "humanDeckTop", "humanOpeningHand", "npcOpeningHand", "npcHand", "humanHand", "npcBoard", "humanBoard", "npcBoardStats", "humanBoardStats", "npcSummonStats", "humanHandMods", "humanHandHealth", "humanHandHealthWing", "humanHandClear", "humanManaRaw", "npcManaRaw", "npcMana", "humanMana", "humanSkin", "npcSkin", "heroAttack", "heroPower", "heroPowerUpgrade", "attackSecret", "attackArmor", "attackWeapon", "attackLethal", "humanSeat", "overdraw", "runId" };
+    private static readonly string[] Keys = { "npcDeckTop", "humanDeckTop", "humanOpeningHand", "npcOpeningHand", "npcHand", "npcPlayNext", "humanHand", "npcBoard", "humanBoard", "npcBoardStats", "humanBoardStats", "npcSummonStats", "humanHandMods", "humanHandHealth", "humanHandHealthWing", "humanHandClear", "humanManaRaw", "npcManaRaw", "npcMana", "humanMana", "humanSkin", "npcSkin", "heroAttack", "heroPower", "heroPowerUpgrade", "attackSecret", "attackArmor", "attackWeapon", "attackLethal", "humanSeat", "overdraw", "runId" };
 
     public IReadOnlyList<string> NpcDeckTop { get; private set; } = new string[0];
     public IReadOnlyList<string> HumanDeckTop { get; private set; } = new string[0];
     public IReadOnlyList<string> NpcHand { get; private set; } = new string[0];
+    // One scripted NPC play: the card and an optional target kind (see npcPlayNext in the header).
+    public sealed class NpcPlay
+    {
+        public string CardId { get; }
+        public string Target { get; }
+        public static readonly string[] Targets = { "hero", "self", "enemy", "friend" };
+        public NpcPlay(string cardId, string target) { CardId = cardId; Target = target; }
+        public override string ToString() => Target == null ? CardId : CardId + "@" + Target;
+    }
+    public IReadOnlyList<NpcPlay> NpcPlayNext { get; private set; } = new NpcPlay[0];
+    private int npcPlayIndex;
+    private static IReadOnlyList<NpcPlay> NpcPlays(Dictionary<string, string> values, Func<string, bool> known)
+    {
+        if (!values.TryGetValue("npcPlayNext", out string text)) return new NpcPlay[0];
+        var items = text.Split(',').Select(item => item.Trim()).ToArray();
+        var ids = new List<string>();
+        var plays = new List<NpcPlay>();
+        foreach (string item in items)
+        {
+            int at = item.IndexOf('@');
+            string id = at < 0 ? item : item.Substring(0, at).Trim(), target = at < 0 ? null : item.Substring(at + 1).Trim();
+            if (target != null && Array.IndexOf(NpcPlay.Targets, target) < 0)
+                throw new ArgumentException("npcPlayNext: target must be " + string.Join(", ", NpcPlay.Targets) + " (got '" + target + "').");
+            ids.Add(id); plays.Add(new NpcPlay(id, target));
+        }
+        // Same id rules as a hand card (known card, playable type, native definition); at most a hand's worth.
+        Cards(new Dictionary<string, string> { ["npcPlayNext"] = string.Join(",", ids) }, "npcPlayNext", MaxHand, known);
+        return plays;
+    }
     public IReadOnlyList<string> HumanHand { get; private set; } = new string[0];
     public IReadOnlyList<string> HumanOpeningHand { get; private set; } = new string[0];
     public IReadOnlyList<string> NpcOpeningHand { get; private set; } = new string[0];
@@ -190,7 +225,7 @@ public sealed class DebugScenario
             AttackArmor = Number(values, "attackArmor", 0, 30), AttackLethal = Number(values, "attackLethal", 0, 1) == 1,
             NpcDeckTop = Cards(values, "npcDeckTop", MaxDeckTop, known), HumanDeckTop = Cards(values, "humanDeckTop", MaxDeckTop, known),
             HumanOpeningHand = Cards(values, "humanOpeningHand", 4, known), NpcOpeningHand = Cards(values, "npcOpeningHand", 4, known),
-            NpcHand = Cards(values, "npcHand", MaxHand, known), HumanHand = humanHand,
+            NpcHand = Cards(values, "npcHand", MaxHand, known), HumanHand = humanHand, NpcPlayNext = NpcPlays(values, known),
             HumanHandMods = HandMods(values, "humanHandMods", humanHand, known),
             HumanHandHealth = handHealth, HumanHandHealthWing = handHealthWing,
             HumanHandClear = Number(values, "humanHandClear", 0, 1) == 1,
@@ -373,6 +408,7 @@ public sealed class DebugScenario
         var lines = new List<string>();
         void Add(string key, IReadOnlyList<string> ids) { if (ids.Count > 0) lines.Add(key + "=" + string.Join(",", ids)); }
         Add("npcDeckTop", NpcDeckTop); Add("humanDeckTop", HumanDeckTop); Add("npcHand", NpcHand); Add("humanHand", HumanHand);
+        if (NpcPlayNext.Count > 0) lines.Add("npcPlayNext=" + string.Join(",", NpcPlayNext));
         Add("humanOpeningHand", HumanOpeningHand); Add("npcOpeningHand", NpcOpeningHand);
         Add("npcBoard", NpcBoard); Add("humanBoard", HumanBoard);
         if (NpcBoardStats != null) lines.Add("npcBoardStats=" + NpcBoardStats);
@@ -503,6 +539,46 @@ public sealed class DebugScenario
         if (NpcSkin != null && HeroSkinData.All[NpcSkin].BaseHero != game.Player2.Hero.Card.Id) return "npcSkin class mismatch";
         if (game.Player2.BoardZone.FreeSpace < NpcBoard.Count || game.Player1.BoardZone.FreeSpace < HumanBoard.Count) return "Board has no room for scenario bodies.";
         return Fit(game.Player2, "NPC", NpcDeckTop.Count, NpcHand.Count) ?? Fit(game.Player1, "Human", HumanDeckTop.Count, HumanHand.Count);
+    }
+
+    // The NPC's next scripted play, or null (no step left, or the NPC is not at a main-action decision: choices consume nothing).
+    // One step per call; a step that cannot be played is logged and dropped, then the next one is tried. The returned task is one of
+    // `tasks` (the engine's own legal options), so the caller processes it exactly as it would the AI's pick.
+    public SabberStoneCore.Tasks.PlayerTasks.PlayerTask NextNpcPlay(EngineGame game, IEnumerable<SabberStoneCore.Tasks.PlayerTasks.PlayerTask> tasks, Action<string> log)
+    {
+        var list = tasks.ToList();
+        if (NpcPlayNext.Count == 0 || game == null || list.All(t => t.PlayerTaskType != SabberStoneCore.Tasks.PlayerTasks.PlayerTaskType.END_TURN)) return null;
+        while (npcPlayIndex < NpcPlayNext.Count)
+        {
+            var step = NpcPlayNext[npcPlayIndex++];
+            var task = SelectNpcPlay(game, list, step, out string why);
+            if (task != null)
+            {
+                try { log?.Invoke("DEBUG_SCENARIO npcPlayNext playing " + step); } catch (Exception) { }
+                return task;
+            }
+            try { log?.Invoke("DEBUG_SCENARIO npcPlayNext warning: " + step + " not played: " + why); } catch (Exception) { }
+        }
+        return null;
+    }
+
+    internal static SabberStoneCore.Tasks.PlayerTasks.PlayerTask SelectNpcPlay(EngineGame game, IList<SabberStoneCore.Tasks.PlayerTasks.PlayerTask> tasks, NpcPlay step, out string why)
+    {
+        var plays = tasks.Where(t => t.PlayerTaskType == SabberStoneCore.Tasks.PlayerTasks.PlayerTaskType.PLAY_CARD && t.Source?.Card.Id == step.CardId).ToList();
+        if (plays.Count == 0)
+        {
+            bool inHand = game.Player2.HandZone.Any(c => c.Card.Id == step.CardId);
+            why = inHand ? "no legal play now (mana, full board or no legal target)" : "the card is not in the NPC's hand";
+            return null;
+        }
+        why = null;
+        if (step.Target == null)
+            return plays.OrderBy(t => t.Target != null && t.Target.Id == game.Player1.Hero.Id ? 0 : t.Target != null ? 1 : 2).First();
+        SabberStoneCore.Model.Entities.ICharacter wanted = step.Target == "hero" ? game.Player1.Hero : step.Target == "self" ? game.Player2.Hero
+            : step.Target == "enemy" ? game.Player1.BoardZone.FirstOrDefault() : game.Player2.BoardZone.FirstOrDefault();
+        var targeted = plays.FirstOrDefault(t => wanted != null && t.Target != null && t.Target.Id == wanted.Id);
+        if (targeted == null) why = "no legal play at target " + step.Target;
+        return targeted;
     }
 
     // After the normal deal, before either offer is sent/answered. Transform real dealt entities, never the Coin.
