@@ -77,7 +77,7 @@ namespace SabberStoneCore.Presentation
             Add("EDR_263", VisualPhase.Damage, "ReuseFX_Lightning_Missile_Bolt_Small_Super_Simultaneous:4e176ec954bdc6f4bb7494e521d35c8a", subOption: 0);
             Add("EDR_813", VisualPhase.Damage, "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1", subOption: 1);
             // EDR_570 sub-option 0, EDR_820 sub-option 1 and the area-only cards below (CATA_581, EDR_820b, EDR_570A): the per-hit missile is unreachable
-            // since 2026-11-18 (the DamageGroup recipe is chosen first and suppresses it); kept as the single-target fallback of the table.
+            // since 2026-11-18 (the DamageGroup recipe is chosen first and suppresses it); the rows stay because the Damage-phase lookup and DelegatedPowerFx still read them.
             Add("EDR_570", VisualPhase.Damage, "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0", subOption: 0);
             Add("EDR_820", VisualPhase.Damage, "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0", subOption: 1);
             Add("EDR_570", VisualPhase.DamageGroup, "ReuseFX_Shadow_Fire_AE_Shockwave_Small_BothSides_Super:1f77cfbb2d94e3f4982cf07e849fa699", VisualTargets.None, subOption: 0, source: VisualSource.Effect, group: true);

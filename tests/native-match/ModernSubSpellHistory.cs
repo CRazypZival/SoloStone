@@ -664,7 +664,6 @@ internal static partial class Program
     }
 
     private static void RottenAppleVisual()
-
     {
         foreach (bool bot in new[] { false, true })
         {
