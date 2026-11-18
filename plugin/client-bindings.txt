@@ -720,6 +720,7 @@ M	Assembly-CSharp	AchievementCategoryDbfRecord	get_Subcategories	System.Collecti
 M	Assembly-CSharp	AchievementSubcategoryDbfRecord	get_Icon	System.String()
 M	Assembly-CSharp	AchievementSubcategoryDbfRecord	get_SortOrder	System.Int32()
 M	Assembly-CSharp	Actor	Destroy	System.Void()
+M	Assembly-CSharp	Actor	GetEntity	Entity()
 M	Assembly-CSharp	Actor	GetEntityDef	EntityDef()
 M	Assembly-CSharp	Actor	GetMeshRenderer	UnityEngine.MeshRenderer(System.Boolean)
 M	Assembly-CSharp	Actor	GetPortraitMaterial	UnityEngine.Material()
@@ -727,6 +728,8 @@ M	Assembly-CSharp	Actor	GetPremium	TAG_PREMIUM()
 M	Assembly-CSharp	Actor	GetSpell	*
 M	Assembly-CSharp	Actor	IsColliderEnabled	System.Boolean()
 M	Assembly-CSharp	Actor	IsShown	System.Boolean()
+M	Assembly-CSharp	Actor	SetPortraitMaterial	System.Void(UnityEngine.Material,System.Int32)
+M	Assembly-CSharp	Actor	SetPortraitTexture	System.Void(UnityEngine.Texture)
 M	Assembly-CSharp	AlertPopup	ButtonPress	*
 M	Assembly-CSharp	AlertPopup	GetInfo	AlertPopup+PopupInfo()
 M	Assembly-CSharp	AlertPopup	Hide	*
@@ -1165,9 +1168,12 @@ M	Assembly-CSharp	DeckTrayReorderableContent	StopDragToReorder	*
 M	Assembly-CSharp	DeckTrayReorderableContent	get_DraggingDeckBox	IDraggableCollectionVisual()
 M	Assembly-CSharp	DefLoader	Get	DefLoader()
 M	Assembly-CSharp	DefLoader	GetAllEntityDefs	System.Collections.Generic.Dictionary`2<System.String,EntityDef>()
+M	Assembly-CSharp	DefLoader	GetCardDef	DefLoader+DisposableCardDef(System.Int32)
 M	Assembly-CSharp	DefLoader	GetEntityDef	EntityDef(System.Int32,System.Boolean)
 M	Assembly-CSharp	DefLoader	GetEntityDef	EntityDef(System.String)
 M	Assembly-CSharp	DefLoader	HasLoadedEntityDefs	System.Boolean()
+M	Assembly-CSharp	DefLoader+DisposableCardDef	Dispose	System.Void()
+M	Assembly-CSharp	DefLoader+DisposableCardDef	get_CardDef	CardDef()
 M	Assembly-CSharp	DialogBase	AddHideListener	System.Void(DialogBase+HideCallback)
 M	Assembly-CSharp	DialogBase	HandleKeyboardInput	()
 M	Assembly-CSharp	DialogBase	Hide	System.Void()
@@ -2959,6 +2965,7 @@ T	Assembly-CSharp	CardBackManager
 T	Assembly-CSharp	CardBackRewardData		
 T	Assembly-CSharp	CardChangeDbfRecord		
 T	Assembly-CSharp	CardDbfRecord		
+T	Assembly-CSharp	CardDef		
 T	Assembly-CSharp	CardEffect		
 T	Assembly-CSharp	CardHeroDbfRecord		
 T	Assembly-CSharp	CardListPanel		
@@ -3036,6 +3043,7 @@ T	Assembly-CSharp	DeckTrayHeroSkinContent
 T	Assembly-CSharp	DeckTrayPetContent		
 T	Assembly-CSharp	DeckTrayReorderableContent		
 T	Assembly-CSharp	DefLoader		
+T	Assembly-CSharp	DefLoader+DisposableCardDef		
 T	Assembly-CSharp	DialogBase		
 T	Assembly-CSharp	DialogBase+HideCallback		
 T	Assembly-CSharp	DialogManager		

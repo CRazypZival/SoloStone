@@ -98,6 +98,7 @@ var hooks = new[] {
     ("PackOpeningDirector", "FinishMassPackOpen", "NativeUIProbe", "BeforeMassDone"),
     ("Gameplay", "OnBoardLoaded", "ClientBridge", "RetryBoardLoad"),
     ("ThinkEmoteManager", "Update", "ClientBridge", "AllowIdleThinkEmotes"),
+    ("Actor", "UpdatePortraitTexture", "NativeCreationPortrait", "UseFirstDragonPortrait"),
     ("GameEntity", "NotifyOfMulliganInitialized", "NativeNpcPresence", "LoadEnemyEmoteHandler"),
     ("RemoteActionHandler", "CanReceiveEnemyEmote", "NativeNpcPresence", "CanReceiveEnemyEmote"),
     ("Player", "UpdateName", "NativeNpcPresence", "UpdateOpponentName"),
@@ -200,6 +201,37 @@ var hooks = new[] {
     ("Hearthstone.Progression.AchievementInspectionPopup", "UpdateAchievement", "NativeAchievements", "InspectionDetail")
 };
 var failures = new List<string>();
+// Creation portrait (#119): the plugin reads the texture of an AssetHandle<Texture> by reflection (its assembly is not referenced).
+// The handle has two implicit operators taking it (to the asset and to bool), so selecting one by parameter type is ambiguous; the
+// plugin must read the Asset property, which the client calls with the type argument as its return type.
+{
+    bool asset = false, toAsset = false, toBool = false;
+    foreach (var handle in gameMetadata.MemberReferences)
+    {
+        var member = gameMetadata.GetMemberReference(handle);
+        if (member.Parent.Kind != HandleKind.TypeSpecification) continue;
+        string parent = gameMetadata.GetTypeSpecification((TypeSpecificationHandle)member.Parent).DecodeSignature(signatures, (object)null);
+        if (!parent.StartsWith("AssetHandle`1<", StringComparison.Ordinal) || member.GetKind() != MemberReferenceKind.Method) continue;
+        var signature = member.DecodeMethodSignature(signatures, (object)null);
+        string name = gameMetadata.GetString(member.Name);
+        if (name == "get_Asset" && signature.ParameterTypes.Length == 0 && signature.ReturnType == "!0") asset = true;
+        if (name == "op_Implicit" && signature.ParameterTypes.Length == 1) { toAsset |= signature.ReturnType == "!0"; toBool |= signature.ReturnType == "Boolean"; }
+    }
+    if (!asset) failures.Add("AssetHandle<T>.Asset (returns T) is missing: the Creation portrait hook reads it");
+    if (!toAsset || !toBool) failures.Add("AssetHandle<T> implicit operators changed: re-check how NativeCreationPortrait converts a handle");
+    string creation = File.ReadAllText(Path.Combine(root, "plugin/NativeCreationPortrait.cs"));
+    if (creation.Contains("\"op_Implicit\"") && toBool) failures.Add("NativeCreationPortrait selects op_Implicit, ambiguous with the bool operator");
+    if (!creation.Contains("GetProperty(\"Asset\"")) failures.Add("NativeCreationPortrait must read the handle's Asset property");
+    // Golden Creation: a premium actor shows the CardDef's portrait material, which SetPortraitTexture leaves alone, so the plugin
+    // swaps in the part's material. It reads these by name; the hook is optional (a miss keeps the template's golden art), so a
+    // change here is a failure of this check, not of a launch.
+    try { if (Field(gameMetadata, "Actor", "m_usingInitialPortraitMaterial").DecodeSignature(signatures, (object)null) != "Boolean") failures.Add("Actor.m_usingInitialPortraitMaterial is no longer Boolean: re-check the golden Creation material hook"); }
+    catch (Exception error) { failures.Add("Actor.m_usingInitialPortraitMaterial is missing: re-check the golden Creation material hook (" + error.Message + ")"); }
+    try { MethodSignature(gameMetadata, "CardDef", "GetPortraitMaterial", new[] { "TAG_PREMIUM" }, "AssetHandle`1<Material>", signatures); }
+    catch (Exception error) { failures.Add("CardDef.GetPortraitMaterial(TAG_PREMIUM) returning AssetHandle<Material> is missing: re-check the golden Creation material hook (" + error.Message + ")"); }
+    foreach (string required in new[] { "\"m_usingInitialPortraitMaterial\"", "\"GetPortraitMaterial\"", "SetPortraitMaterial(material, -1)", "TAG_PREMIUM.DIAMOND ? TAG_PREMIUM.GOLDEN", "material.mainTexture == null" })
+        if (!creation.Contains(required)) failures.Add("NativeCreationPortrait golden material hook lost: " + required);
+}
 if (pluginMetadata.TypeDefinitions.Select(pluginMetadata.GetTypeDefinition).SelectMany(type => type.GetMethods())
     .Select(pluginMetadata.GetMethodDefinition).Any(method => pluginMetadata.GetString(method.Name) == "BlockPersonalSuggestionCraft"))
     failures.Add("DeckHelper missing-card preview must retain native crafting; obsolete blocker still present");
