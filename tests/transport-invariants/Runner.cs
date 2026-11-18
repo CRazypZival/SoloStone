@@ -21,10 +21,10 @@ internal sealed class TransportReplay
     public string EngineFingerprint { get; set; }
     public bool Focused { get; set; }
     public string FindingsSha { get; set; }
-    // Set only by a tail renewal (ReplayRenewal.cs): the steps before FromStep are the recorded ones, the rest was played by the
-    // seeded random policy with Seed.
+    // Set only by a tail renewal (ReplayRenewal.cs), one entry per renewal, oldest first: the steps before FromStep are the
+    // recorded ones, the rest was played by the seeded random policy with Seed.
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    public TailRenewal Renewal { get; set; }
+    public List<TailRenewal> Renewals { get; set; }
 }
 
 internal sealed class TailRenewal
@@ -41,7 +41,9 @@ internal sealed class RenewPlan
     public List<int> OldActions = new();
     public List<string> OldShas = new();
     public int Divergence = -1;      // first step played by the tail policy; -1 = the whole recording was kept
-    public int FirstHashDrift = -1;  // first step whose legal-move hash differs from the recorded one
+    public int FirstHashDrift = -1;  // first step whose legal-move hash differs from the recorded one (the tail's first step included)
+    public bool TailAtDrift;         // the tail starts at the first hash drift too, not only at an illegal action or the end of the recording
+    public string Fingerprint;       // state and RNG fingerprint at the end of the run, whether or not the file stores one
 }
 
 internal sealed record Example(string Replay, int Checkpoint, int Turn, int Entity, int Packets);
@@ -193,8 +195,10 @@ internal sealed class Runner
                     throw new InvalidOperationException($"replay.actions: {record.Id} checkpoint {step}");
                 index = record.Actions[step];
             }
-            else if (renewing && (renew.Divergence >= 0 || (renew.Divergence = TailStart(renew, step, legal.Count)) >= 0))
+            else if (renewing && (renew.Divergence >= 0 || (renew.Divergence = TailStart(renew, step, legal.Count, hash)) >= 0))
             {
+                if ((replay.Focused || coverageCard != null) && step < 3)
+                    throw new ArgumentException("a forced-card replay is arranged at step 2; its tail cannot start before step 3 (step " + step + ")");
                 index = random.Index(legal.Count);
                 record.Actions.Add(index);
                 record.LegalShas.Add(hash);
@@ -202,7 +206,6 @@ internal sealed class Runner
             else if (renewing)
             {
                 index = renew.OldActions[step];
-                if (renew.FirstHashDrift < 0 && (step >= renew.OldShas.Count || hash != renew.OldShas[step])) renew.FirstHashDrift = step;
                 record.Actions.Add(index);
                 record.LegalShas.Add(hash);
             }
@@ -270,6 +273,7 @@ internal sealed class Runner
         string findingsSha = Canonical.Sha(findings.ToString());
         if (verify && (step != record.Actions.Count || step != record.LegalShas.Count || findingsSha != replay.FindingsSha))
             throw new InvalidOperationException("replay.result: action length or transport findings changed");
+        if (renewing) renew.Fingerprint = Canonical.Sha(Canonical.State(game) + Canonical.Value(game.Random.CaptureState()));
         if (replay.EngineFingerprint != null)
         {
             // State and random-number state only, as in engine-proof's PinnedReplayEngineProof: the power history is checked by
@@ -297,10 +301,18 @@ internal sealed class Runner
         return session.History;
     }
 
-    // First step the tail policy plays, or -1 while the recording still applies: the forced step, the first recorded action that
-    // is no longer legal, or the end of a recording that stops before the game does.
-    private static int TailStart(RenewPlan renew, int step, int legalCount) =>
-        renew.FromStep == step || step >= renew.OldActions.Count || renew.OldActions[step] < 0 || renew.OldActions[step] >= legalCount ? step : -1;
+    // First step the tail policy plays, or -1 while the recording still applies: the forced step, the first recorded action that is
+    // no longer legal, the first legal-move hash that differs from the recorded one (the same index would stand for another move), or
+    // the end of a recording that stops before the game does. Also notes the first hash drift.
+    private static int TailStart(RenewPlan renew, int step, int legalCount, string hash)
+    {
+        bool drift = step >= renew.OldShas.Count || hash != renew.OldShas[step];
+        if (drift && renew.FirstHashDrift < 0) renew.FirstHashDrift = step;
+        if (renew.FromStep is int from && step < from && drift && renew.TailAtDrift)
+            throw new ArgumentException($"--from-step {from} is later than the first legal-move drift at step {step}: the recorded moves after it no longer mean what they did");
+        return renew.FromStep == step || step >= renew.OldActions.Count || renew.OldActions[step] < 0 || renew.OldActions[step] >= legalCount
+            || (renew.TailAtDrift && drift) ? step : -1;
+    }
 
     internal static IEnumerable<TransportReplay> Cases(string suite, int end)
     {
