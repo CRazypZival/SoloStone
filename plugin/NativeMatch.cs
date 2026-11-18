@@ -5807,6 +5807,7 @@ public sealed class NativeMatch
         NormalizePublicIdentity(packet);
         NormalizeBurnTransitions(packet);
         NormalizeBurnedCards(packet);
+        NestPredictedPlayCreations(packet);
         // PowerProcessor.BuildTaskList: END as a packet's last row falls out of its switch, enqueues the list twice and
         // replays the prefab. Blocks stay open across choices, so any recipe can reach this; zero SLUSH_TIME is inert.
         if (packet.List.Count > 0 && packet.List[packet.List.Count - 1].HasSubSpellEnd)
@@ -5816,6 +5817,99 @@ public sealed class NativeMatch
         NormalizeDormantVisuals(packet);
         if (packet.List.Count > 0) send(19, packet);
     }
+
+#if ENGINE_SOURCE
+    // #118 (Ido's Call of the Threshfleet), Twinspell twins: a card the human drops from the hand is moved locally first
+    // (InputManager.DropHeldMinionLikeCard / DropHeldSpellLikeCard -> ZoneMgr.AddLocalZoneChange). When a task list of the PLAY block
+    // (its own rows between nested blocks) moves that card to PLAY at the predicted position, ZoneMgr.CheckAndIgnoreServerChangeList
+    // marks the whole list ignored and ZoneChangeList.ShouldIgnoreZoneChange then skips every card zone change in it: a card created
+    // into the hand there is registered but never placed, so it has no actor and the queue can wait on it (live: Ido by real drag
+    // never settled, Call of the Threshfleet invisible). Retail keeps such effects in their own blocks; so each run of rows that
+    // creates, moves or hides another card in that list gets its own player TRIGGER block (EffectIndex -1, as Shatter and overdraw
+    // use), a separate task list the client processes in full.
+    private void NestPredictedPlayCreations(NativePowerHistory packet)
+    {
+        var list = packet.List;
+        for (int start = 0; start < list.Count; start++)
+        {
+            if (!list[start].HasPowerStart || (int)list[start].PowerStart.Type != (int)BlockType.PLAY) continue;
+            int source = list[start].PowerStart.Source;
+            if (!wireEntities.TryGetValue(source, out var played) || played.Controller != HumanPlayerId
+                || played.CardType is 1 or 2 or 3 or 6) continue;
+            // The block's own task lists: rows outside nested blocks and sub-spells, split at each of them and after metadata 21.
+            var lists = new List<List<int>>();
+            List<int> open = null;
+            int depth = 0, subSpells = 0;
+            for (int at = start + 1; at < list.Count; at++)
+            {
+                var row = list[at];
+                if (row.HasPowerStart) { depth++; open = null; continue; }
+                if (row.HasPowerEnd) { open = null; if (depth == 0) break; depth--; continue; }
+                if (row.HasSubSpellStart) { subSpells++; open = null; continue; }
+                if (row.HasSubSpellEnd) { subSpells = Math.Max(0, subSpells - 1); open = null; continue; }
+                if (depth > 0 || subSpells > 0) continue;
+                if (open == null) lists.Add(open = new List<int>());
+                open.Add(at);
+                if (row.HasMetaData && (int)row.MetaData.Type == 21) open = null;
+            }
+            var runs = new List<(int From, int To)>();
+            foreach (var rows in lists)
+            {
+                bool entersPlay = false;
+                var cardless = new HashSet<int>();
+                foreach (int at in rows)
+                {
+                    var row = list[at];
+                    var snapshot = row.HasFullEntity ? row.FullEntity : row.HasShowEntity ? row.ShowEntity : row.HasChangeEntity ? row.ChangeEntity : null;
+                    if (snapshot != null)
+                    {
+                        if (snapshot.Tags.Any(t => t.Name == (int)GameTag.CARDTYPE && t.Value is 1 or 2 or 6)) cardless.Add(snapshot.Entity);
+                        if (snapshot.Entity == source && snapshot.Tags.Any(t => t.Name == (int)GameTag.ZONE && t.Value == (int)EngineZone.PLAY)) entersPlay = true;
+                    }
+                    if (row.HasTagChange && row.TagChange.Entity == source && row.TagChange.Tag == (int)GameTag.ZONE
+                        && row.TagChange.Value == (int)EngineZone.PLAY) entersPlay = true;
+                }
+                if (!entersPlay) continue;
+                bool Cardless(int id) => cardless.Contains(id) || wireEntities.TryGetValue(id, out var known) && known.CardType is 1 or 2 or 6;
+                var moved = new HashSet<int>();
+                foreach (int at in rows)
+                {
+                    var row = list[at];
+                    int id = HistoryEntity(row);
+                    if (id == 0 || id == source || Cardless(id)) continue;
+                    // The weapon a new weapon replaces leaves in this list today (live-checked: Twig, #83); the client's weapon zone owns it.
+                    if (played.CardType == (int)CardType.WEAPON && row.HasTagChange && row.TagChange.Tag == (int)GameTag.ZONE
+                        && row.TagChange.Value == (int)EngineZone.GRAVEYARD
+                        && wireEntities.TryGetValue(id, out var replaced) && replaced.CardType == (int)CardType.WEAPON) continue;
+                    if (row.HasFullEntity || row.HasHideEntity
+                        || row.HasTagChange && (row.TagChange.Tag == (int)GameTag.ZONE || row.TagChange.Tag == (int)GameTag.CONTROLLER))
+                        moved.Add(id);
+                    else if (row.HasShowEntity || row.HasChangeEntity)
+                    {
+                        var tags = (row.HasShowEntity ? row.ShowEntity : row.ChangeEntity).Tags;
+                        int zone = tags.Where(t => t.Name == (int)GameTag.ZONE).Select(t => t.Value).DefaultIfEmpty(-1).Last();
+                        if (moved.Contains(id) || zone >= 0 && zone != (int)EngineZone.HAND && zone != (int)EngineZone.DECK) moved.Add(id);
+                    }
+                }
+                if (moved.Count == 0) continue;
+                int previous = -2;
+                foreach (int at in rows)
+                {
+                    if (!moved.Contains(HistoryEntity(list[at]))) { previous = -2; continue; }
+                    if (previous == at - 1 && runs.Count > 0) runs[runs.Count - 1] = (runs[runs.Count - 1].From, at);
+                    else runs.Add((at, at));
+                    previous = at;
+                }
+            }
+            for (int run = runs.Count - 1; run >= 0; run--)
+            {
+                list.Insert(runs[run].To + 1, new PowerHistoryData { PowerEnd = new PowerHistoryEnd() });
+                list.Insert(runs[run].From, new PowerHistoryData { PowerStart = new PowerHistoryStart {
+                    Type = HistoryBlock.Type.TRIGGER, Source = Game.Player1.Id, EffectIndex = -1, SubOption = -1 } });
+            }
+        }
+    }
+#endif
 
     private void NormalizeDormantVisuals(NativePowerHistory packet)
     {

@@ -104,6 +104,7 @@ internal static partial class Program
         if (args.Contains("--board-identity-only")) { NativeMatch.ClockFreeBot = true; BoardIdentityHistory(); return; }
         if (args.Contains("--rewind-presentation-only")) { RewindPresentationTags(); return; }
         if (args.Contains("--announcer-rewind-only")) { NativeMatch.ClockFreeBot = true; AnnouncerRewindHistory(); return; }
+        if (args.Contains("--hidden-hand-only")) { NativeMatch.ClockFreeBot = true; HiddenHandCardHistory(); return; }
         if (args.Contains("--king-llane-only")) { NativeMatch.ClockFreeBot = true; KingLlanePlayHistory(); return; }
         if (args.Contains("--vanguard-only")) { NativeMatch.ClockFreeBot = true; VanguardDrawHistory(); return; }
         if (args.Contains("--broxigar-only")) { NativeMatch.ClockFreeBot = true; BroxigarReturnHistory(); return; }
@@ -221,6 +222,7 @@ internal static partial class Program
         AutomaticSecretHistory();
         FacelessEnigmaHistory();
         HeroReplacementHistory();
+        HiddenHandCardHistory();
         EnchantmentVisibilityHistory();
         BoardPositionContract();
         DiscoverSpellLifecycle("CORE_WON_350",scheduledRepeat:true);
