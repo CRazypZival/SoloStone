@@ -1931,7 +1931,7 @@ internal sealed partial class NativeTestControl
         view.State["achievementToast"] = NativeAchievementToast.State();
         view.State["scene"] = scene?.GetMode().ToString(); view.State["screen"] = LocalLadder.Screen;
         view.ClientGameOver = front?.IsGameOver() == true;
-        view.State["gameMenuShown"] = GameMenu.Get()?.GameMenuIsShown() == true; view.State["responseMode"] = front?.GetResponseMode().ToString(); view.State["concedeRequested"] = front?.WasConcedeRequested() ?? false; view.State["humanOptionsId"] = view.OptionsId;
+        var gameMenu = GameMenu.Get(); view.State["gameMenuShown"] = gameMenu != null && gameMenu.GameMenuIsShown(); view.State["responseMode"] = front?.GetResponseMode().ToString(); view.State["concedeRequested"] = front?.WasConcedeRequested() ?? false; view.State["humanOptionsId"] = view.OptionsId;
         view.State["clientOptionsId"] = front?.GetOptionsPacket()?.ID ?? -1; view.State["choiceId"] = view.ChoiceId;
         view.State["clientChoiceId"] = front?.GetFriendlyEntityChoices()?.ID ?? -1;
         view.State["inputEnabled"] = input?.IsInputEnabled() ?? false;
