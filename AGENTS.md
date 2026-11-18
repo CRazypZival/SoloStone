@@ -10,6 +10,9 @@ For people and coding agents alike. Be direct and brief.
   [docs/BUILDING.md](docs/BUILDING.md) builds the plugin, the launcher and the installer.
 - Run the suites that cover what you changed before you open a pull request. Do not re-record a golden file to make a
   test pass; read [docs/TESTING.md](docs/TESTING.md) first.
+- A change to what a played card sends to the client must also pass admission rule R7 in the `native-match` suite and
+  a live check with a real mouse drag, because the client predicts a dragged play and silently ignores part of its
+  history. See [Client drop prediction](docs/TESTING.md#client-drop-prediction).
 
 ## Branches, commits and pull requests
 
