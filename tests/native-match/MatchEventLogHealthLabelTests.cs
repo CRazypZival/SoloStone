@@ -44,8 +44,8 @@ internal static partial class Program
 
     private static void HealthLabelsHalvingIsHealthSet()
     {
-        // Garona Halforcen on main sets the enemy hero's Health to half (no damage event). After PR 203 it adds DAMAGE inside
-        // the battlecry block without a damage meta; the same rule (no hit meta, no heal meta) labels it HEALTH_SET.
+        // Garona Halforcen halves the enemy hero's remaining Health: since PR 203 it adds DAMAGE inside the battlecry block
+        // without a damage meta, so the rule (no hit meta, no heal meta) labels it HEALTH_SET, never DAMAGE or a STATS change.
         var (match, _, lines) = LoggedBoard();
         var player = match.Game.Player1; var enemy = match.Game.Player2;
         var llane = EngineEntity.FromCard(enemy, Cards.FromId("TIME_875t"), zone: enemy.HandZone);
@@ -55,7 +55,8 @@ internal static partial class Program
         PlayAndFlush(match, player, garona);
         Check(enemy.Hero.Health == before / 2, "Garona halved the hero: " + before + " -> " + enemy.Hero.Health);
         Check(!Kind(lines, "DAMAGE").Any() && !Kind(lines, "HEAL").Any(), "halving is neither damage nor heal" + Dump(lines));
-        Check(Kind(lines, "STATS").Any(l => l.Contains("target=HERO_08#") && l.Contains("stats=0/" + before + "->0/" + before / 2) && l.Contains("by=TIME_875#" + garona.Id)), "halving is a STATS line " + before + "->" + before / 2 + Dump(lines));
+        Check(Kind(lines, "HEALTH_SET").Any(l => l.Contains("target=HERO_08#") && l.Contains("hp=" + before + "->" + before / 2) && l.Contains("by=TIME_875#" + garona.Id)), "halving is HEALTH_SET " + before + "->" + before / 2 + Dump(lines));
+        Check(!Kind(lines, "STATS").Any(l => l.Contains("target=HERO_08#")), "halving keeps max Health, so no STATS line on the hero" + Dump(lines));
     }
 
     private static void HealthLabelsDamageWriteWithoutHitIsHealthSet()
