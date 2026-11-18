@@ -946,6 +946,9 @@ public sealed class NativeMatch
         Process(task);
 #endif
         humanChoices = null;
+#if ENGINE_SOURCE
+        NoteGuessResult(choices, choices.Entities, ChoiceEngineId, picks);
+#endif
         SendChosen(choices, acknowledged);
 
         if (Game.Step == Step.BEGIN_MULLIGAN &&
@@ -1042,9 +1045,10 @@ public sealed class NativeMatch
     private double opposingShownAt = -1, opposingRevealedAt = -1, opposingHoldStarted = -1;
     // EntitiesChosen waiting for the client to process its EntityChoices. GameState processes an EntitiesChosen at once
     // when no choice of that player is mapped; arriving before its EntityChoices it would leave that choice mapped
-    // forever and queue every later choice (the human's too) behind it. Each entry also retires its spent picks.
-    private readonly List<(PowerEntityChoices Choices, List<int> Picks, HashSet<int> Proxies)> deferredOpposing =
-        new List<(PowerEntityChoices Choices, List<int> Picks, HashSet<int> Proxies)>();
+    // forever and queue every later choice (the human's too) behind it. Each entry also retires its spent picks, and
+    // carries a guess's result row (NoteGuessResult), which must not reach the client before its EntitiesChosen.
+    private readonly List<(PowerEntityChoices Choices, List<int> Picks, HashSet<int> Proxies, (int Source, int Target)? Guess)> deferredOpposing =
+        new List<(PowerEntityChoices Choices, List<int> Picks, HashSet<int> Proxies, (int Source, int Target)? Guess)>();
     internal const double OpposingDealWaitMilliseconds = 3000;
     // Native ChoiceCardMgr has dealt (revealed) the opposing choice with this id. Null headless: shown counts as dealt.
     internal Func<int, bool> NativeOpposingChoiceRevealed { get; set; }
@@ -1087,13 +1091,18 @@ public sealed class NativeMatch
         var picks = (opposingPicks ?? new List<int>())
             .Select(id => toClient.TryGetValue(id, out int proxy) ? proxy : id).Where(shown.Entities.Contains).Distinct().ToList();
         var proxies = new HashSet<int>(picks.Where(opposingProxies.ContainsKey));
+        NoteGuessResult(shown, shown.Entities, id => opposingProxies.TryGetValue(id, out int engine) ? engine : id, (opposingPicks ?? new List<int>()));
         opposingChoices = null; opposingChoiceSource = null; opposingChoiceOriginals = null; opposingPicks = null;
         opposingProxies.Clear(); opposingShownAt = opposingRevealedAt = opposingHoldStarted = -1;
         // Game over: the native OnGameOver cancels every shown choice itself.
         if (Game.State == State.COMPLETE) { deferredOpposing.Clear(); return (null, null, null); }
         if (deferredOpposing.Count > 0 || !OpposingChoiceReceived(shown.Index))
         {
-            deferredOpposing.Add((shown, picks, proxies));
+            // A slow client (the Steam Deck) may not have this EntityChoices yet when the NPC answers. Client code reading, not seen
+            // live: a choice queued behind an earlier opponent choice does not hold the power queue, so a result row sent with the
+            // answer's history could be replayed before the conceal spell exists. The row follows the released EntitiesChosen instead.
+            deferredOpposing.Add((shown, picks, proxies, guessResult));
+            guessResult = null;
             return (null, null, null);
         }
         SendChosen(shown, picks);
@@ -1106,13 +1115,29 @@ public sealed class NativeMatch
     {
         if (deferredOpposing.Count == 0) return;
         if (Game == null || Game.State == State.COMPLETE) { deferredOpposing.Clear(); return; }
-        while (deferredOpposing.Count > 0 && OpposingChoiceReceived(deferredOpposing[0].Choices.Index))
+        if (!OpposingChoiceReceived(deferredOpposing[0].Choices.Index)) return;
+        // SendPowerHistory places a pending guessResult (the human's, answered in this same batch) into any packet: set it aside
+        // while these releases send their own rows and retire packets, so it reaches the human's own answer history.
+        var pending = guessResult;
+        guessResult = null;
+        try
         {
-            var entry = deferredOpposing[0];
-            deferredOpposing.RemoveAt(0);
-            SendChosen(entry.Choices, entry.Picks);
-            RetireChosenChoiceActors(entry.Choices, entry.Picks, entry.Proxies, new HashSet<int>());
+            while (deferredOpposing.Count > 0 && OpposingChoiceReceived(deferredOpposing[0].Choices.Index))
+            {
+                var entry = deferredOpposing[0];
+                deferredOpposing.RemoveAt(0);
+                SendChosen(entry.Choices, entry.Picks);
+                if (entry.Guess.HasValue)
+                {
+                    // The answer's Battlecry block went out already: the row follows its EntitiesChosen on its own, loose.
+                    var result = new NativePowerHistory();
+                    InsertGuessRow(result, entry.Guess.Value.Source, entry.Guess.Value.Target);
+                    SendPowerHistory(result);
+                }
+                RetireChosenChoiceActors(entry.Choices, entry.Picks, entry.Proxies, new HashSet<int>());
+            }
         }
+        finally { guessResult = pending; }
     }
 
     // After a history batch: retire a spent SETASIDE pick (Adapt, refresh token, proxy), then show a pending choice.
@@ -1305,6 +1330,8 @@ public sealed class NativeMatch
                 picks.Add(remaining[index]); remaining.RemoveAt(index);
             }
         }
+        // Watchdog recovery and choices on a shortened NPC turn also invalidate the player's pending send.
+        expiredHumanChoices.Add(humanChoices.Index);
         CompleteHumanChoice(humanChoices.Index, picks, drive: false);
         return true;
     }
@@ -2862,7 +2889,7 @@ public sealed class NativeMatch
 #if ENGINE_SOURCE
         if (Game.State != State.COMPLETE && (deferredOpposing.Count > 0 || !OpposingChoiceReceived(choices.Index)))
         {
-            deferredOpposing.Add((choices, picks.ToList(), new HashSet<int>()));
+            deferredOpposing.Add((choices, picks.ToList(), new HashSet<int>(), null));
             return;
         }
 #endif
@@ -3393,6 +3420,7 @@ public sealed class NativeMatch
 #endif
         SendPowerHistory(packet);
 #if ENGINE_SOURCE
+        guessResult = null;
         PublishOpposingChoice(concealedOpposing);
         RecordUnpublishedNpcChoice();
         if (Game.Rewind == null) { rewindPrivacy = null; rewindDerivedPremiums = null; rewindHighlights = null; rewindChoiceOffers = null; rewindAnonymousEntities = null; }
@@ -5802,6 +5830,7 @@ public sealed class NativeMatch
     {
         if (packet.List.Count == 0) return;
 #if ENGINE_SOURCE
+        PlaceGuessResult(packet);
         SuppressEmptyTriggers(packet);
         NormalizeBoardTransit(packet);
         NormalizePublicIdentity(packet);
@@ -6302,6 +6331,55 @@ public sealed class NativeMatch
                     && appendages.Contains(entity.Name)) return;
             }
         start.TriggerKeyword = (int)GameTag.TRIGGER_VISUAL;
+    }
+
+    // Cards whose choice is a guess at a card in the opponent's hand (DiscoverEntitySource.EnemyHandGuess). The client gives them a
+    // CustomChoiceConcealSpell (Card.GetCustomChoiceConcealSpell, CardDef.m_CustomChoiceConcealSpellPath): DoEffects loops
+    // `while (!FindResultOfChoice()) yield return null` and only then finishes the choice. FindResultOfChoice scans the current and
+    // every queued task list for a META_DATA of type TARGET (0) whose Info[0] is one of the choice cards; that card is the correct one,
+    // and the guess was right when it was chosen. Without that row the spell never ends: the choice stays (clientChoiceId,
+    // mustWaitForChoices) and the power queue stays stalled (#115, lane 1 2026-11-15). The row may only exist in the ANSWER's history:
+    // earlier it would give the correct card away.
+    private static readonly HashSet<string> GuessChoiceSources = new HashSet<string>(StringComparer.Ordinal) { "TIME_041", "UNG_035", "CORE_UNG_035" };
+    private (int Source, int Target)? guessResult;
+
+    // Offers are client ids; toEngine maps one to its engine entity; picks are engine ids. With no correct offer (the enemy hand was
+    // empty, so every offer is a decoy) the client still needs a card to reveal: name an unchosen one, which plays the wrong-guess
+    // reveal and matches the engine (no bonus).
+    private void NoteGuessResult(PowerEntityChoices choices, IReadOnlyList<int> offers, Func<int, int> toEngine, IEnumerable<int> picks)
+    {
+        guessResult = null;
+        if (choices == null || choices.ChoiceType != ChoiceType.GENERAL || offers == null || offers.Count == 0
+            || !Game.IdEntityDic.TryGetValue(choices.SourceId, out var source) || !GuessChoiceSources.Contains(source.Card.Id)) return;
+        var chosen = new HashSet<int>(picks ?? Enumerable.Empty<int>());
+        // Curious Glimmerroot (legacy ChoiceAction.GLIMMERROOT, same client conceal spell, lane 1 2026-11-15): the correct offer is the
+        // card that started in the opponent's deck; Forefather marks it with CorrectAnswer.
+        var opponentDeck = source.Controller.Opponent.DeckCards.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
+        bool glimmerroot = source.Card.Id.EndsWith("UNG_035", StringComparison.Ordinal);
+        int target = offers.FirstOrDefault(id => Game.IdEntityDic.TryGetValue(toEngine(id), out var offer)
+            && (glimmerroot ? opponentDeck.Contains(offer.Card.Id) : offer[SabberStoneCore.Actions.DiscoverRealRules.CorrectAnswer] == 1));
+        if (target == 0) target = offers.FirstOrDefault(id => !chosen.Contains(toEngine(id)));
+        if (target != 0) guessResult = (choices.SourceId, target);
+    }
+
+    // Inside the answer's resumed Battlecry block of that source, first: a TARGET row sits at the start of a block in retail traces,
+    // and the client reads it from any queued task list. Without such a block it goes loose at the head of the packet.
+    private void PlaceGuessResult(NativePowerHistory packet)
+    {
+        if (!guessResult.HasValue) return;
+        var (source, target) = guessResult.Value;
+        guessResult = null;
+        InsertGuessRow(packet, source, target);
+    }
+
+    private void InsertGuessRow(NativePowerHistory packet, int source, int target)
+    {
+        var row = new PowerHistoryData { MetaData = new PegasusGame.PowerHistoryMetaData {
+            Type = HistoryMeta.Type.TARGET, Data = source, Info = new List<int> { target } } };
+        int at = packet.List.FindIndex(r => r.HasPowerStart && (int)r.PowerStart.Type == (int)HistoryBlock.Type.POWER && r.PowerStart.Source == source);
+        packet.List.Insert(at >= 0 ? at + 1 : 0, row);
+        TrackVisibility(row);
+        BotTrace?.Invoke("guess result: META_DATA TARGET " + target + " source " + source + (at >= 0 ? " inside the resumed block" : " loose"));
     }
 
     private void SuppressEmptyTriggers(NativePowerHistory packet)
