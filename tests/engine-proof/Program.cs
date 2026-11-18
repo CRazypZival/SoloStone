@@ -101,6 +101,7 @@ if (args.Contains("--rewind-retry-discount-only")) { RewindProof.KarovClockswort
 if (args.Contains("--rewind-smoke-only")) { StandardSetsProof.Run(rewindSmokeOnly: true); return; }
 if (args.Length >= 1 && args[0] == "--rewind-round-two") { RewindProof.RunRoundTwo(args.ElementAtOrDefault(1)); return; }
 if (args.Contains("--rewind-only")) { RewindProof.Run(); return; }
+if (args.Length >= 1 && args[0] == "--rewind-reports") { RewindProof.ReportRegressions(args.ElementAtOrDefault(1)); return; }
 if (args.Contains("--rewind-cards-only")) { StandardSetsProof.Run(rewindOnly: true); return; }
 if (args.Contains("--clone-only")) { CloneProof.Run(); return; }
 if (args.Contains("--time-travel-s2-only")) { StandardSetsProof.Run(timeTravelS2Only: true); return; }

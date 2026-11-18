@@ -108,6 +108,8 @@ internal static partial class Program
         if (args.Contains("--rewind-presentation-only")) { RewindPresentationTags(); return; }
         if (args.Contains("--announcer-rewind-only")) { NativeMatch.ClockFreeBot = true; AnnouncerRewindHistory(); return; }
         if (args.Contains("--hidden-hand-only")) { NativeMatch.ClockFreeBot = true; HiddenHandCardHistory(); return; }
+        if (args.Contains("--morchie-rewind-only")) { NativeMatch.ClockFreeBot = true; MorchieRewindChoices(); return; }
+        if (args.Contains("--rewind-settlement-only")) { NativeMatch.ClockFreeBot = true; RewindSettlementNoOp(args.ElementAtOrDefault(1)); return; }
         if (args.Contains("--king-llane-only")) { NativeMatch.ClockFreeBot = true; KingLlanePlayHistory(); return; }
         if (args.Contains("--vanguard-only")) { NativeMatch.ClockFreeBot = true; VanguardDrawHistory(); return; }
         if (args.Contains("--broxigar-only")) { NativeMatch.ClockFreeBot = true; BroxigarReturnHistory(); return; }
@@ -262,6 +264,8 @@ internal static partial class Program
         NpcGuessForcedPicksNative(); NpcGuessTwoHeldNative(); NpcGuessHeldThenHumanGuessNative();
         GlimmerrootGuessNative();
         TimedChoiceCompletionNative();
+        MorchieRewindChoices();
+        RewindSettlementNoOp();
         GroupProofs.Run(ProofKind.Native);
         if (args.Contains("--hand-buff-only")) return;
         OverloadManaParity();
@@ -1677,6 +1681,7 @@ internal static partial class Program
                     int pick = owner.Choice.ChoiceAction == SabberStoneCore.Model.ChoiceAction.REWIND
                         ? owner.Choice.Choices.First(c => c != game.Rewind.RewindEntityId) : owner.Choice.Choices[0];
                     InvokeProcess(match, ChooseTask.Pick(owner, pick)); FlushFieldHistory(match);
+                    owner = game.ControllerById(owner.Id);
                 }
             }
             else
@@ -1712,8 +1717,10 @@ internal static partial class Program
                 {
                     var choice = capture.Last<EntityChoices>(17);
                     match.SendChoices(choice.Id, choice.Entities.Take(Math.Max(1, choice.CountMin)).ToList());
+                    owner = game.ControllerById(owner.Id);
                 }
             }
+            source = game.IdEntityDic[source.Id];
             Check(owner.Choice == null && !game.Resolution.HasSuspendedEffect, "Standard play resolves pending choices: " + id);
             Check(!owner.HandZone.Contains(source), "Standard option accepted by engine: " + id);
             if (dualIds.Contains(id))
