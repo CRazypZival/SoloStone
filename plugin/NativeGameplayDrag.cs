@@ -50,12 +50,17 @@ internal static class NativeGameplayDrag
         switch (mode)
         {
             case GameState.ResponseMode.OPTION_TARGET:
-            case GameState.ResponseMode.OPTION_REVERSE_TARGET:
                 input.CancelTargetMode(); input.ReturnHeldCardToHand(); break;
+            case GameState.ResponseMode.OPTION_REVERSE_TARGET:
+                // CancelTargetMode returns at once outside OPTION_TARGET; the client's own CancelOption calls this one for this mode.
+                input.CancelReverseTargetMode(false); input.ReturnHeldCardToHand(); break;
             case GameState.ResponseMode.SUB_OPTION:
-                input.CancelSubOptionMode(); break;
+                // May finish in a coroutine (a panel still opening, a weapon Choose One): the caller reads the state again.
+                input.CancelSubOptionMode(); return mode.ToString();
             default: throw new InvalidOperationException("Nothing to cancel (responseMode " + mode + ")");
         }
+        var now = game.GetResponseMode();
+        if (now == mode) throw new InvalidOperationException("The client is still in " + mode + " after its own cancel");
         return mode.ToString();
     }
 
