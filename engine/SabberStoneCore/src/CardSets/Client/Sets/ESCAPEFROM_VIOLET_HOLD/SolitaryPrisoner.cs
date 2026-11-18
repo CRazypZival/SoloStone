@@ -20,8 +20,8 @@ namespace SabberStoneCore.CardSets.Client.Sets
                 new SelfCondition(NoOtherMinions)) };
         }
         private static bool NoOtherMinions(IPlayable source) =>
-            !source.Controller.BoardZone.Any(p => p.Id != source.Id)
-                && !source.Controller.Opponent.BoardZone.Any(p => p.Id != source.Id);
+            !source.Controller.BoardZone.Interactable.Any(p => p.Id != source.Id)
+                && !source.Controller.Opponent.BoardZone.Interactable.Any(p => p.Id != source.Id);
 
     }
 }

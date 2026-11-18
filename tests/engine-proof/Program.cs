@@ -609,6 +609,8 @@ Console.WriteLine("PASS parallel seeded game isolation");
 DeathAuraTimingProof.Run();
 PoisonousDamageProof.Run();
 TargetingRulesProof.Run();
+UntouchableBoardProof.Run();
+UntouchableBoardSourceCheck.Run();
 DamageWeaponTaskProof.Run();
 WeaponKeywordProof.Run();
 MultiAuraCleanupProof.Run();
