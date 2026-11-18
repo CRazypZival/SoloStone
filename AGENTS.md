@@ -14,8 +14,8 @@ For people and coding agents alike. Be direct and brief.
   a live check with a real mouse drag, because the client predicts a dragged play and silently ignores part of its
   history. See [Client drop prediction](docs/TESTING.md#client-drop-prediction).
 - When a card asks a question many cards ask, such as which minions effects can see or which minion is left-most,
-  use the engine's shared helper (`BoardZone.Interactable`, `FirstInteractable`, `LastInteractable`), not a loop of its
-  own. If there is no helper and the same check is already written out in several cards, add one helper and move them
+  use the engine's shared helper (for which minions effects can see, `BoardZone.Interactable` and its
+  `Any`/`Count`/`First`/`LastInteractable` forms), not a loop of its own. If there is no helper and the same check is already written out in several cards, add one helper and move them
   onto it, and fix a bug in such a check there, not card by card. Copies drift: before #216, skipping Untouchable
   minions was written into some cards and missing from others.
 
