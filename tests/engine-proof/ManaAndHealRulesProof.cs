@@ -16,7 +16,7 @@ internal static class ManaAndHealRulesProof
         var failures = new List<string>();
         foreach (var test in new Action[] { CoinAtFullCrystals, TemporaryStacksAboveMaximum, TemporaryAboveRaisedMaximum, TemporaryWhileOverloaded,
             TemporaryManaSpentFirst, GaronaHalvesRemainingHealth, GaronaOddHealthAndNoLlane, SpiritExcessIncludesBonus, SpiritExcessWithDoubling,
-            SpiritAtFullHealth, SpiritWithConversion })
+            SpiritAtFullHealth, SpiritWithConversion, NextTurnManaAboveMaximum, WildGrowthTemporaryManaDoesNotCountAsCrystal, WildGrowthAtTenCrystals, GaronaIsNotDamage })
             try { test(); } catch (Exception e) { failures.Add(test.Method.Name + ": " + e.Message); }
         Verify(failures.Count == 0, string.Join("; ", failures));
         Console.WriteLine("PASS mana and heal rules: temporary Mana above maximum; Garona remaining Health; Lingering Spirit excess with bonus");
@@ -125,5 +125,52 @@ internal static class ManaAndHealRulesProof
         var spirit = Summon(p, "CAP_803");
         Kill(g, spirit); g.DeathProcessingAndAuraUpdate();
         Verify(p.Hero.Damage == 5 && p.Opponent.Hero.Damage == 0, $"converted healing: hero takes 5, no excess; got {p.Hero.Damage}/{p.Opponent.Hero.Damage}");
+    }
+    // Emberscarred Whelp (FIR_927) and other next-turn temporary Mana: the 29.0 note covers all temporary Mana.
+    private static void NextTurnManaAboveMaximum()
+    {
+        foreach (int start in new[] { 9, 10 })
+        {
+            var (g, p) = Start();
+            p.BaseMana = start; p.UsedMana = 0;
+            SabberStoneCore.Actions.TemporaryRules.NextTurnMana(p);
+            End(g); End(g);
+            Verify(p.BaseMana == 10 && p.TemporaryMana == 1 && p.RemainingMana == 11,
+                $"next-turn temporary Mana at base {start} gives 11/10, got {p.RemainingMana}/{p.BaseMana} temp {p.TemporaryMana}");
+        }
+    }
+    // Excess Mana depends on permanent crystals only ("if you have 10 Mana Crystals").
+    private static (bool excess, int baseMana) WildGrowth(int baseMana, int temporary)
+    {
+        var (g, p) = Start();
+        p.BaseMana = baseMana; p.UsedMana = 0; p.TemporaryMana = temporary;
+        PlayNoReset(g, p, "CS2_013");
+        return (p.HandZone.Any(c => c.Card.Id == "CS2_013t"), p.BaseMana);
+    }
+    private static void WildGrowthTemporaryManaDoesNotCountAsCrystal()
+    {
+        foreach (int temporary in new[] { 3, 4 }) // 3 leaves exactly 10 available when it resolves
+        {
+            var (excess, baseMana) = WildGrowth(9, temporary);
+            Verify(!excess && baseMana == 10, $"base 9 + {temporary} temporary: Wild Growth gives the 10th crystal and no Excess Mana, got excess={excess} base={baseMana}");
+        }
+    }
+    private static void WildGrowthAtTenCrystals()
+    {
+        var (excess, baseMana) = WildGrowth(10, 0);
+        Verify(excess && baseMana == 10, $"base 10: Excess Mana card, no new crystal, got excess={excess} base={baseMana}");
+    }
+    private static void GaronaIsNotDamage()
+    {
+        var (g, p) = Start(); var e = p.Opponent;
+        var zzeraku = Summon(e, "DRG_209"); // whenever your hero takes damage, summon a 6/6
+        e.Hero.Damage = 8; e.Hero.Armor = 5; Add(e, "TIME_875t");
+        int damageFacts = g.HistoryFacts.Query.Damage().Count(), board = e.BoardZone.Count, cursor = g.PowerHistory.Full.Count;
+        Play(g, p, "TIME_875"); g.DeathProcessingAndAuraUpdate();
+        Verify(e.Hero.Health == 11, "Garona resolved");
+        Verify(g.HistoryFacts.Query.Damage().Count() == damageFacts, "no damage fact");
+        Verify(e.BoardZone.Count == board && zzeraku.Zone.Type == Zone.PLAY, "no 'hero takes damage' trigger fired (no Nether Drake)");
+        Verify(!g.PowerHistory.Full.Skip(cursor).OfType<SabberStoneCore.Kettle.PowerHistoryTagChange>().Any(t => t.EntityId == e.Hero.Id
+            && (t.Tag == GameTag.PREDAMAGE)), "no PREDAMAGE tag change on the hero");
     }
 }
