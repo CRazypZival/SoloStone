@@ -560,6 +560,33 @@ namespace SabberStoneCore.Kettle
             return new EffectSourceScope(this);
         }
 
+        // Cards whose own play effect on the client is a deck-spawn spell: it reads the DECK FULL_ENTITYs of its own POWER
+        // block (SpawnToDeckSpell.AddPowerTargets) and, with none there, never attaches, so the card's FX is lost (#153).
+        // Their generated deck cards stay directly in the POWER block, as retail sends them (Marrowslicer), and keep the
+        // FULL/SHOW/HIDE/TARGET shape without the generic sub-spell scope. Chosen from each card's play effect name in the
+        // pinned effect census; a card that is wrongly here loses only the generic flight, a card wrongly left out keeps
+        // losing its own effect. Cards with another play effect (a missile, a deck swap) keep the generic scope.
+        private static readonly HashSet<string> deckSpawnPlaySpells = new HashSet<string> {
+            "AT_035", "BOT_087", "BOT_288", "BOT_511", "BRM_007", "CFM_602b", "CFM_660", "DAL_010", "DAL_060", "DAL_565",
+            "DAL_582", "GIL_815", "GVG_056", "ICC_091", "ICC_215", "JAIL_882", "LOE_002", "LOE_019t", "LOE_079", "LOE_110",
+            "LOE_111", "LOOT_026", "LOOT_106", "LOOT_526", "OG_255", "UNG_851"
+        };
+
+        public static bool IsDeckSpawnPlaySpell(string cardId) => cardId != null && deckSpawnPlaySpells.Contains(cardId);
+
+        private bool InOwnDeckSpawnSpell(IPlayable generated)
+        {
+            var block = CurrentBlock;
+            if (block == null || block.BlockType != BlockType.POWER || block.EffectIndex.GetValueOrDefault() != 0) return false;
+            string source = block.EffectCardId;
+            if (string.IsNullOrEmpty(source))
+            {
+                if (!generated.Game.IdEntityDic.TryGetValue(block.Source, out var entity)) return false;
+                source = entity.Card.Id;
+            }
+            return IsDeckSpawnPlaySpell(source);
+        }
+
         internal bool GeneratedShuffle(IPlayable card, bool reveal)
         {
             int creation = Last.FindLastIndex(e => e is PowerHistoryFullEntity full && full.Entity.Id == card.Id
@@ -577,18 +604,18 @@ namespace SabberStoneCore.Kettle
             full.Entity.Tags = new Dictionary<GameTag, int> {
                 [GameTag.ZONE] = (int)Zone.DECK, [GameTag.CONTROLLER] = card.Controller.PlayerId, [GameTag.ENTITY_ID] = card.Id
             };
-            var presentation = new List<IPowerHistoryEntry> {
-                new PowerHistorySubSpellStart { Source = card.Controller.Hero.Id, SpellPrefabGuid = GeneratedShufflePrefab },
-                full
-            };
+            bool ownSpell = InOwnDeckSpawnSpell(card);
+            var presentation = new List<IPowerHistoryEntry>();
+            if (!ownSpell) presentation.Add(new PowerHistorySubSpellStart { Source = card.Controller.Hero.Id, SpellPrefabGuid = GeneratedShufflePrefab });
+            presentation.Add(full);
             // Random stacks and hidden deck copies must not gain identity through presentation.
             if (reveal) presentation.Add(PowerHistoryBuilder.ShowEntity(card));
             presentation.AddRange(new IPowerHistoryEntry[] {
                 PowerHistoryBuilder.HideEntity(card),
-                new PowerHistoryMetaData { Type = MetaDataType.TARGET, Data = 0, Info = new List<int> { card.Id } },
-                new PowerHistorySubSpellEnd()
+                new PowerHistoryMetaData { Type = MetaDataType.TARGET, Data = 0, Info = new List<int> { card.Id } }
             });
-            int open = JoinableShuffleEnd(card, creation);
+            if (!ownSpell) presentation.Add(new PowerHistorySubSpellEnd());
+            int open = ownSpell ? -1 : JoinableShuffleEnd(card, creation);
             if (open >= 0)
             {
                 // Retail SpawnToDeckSpell.AddPowerTargets flies every DECK FULL of one sub-spell together;
@@ -606,7 +633,8 @@ namespace SabberStoneCore.Kettle
 
         // Last index of an unflushed generated spawn scope into the same deck that this creation can join:
         // same block, and in between only the scope cards' own deck-side tag changes and enchantments attached to
-        // them (e.g. Academic Espionage's cost buff). Any other row, such as a listener's effect, keeps its own scope.
+        // them (e.g. Academic Espionage's cost buff), Choose One options, or retirement of a replaced card from that deck.
+        // Any other row, such as a listener's effect, keeps its own scope.
         private int JoinableShuffleEnd(IPlayable card, int creation)
         {
             var game = card.Game;
@@ -628,27 +656,41 @@ namespace SabberStoneCore.Kettle
             }
             if (start < 0 || !(Last[start] is PowerHistorySubSpellStart scope) || scope.SpellPrefabGuid != GeneratedShufflePrefab
                 || scope.Source != card.Controller.Hero.Id || scope.Targets.Count != 0 || scope.RequirePublicOrigin) return -1;
-            var buffs = new HashSet<int>();
-            bool Buff(int id) => game.IdEntityDic.TryGetValue(id, out var entity) && entity is Enchantment enchantment
-                && enchantment.Target != null && cards.Contains(enchantment.Target.Id);
+            var attachments = new HashSet<int>();
+            var retirements = new List<IPowerHistoryEntry>();
+            bool Attached(int id) => game.IdEntityDic.TryGetValue(id, out var entity)
+                && (entity is Enchantment enchantment && enchantment.Target != null && cards.Contains(enchantment.Target.Id)
+                    || cards.Contains(entity[GameTag.PARENT_CARD])
+                    && game.IdEntityDic.TryGetValue(entity[GameTag.PARENT_CARD], out var parent)
+                    && parent.ChooseOnePlayables?.Any(option => option.Id == id) == true);
             for (int i = end + 1; i < creation; i++)
             {
                 switch (Last[i])
                 {
-                    case PowerHistoryFullEntity full when Buff(full.Entity.Id): buffs.Add(full.Entity.Id); break;
-                    case PowerHistoryShowEntity show when buffs.Contains(show.Entity.Id): break;
-                    case PowerHistoryTagChange change when buffs.Contains(change.EntityId): break;
+                    case PowerHistoryFullEntity full when Attached(full.Entity.Id): attachments.Add(full.Entity.Id); break;
+                    case PowerHistoryShowEntity show when attachments.Contains(show.Entity.Id): break;
+                    case PowerHistoryTagChange change when attachments.Contains(change.EntityId): break;
                     case PowerHistoryTagChange change when cards.Contains(change.EntityId) && change.Tag != GameTag.CONTROLLER
                         && (change.Tag != GameTag.ZONE || change.Value == (int)Zone.DECK): break;
+                    // Alternate Reality interleaves random picks and shuffles; merge history without changing RNG order (#160).
+                    case PowerHistoryTagChange change when game.IdEntityDic.TryGetValue(change.EntityId, out var retired)
+                        && retired.Controller == card.Controller && retired.Zone == card.Controller.SetasideZone
+                        && retired[Actions.CardStateBoundary.ReplacedHiddenZone] == (int)Zone.DECK
+                        && (change.Tag == Actions.CardStateBoundary.ReplacedHiddenZone && change.Value == (int)Zone.DECK
+                            || change.Tag == GameTag.ZONE && change.Value == (int)Zone.SETASIDE):
+                        retirements.Add(change); break;
                     default: return -1;
                 }
             }
             // Both histories must hold the same unflushed run, or a merge would desynchronize them.
-            int fullEnd = Full.LastIndexOf(Last[end]);
-            if (fullEnd < 0 || fullEnd + creation - end >= Full.Count) return -1;
-            for (int i = end; i <= creation; i++)
-                if (!ReferenceEquals(Full[fullEnd + i - end], Last[i])) return -1;
-            return end;
+            int fullStart = Full.LastIndexOf(Last[start]);
+            if (fullStart < 0 || fullStart + creation - start >= Full.Count) return -1;
+            for (int i = start; i <= creation; i++)
+                if (!ReferenceEquals(Full[fullStart + i - start], Last[i])) return -1;
+            // Retired cards must stay outside SpawnToDeck's inferred targets (#160).
+            foreach (var retirement in retirements) { Full.Remove(retirement); Last.Remove(retirement); }
+            Full.InsertRange(fullStart, retirements); Last.InsertRange(start, retirements);
+            return end + retirements.Count;
         }
 
         /// <summary>The enchantment whose granted Deathrattle is resolving, for presentation recipes only.</summary>
