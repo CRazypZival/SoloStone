@@ -201,7 +201,8 @@ still passes a live check that uses `act`.
 - The `native-match` suite (client tier; its program's `--admission-only` slice runs just this sweep). Admission rule R7
   (`tests/native-match/NativeAdmission.cs`) reports any such row in a predicted PLAY list, over every Standard loaner
   fixture and both seats. A new kind of row needs a new R7 case, not an exemption.
-- A live check with a real mouse drag of the card (test control's `entity-drag` or a physical drag), never `act`.
+- A live check with a native drag of the card (test control's `entity-drag` without `click`, or a physical drag), never
+  `act`.
 
 R7 doesn't cover yet: a transform or reveal of another hand card in the matched list, position rows of cards that entered
 the hand earlier in the same play, drops into SECRET, and PLAY blocks that started in an earlier packet.
