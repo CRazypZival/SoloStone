@@ -204,8 +204,18 @@ still passes a live check that uses `act`.
 - A live check with a native drag of the card (test control's `entity-drag` without `click`, or a physical drag), never
   `act`.
 
-R7 doesn't cover yet: a transform or reveal of another hand card in the matched list, position rows of cards that entered
-the hand earlier in the same play, drops into SECRET, and PLAY blocks that started in an earlier packet.
+The paired list can be any of the block's own lists: one after a nested block, a sub-spell's list, or the rows that
+continue the block in a later packet. R7 checks all of them. Besides moves, it also reports a card revealed in place
+(a SHOW_ENTITY of a card that stays in hand, on the board or in SECRET), because the client refreshes that card's actor
+only when it processes the list.
+
+These need no R7 case, because the client loses nothing there:
+- A transform in place (CHANGE_ENTITY): the card refreshes its own actor.
+- Position rows: the prediction itself shifts the cards in hand and on the board around the played card. A card that
+  entered the zone after the drop misses that shift and can be off by one, but that can only tie it with a neighbour.
+  The client breaks a tie by the entity's position tag, which still applies, so the order stays right.
+- A Secret, quest or Sigil: it moves from hand straight to SECRET. The client predicts PLAY, so that list is never
+  paired.
 
 ## You changed X, run Y
 
