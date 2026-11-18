@@ -530,6 +530,11 @@ internal static class ClientBridge
             try
             {
                 log.LogInfo("NPC_REPLY_PRIOR match=" + record.Id + " prior=" + NativeDeckInferenceOption.ThisMatch + " nextMatch=" + NativeDeckInferenceOption.Enabled);
+#if ENGINE_SOURCE
+                // Which pool this match's random effects read (the Standard policy, whatever FormatType the client shows).
+                log.LogInfo("MATCH_RANDOM_POOL match=" + record.Id + " pool=" + SabberStoneCore.Model.RandomPools.MatchRandomPool.PolicyVersion
+                    + " format=" + match.Game.PoolFormat + " formatType=" + match.Game.FormatType + " manifest=" + match.Game.OfflinePools.Hash);
+#endif
                 var npc = NpcCatalog.ForDeck(record.Opponent);
                 var humanDeck = player ?? LocalDecks.Get(record.Deck);
                 var encounterFacts = EncounterFacts(record.Opponent);

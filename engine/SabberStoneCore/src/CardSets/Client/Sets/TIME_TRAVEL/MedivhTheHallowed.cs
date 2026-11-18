@@ -23,7 +23,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
                 Aura=new AdaptiveCostEffect(s=>0,EffectOperator.SET,
                     new SelfCondition(s=>s.Controller.BoardZone.GetLocations().Any(l=>l.Card.Id=="TIME_890t2"))),
                 PowerTask=new CustomTask((g,c,s,t,stack)=> {
-                    var others=c.BoardZone.Concat(c.Opponent.BoardZone).Where(m=>m.Id!=s.Id).ToArray();
+                    var others=c.BoardZone.Concat(c.Opponent.BoardZone).Where(m=>m.Id!=s.Id && !m.Untouchable).ToArray();
                     foreach(var minion in others) minion.Silence();
                     foreach(var minion in others) minion.ToBeDestroyed=true;
                 }) };

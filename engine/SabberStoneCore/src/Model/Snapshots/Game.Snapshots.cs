@@ -43,7 +43,7 @@ namespace SabberStoneCore.Model
         internal static Game LoadSnapshotWithPools(byte[] data, OfflinePoolManifest pools, GameConfig config = null)
         {
             Game game = new SnapshotCodec().Load(data, pools: pools);
-            if (config != null && (config.FormatType != game.FormatType || config.History != game.History || config.Logging != game.Logging || config.EnableCorpses != game.EnableCorpses))
+            if (config != null && (config.FormatType != game.FormatType || config.History != game.History || config.Logging != game.Logging || config.EnableCorpses != game.EnableCorpses || config.PoolFormat != game.PoolFormat))
                 throw new SerializationException("Snapshot configuration mismatch (format/history/logging/corpses).");
             game.ValidateLoadedSnapshot();
             return game;
