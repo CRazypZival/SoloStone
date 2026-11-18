@@ -5,7 +5,9 @@ using SabberStoneCore.Kettle;
 namespace SabberStoneCore.Presentation
 {
     internal enum VisualPhase { Damage, DamageGroup, Heal, BoardBuff, Draw, Create, Summon, Armor }
-    internal enum VisualSource { Hero, Effect, Inherit }
+    // Dying: the Deathrattle's own minion while its card is still on the board (in play, or in the graveyard because of this death),
+    // else the owner's public hero. The default of every Deathrattle recipe: retail sources the cue at the dying minion.
+    internal enum VisualSource { Hero, Effect, Inherit, Dying }
     internal enum VisualTargets { Resolved, None }
 
     // Pinned 37.0.0.254477. Admission/provenance: data/fx/subspell-recipes.tsv.
@@ -29,6 +31,7 @@ namespace SabberStoneCore.Presentation
             void Add(string cards, VisualPhase phase, string prefab, VisualTargets targets = VisualTargets.Resolved,
                 bool pulse = false, BlockType block = BlockType.POWER, int keyword = 0, int subOption = -1, VisualSource source = VisualSource.Hero, bool group = false, int effectIndex = 0)
             {
+                if (block == BlockType.TRIGGER && keyword == (int)GameTag.DEATHRATTLE && source == VisualSource.Hero) source = VisualSource.Dying;
                 foreach (string card in cards.Split(' '))
                     result.Add((card, block, effectIndex, subOption, keyword, phase), new SubSpellRecipe(prefab, source, targets, pulse, group));
             }
