@@ -47,6 +47,7 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 //       10 cap, for a counter gag such as 32/333. Needs humanSeat=first; excludes humanMana/npcMana; npcManaRaw CUR <= 10 (its own
 //       turn start would otherwise send a negative RESOURCES_USED). Capture-only.)
 //   npcMana=N          humanMana=N           (mana crystals on that player's FIRST turn, full)
+//   humanCorpses=N     npcCorpses=N        (starting Corpses, 0..999; matching hero must be a Death Knight)
 //   runId=<this launch's run id>   (REQUIRED by Read: the file is bound to one launch, like enable-test-control)
 // ENGINE_SOURCE builds only (the Deck and lane builds); other builds ignore the file. A file is honoured only while test
 // control is live and its runId is this launch's; anything else is rejected (renamed .rejected-<utc>), and any file left over
@@ -72,7 +73,7 @@ public sealed class DebugScenario
     public static Outcome LastOutcome { get; private set; }
     internal static void RecordOutcome(string status, string detail, string runId) =>
         LastOutcome = new Outcome { Status = status, Detail = detail, RunId = runId };
-    private static readonly string[] Keys = { "npcDeckTop", "humanDeckTop", "humanOpeningHand", "npcOpeningHand", "npcHand", "npcPlayNext", "humanHand", "npcBoard", "humanBoard", "npcBoardStats", "humanBoardStats", "npcSummonStats", "humanHandMods", "humanHandHealth", "humanHandHealthWing", "humanHandClear", "humanManaRaw", "npcManaRaw", "npcMana", "humanMana", "humanSkin", "npcSkin", "heroAttack", "heroPower", "heroPowerUpgrade", "attackSecret", "attackArmor", "attackWeapon", "attackLethal", "humanSeat", "overdraw", "runId" };
+    private static readonly string[] Keys = { "npcDeckTop", "humanDeckTop", "humanOpeningHand", "npcOpeningHand", "npcHand", "npcPlayNext", "humanHand", "npcBoard", "humanBoard", "npcBoardStats", "humanBoardStats", "npcSummonStats", "humanHandMods", "humanHandHealth", "humanHandHealthWing", "humanHandClear", "humanManaRaw", "npcManaRaw", "npcMana", "humanMana", "humanCorpses", "npcCorpses", "humanSkin", "npcSkin", "heroAttack", "heroPower", "heroPowerUpgrade", "attackSecret", "attackArmor", "attackWeapon", "attackLethal", "humanSeat", "overdraw", "runId" };
 
     public IReadOnlyList<string> NpcDeckTop { get; private set; } = new string[0];
     public IReadOnlyList<string> HumanDeckTop { get; private set; } = new string[0];
@@ -175,6 +176,8 @@ public sealed class DebugScenario
     public BoardStats HumanBoardStats { get; private set; }
     public int? NpcMana { get; private set; }
     public int? HumanMana { get; private set; }
+    public int? HumanCorpses { get; private set; }
+    public int? NpcCorpses { get; private set; }
     public int? FirstPlayer { get; private set; }
     private static int? Seat(Dictionary<string, string> values)
     {
@@ -240,6 +243,8 @@ public sealed class DebugScenario
             NpcBoard = Cards(values, "npcBoard", MaxBoard, known), HumanBoard = Cards(values, "humanBoard", MaxBoard, known),
             NpcBoardStats = Stats(values, "npcBoardStats", "npcBoard"), HumanBoardStats = Stats(values, "humanBoardStats", "humanBoard"),
             NpcSummonStats = SummonRule(values, "npcSummonStats", known),
+            HumanCorpses = values.ContainsKey("humanCorpses") ? Number(values, "humanCorpses", 0, 999) : (int?)null,
+            NpcCorpses = values.ContainsKey("npcCorpses") ? Number(values, "npcCorpses", 0, 999) : (int?)null,
             NpcMana = Mana(values, "npcMana"), HumanMana = Mana(values, "humanMana") };
     }
 
@@ -428,6 +433,8 @@ public sealed class DebugScenario
         if (NpcManaRaw != null) lines.Add("npcManaRaw=" + NpcManaRaw);
         if (NpcMana.HasValue) lines.Add("npcMana=" + NpcMana.Value.ToString(CultureInfo.InvariantCulture));
         if (HumanMana.HasValue) lines.Add("humanMana=" + HumanMana.Value.ToString(CultureInfo.InvariantCulture));
+        if (HumanCorpses.HasValue) lines.Add("humanCorpses=" + HumanCorpses.Value.ToString(CultureInfo.InvariantCulture));
+        if (NpcCorpses.HasValue) lines.Add("npcCorpses=" + NpcCorpses.Value.ToString(CultureInfo.InvariantCulture));
         if (FirstPlayer.HasValue) lines.Add("humanSeat=" + (FirstPlayer == 1 ? "first" : "second"));
         if (Overdraw != null) lines.Add("overdraw=" + Overdraw);
         if (HumanSkin != null) lines.Add("humanSkin=" + HumanSkin);
@@ -540,6 +547,10 @@ public sealed class DebugScenario
         }
         foreach (string id in NpcDeckTop.Concat(HumanDeckTop).Concat(NpcHand).Concat(HumanHand).Concat(HumanOpeningHand).Concat(NpcOpeningHand).Concat(NpcBoard).Concat(HumanBoard))
             if (EngineCards.FromId(id) == null) return "unknown card " + id;
+        if (HumanCorpses.HasValue && (!game.EnableCorpses || game.Player1.Hero.Card.Class != SabberStoneCore.Enums.CardClass.DEATHKNIGHT))
+            return "humanCorpses needs a Death Knight with Corpses enabled.";
+        if (NpcCorpses.HasValue && (!game.EnableCorpses || game.Player2.Hero.Card.Class != SabberStoneCore.Enums.CardClass.DEATHKNIGHT))
+            return "npcCorpses needs a Death Knight with Corpses enabled.";
         if (HumanOpeningHand.Count > game.Player1.HandZone.Count(c => c.Card.Id != "GAME_005") ||
             NpcOpeningHand.Count > game.Player2.HandZone.Count(c => c.Card.Id != "GAME_005")) return "Opening hand has too few replaceable slots.";
         if (HumanSkin != null && HeroSkinData.All[HumanSkin].BaseHero != game.Player1.Hero.Card.Id) return "humanSkin class mismatch";
@@ -645,6 +656,14 @@ public sealed class DebugScenario
         string problem = Validate(game);
         if (problem != null) throw new InvalidOperationException(problem);
         var applied = new List<string>();
+        void Corpses(EngineController player, int? amount, string name)
+        {
+            if (!amount.HasValue) return;
+            SabberStoneCore.Actions.CorpseRules.Gain(player, amount.Value);
+            applied.Add(name + "=" + amount.Value.ToString(CultureInfo.InvariantCulture));
+        }
+        // Seed before staged summons can add Corpse gain modifiers.
+        Corpses(game.Player1, HumanCorpses, "humanCorpses"); Corpses(game.Player2, NpcCorpses, "npcCorpses");
         // Last in the zone = next drawn, so the listed order is added in reverse.
         void Top(EngineController player, IReadOnlyList<string> ids, string name)
         {

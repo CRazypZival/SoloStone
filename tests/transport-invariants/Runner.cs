@@ -53,6 +53,7 @@ internal sealed class Runner
     internal readonly HashSet<string> ReprintsPlayed = new(StringComparer.Ordinal);
     internal readonly HashSet<string> ReprintsTraded = new(StringComparer.Ordinal);
     internal bool LightspawnDetected => Buckets.Values.Any(b => b.Card == "EX1_335" && b.Tag == "ATK");
+    internal SabberStoneCore.Model.Game LastGame { get; private set; }
     internal int ViolationCount => Buckets.Values.Sum(b => b.Occurrences);
 
     internal HistoryShape Run(TransportReplay replay, bool verify = false, bool stopAfterForcedCard = false)
@@ -70,6 +71,7 @@ internal sealed class Runner
         if ((replay.PlayerDeck == null) != (replay.OpponentDeck == null))
             throw new ArgumentException("Transport replay requires both pinned decks or neither.");
         var game = Simulation.Create(record, replay: verify, playerDeck: replay.PlayerDeck, opponentDeck: replay.OpponentDeck);
+        LastGame = game;
         NativeSession session = null;
         var match = new NativeMatch((id, packet) => session.Receive(id, packet));
         // Test seam: Start-equivalent factory + real Process/SendHistory, with both players seeded.
