@@ -209,6 +209,7 @@ namespace SabberStoneCore.Model.Rewind
             // Logging is receiver policy; exact clones retain baseline bytes from their logging source.
             if (baseline.FormatType != game.FormatType || baseline.History != game.History ||
                 baseline.EnableCorpses != game.EnableCorpses ||
+                baseline.PoolFormat != game.PoolFormat || baseline.UnversionedRandomPoolReplay != game.UnversionedRandomPoolReplay ||
                 baseline.State != State.RUNNING || baseline.Step != Step.MAIN_ACTION ||
                 baseline.CurrentPlayer.Id != t.ControllerId || baseline.Player1.Choice != null || baseline.Player2.Choice != null ||
                 source == null ||

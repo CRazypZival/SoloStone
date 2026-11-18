@@ -779,6 +779,9 @@ public sealed class NativeMatch
             History = true,
 #if ENGINE_SOURCE
             EnableCorpses = true,
+            // The live match is FT_WILD (the client shows the format), but random effects play the Standard pool.
+            // The pool policy is set explicitly; the Wild mode will set it from the deck's format.
+            PoolFormat = SabberStoneCore.Config.GenerationFormat.Standard,
             Player1Sideboards = playerDeck?.Sideboards,
             Player2Sideboards = opponentDeck?.Sideboards,
 #endif
