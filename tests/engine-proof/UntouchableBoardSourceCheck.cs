@@ -16,7 +16,7 @@ internal static class UntouchableBoardSourceCheck
     // Anything else (LINQ, Count, indexers, Slots, GetSlot, GetSpan, enumeration) is a raw read and needs Interactable or a marker.
     private static readonly HashSet<string> NonReads = new(StringComparer.Ordinal)
     {
-        "Interactable", "AnyInteractable", "CountInteractable", "GetAll", "CountExceptUntouchables", "HasUntouchables", "Random",
+        "Interactable", "AnyInteractable", "CountInteractable", "FirstInteractable", "LastInteractable", "GetAll", "CountExceptUntouchables", "HasUntouchables", "Random",
         "IsFull", "FreeSpace", "SlotCount", "LocationCount", "HasLocations", "GetLocations",
         "Add", "Remove", "MoveTo", "Swap", "ChangeEntity", "Replace", "Controller", "Game", "Type", "AdjacentAuras",
     };
@@ -234,7 +234,7 @@ internal static class UntouchableBoardSourceCheck
         Expect("var a = c.BoardZone.GetSpan();", 1, "GetSpan");
         Expect("var a = $\"n={c.BoardZone.Count(m => m.IsDead)}\";", 1, "read inside an interpolated hole");
         Expect("var a = $\"BoardZone.Count {{x}} {c.BoardZone.Interactable.Length}\";", 0, "interpolated text and an Interactable hole");
-        Expect("var a = c.BoardZone.AnyInteractable(m => m.IsDead) || c.BoardZone.CountInteractable() > 1 || c.BoardZone.CountExceptUntouchables > 1;", 0, "non-allocating helpers");
+        Expect("var a = c.BoardZone.AnyInteractable(m => m.IsDead) || c.BoardZone.CountInteractable() > 1 || c.BoardZone.CountExceptUntouchables > 1 || c.BoardZone.FirstInteractable == null || c.BoardZone.LastInteractable == null;", 0, "non-allocating helpers");
         Expect("var a = c.BoardZone?.Where(m => m.IsDead);", 1, "null-conditional chain");
         Expect("var a = c.BoardZone.Count; // untouchable-ok: occupancy", 0, "marker on the same line");
         Expect("var a = c.BoardZone.Count; // untouchable-ok:", 1, "marker without a reason");

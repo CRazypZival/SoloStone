@@ -162,6 +162,23 @@ internal static class UntouchableBoardProof
             Verify(p2.Choice != null, "an ordinary Mech does");
         });
 
+        // Ravitz "Your left-most minion has Rush. Your right-most minion is Immune while attacking": left- and right-most skip
+        // Untouchable minions (owner ruling 2026-11-18, no retail source found), as Flash Flood and Diabolus Rex do. A Portal at the
+        // left edge and a sleeper at the right edge do not take the ends; with nothing Untouchable the plain ends get them.
+        Parts(failures, "Ravitz edges", () => {
+            var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
+            var portal = Portal(p); var a = Summon(p, "CS2_182"); var ravitz = Summon(p, "BE_230"); var b = Summon(p, "CS2_182"); var sleeper = Sleeper(p);
+            g.DeathProcessingAndAuraUpdate();
+            Verify(a[GameTag.RUSH] == 1, "the left-most interactable minion has Rush beside an edge Portal (Rush " + a[GameTag.RUSH] + ")");
+            Verify(b[GameTag.IMMUNE_WHILE_ATTACKING] > 0, "the right-most interactable minion is Immune while attacking beside an edge sleeper");
+            Verify(ravitz[GameTag.RUSH] == 0 && ravitz[GameTag.IMMUNE_WHILE_ATTACKING] == 0, "Ravitz in the middle gets neither");
+            Verify(portal[GameTag.RUSH] == 0 && sleeper[GameTag.IMMUNE_WHILE_ATTACKING] == 0, "the Untouchable edge minions get neither");
+            var g2 = QuestLifecycleProof.Fixture(); var p2 = g2.Player1;
+            var a2 = Summon(p2, "CS2_182"); Summon(p2, "BE_230"); var b2 = Summon(p2, "CS2_182");
+            g2.DeathProcessingAndAuraUpdate();
+            Verify(a2[GameTag.RUSH] == 1 && b2[GameTag.IMMUNE_WHILE_ATTACKING] > 0, "control: with nothing Untouchable the plain ends get Rush and Immune while attacking");
+        });
+
         // The helper itself: board order is kept, Untouchable minions are left out, occupancy still counts them.
         Parts(failures, "BoardZone.Interactable", () => {
             var g = QuestLifecycleProof.Fixture(); var p = g.Player1;

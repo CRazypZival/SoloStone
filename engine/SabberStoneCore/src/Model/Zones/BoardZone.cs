@@ -400,6 +400,26 @@ namespace SabberStoneCore.Model.Zones
 			return false;
 		}
 
+		/// <summary>The left-most Interactable minion (see <see cref="Interactable"/>), or null; an Untouchable minion at the edge does not take it. Does not allocate.</summary>
+		public Minion FirstInteractable
+		{
+			get
+			{
+				for (int i = 0; i < _count; i++) if (!_entities[i].Untouchable) return _entities[i];
+				return null;
+			}
+		}
+
+		/// <summary>The right-most Interactable minion (see <see cref="Interactable"/>), or null. Does not allocate.</summary>
+		public Minion LastInteractable
+		{
+			get
+			{
+				for (int i = _count - 1; i >= 0; i--) if (!_entities[i].Untouchable) return _entities[i];
+				return null;
+			}
+		}
+
 		/// <summary>Counts the Interactable minions that satisfy the predicate (all when null), without allocating.</summary>
 		public int CountInteractable(Func<Minion, bool> predicate = null)
 		{
