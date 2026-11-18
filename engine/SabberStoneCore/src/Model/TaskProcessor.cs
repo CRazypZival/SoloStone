@@ -301,7 +301,7 @@ namespace SabberStoneCore.Model
 #endif
                 // A granted Deathrattle runs as the recipient's own block with the enchantment as target; presentation recipes need it.
                 if (_game.History) _game.PowerHistory.GrantedDeathrattle = CurrentQueue.Peek().TriggerKeyword == (int)GameTag.DEATHRATTLE ? target as Enchantment : null;
-                bool previousFromDeath = _game.PowerHistory.DeathrattleFromDeath;
+                bool previousFromDeath = _game.History && _game.PowerHistory.DeathrattleFromDeath;
                 if (_game.History) _game.PowerHistory.DeathrattleFromDeath = CurrentQueue.Peek().TriggerKeyword == (int)GameTag.DEATHRATTLE && CurrentQueue.Peek().DeathId > 0;
                 try
                 {
