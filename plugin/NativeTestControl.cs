@@ -330,6 +330,7 @@ internal sealed partial class NativeTestControl
     }
     private static bool NeedsView(ControlRequest request) => (request.Mutation && request.Command != "shop-purchase" && request.Command != "open-packs"
         && request.Command != "craft-token-grant" && request.Command != "collection-jump"
+        && request.Command != "clipboard-set" && request.Command != "collection-paste-check"
         && !(request.Command == "press" && UiRules.IsMatchEscape(request.Text("element")))) || request.Command == "state"
         || request.Command == "options" || request.Command == "choices" || request.Command == "wait-until-idle";
     private void ResetSampling()
@@ -496,6 +497,7 @@ internal sealed partial class NativeTestControl
                         view.State["deckGuide"] = NativeDeckPickerGuide.State();
                         view.State["deckGuideCards"] = NativeGuideCards.State();
                         view.State["deckRecord"] = NativeDeckRecord.State();
+                        view.State["deckImport"] = DeckImportState();
                         var settledMatch = LocalLadder.Profile?.LastSettledMatch;
                         view.State["settledMatch"] = settledMatch == null ? null : new JsonNode {
                             { "id", settledMatch.Id }, { "result", settledMatch.Result },
@@ -528,6 +530,7 @@ internal sealed partial class NativeTestControl
             if (request.Command == "shop-purchase") { HandleShopPurchase(envelope); return; }
             if (request.Command == "open-packs") { HandleOpenPacks(envelope); return; }
             if (request.Command == "craft-token-grant" || request.Command == "collection-jump") { HandleCraftingTest(envelope); return; }
+            if (request.Command == "clipboard-set" || request.Command == "collection-paste-check") { HandleDeckImportTest(envelope); return; }
             if (request.Command == "squelch" || request.Command == "unsquelch" || request.Command == "emote" || request.Command == "npc-emote" || request.Command == "npc-concede"
                 || request.Command == "human-defeat" || request.Command == "premium-unlock-prepare" || request.Command == "achievement-prime" || request.Command == "turn-timer-debug" || request.Command == "spell-stall-arm" || request.Command == "cancel-target")
             { HandlePresence(envelope, view); return; }

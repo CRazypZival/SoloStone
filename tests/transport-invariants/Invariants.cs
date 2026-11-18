@@ -158,6 +158,13 @@ internal static class Invariants
 
     internal static IEnumerable<Violation> Compare(Game game, ClientModel client, bool reset = false)
     {
+        foreach (string fault in HeroPowerSlotInvariant.Inspect(client))
+            yield return new("", 0, "HERO_POWER_SLOT", "one PLAY power per slot", fault);
+        foreach (var owner in new[] { game.Player1, game.Player2 })
+        foreach (var power in game.IdEntityDic.Values.OfType<HeroPower>().Where(p => p.Controller == owner))
+            if (!owner.HeroPowers.Contains(power) && client.Entities.TryGetValue(client.WireId(power.Id), out var shown)
+                && shown.CardZone == (int)Zone.PLAY)
+                yield return new(power.Card.Id, power.Id, "RETIRED_HERO_POWER", "outside PLAY", "PLAY");
         foreach (var entity in client.Entities)
             foreach (int tag in entity.Value.Tags.Keys.Where(tag => IsPrivateRuleTag((GameTag)tag)))
                 yield return new(entity.Value.CardId, entity.Key, "PRIVATE_RULE_TAG", "absent", tag.ToString());
