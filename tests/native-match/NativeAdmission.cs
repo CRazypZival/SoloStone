@@ -161,7 +161,7 @@ internal static partial class NativeAdmission
         }
         // R7 (#118, #82, #116). A card the human drops from the hand has a local prediction (InputManager.DropHeldMinionLikeCard /
         // DropHeldSpellLikeCard add a HAND -> PLAY zone change). ZoneMgr.CheckAndIgnoreServerChangeList pairs it with the server's own
-        // initial PLAY task list when that list moves the same card to PLAY, and then ignores EVERY card zone change in that list
+        // first PLAY task list that moves the same card to PLAY (any of the block's own lists), and then ignores EVERY card zone change in that list
         // (ZoneChangeList.ShouldIgnoreZoneChange): a card created into the hand, discarded or moved by that list never gets an actor.
         // So a task list of a human PLAY block (its own rows between nested blocks) that holds the played card's move may move no other card.
         // Also the SHOW_ENTITY actor refresh is skipped there: a card revealed in place in HAND/PLAY/SECRET keeps its old actor.

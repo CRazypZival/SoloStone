@@ -211,8 +211,9 @@ only when it processes the list.
 
 These need no R7 case, because the client loses nothing there:
 - A transform in place (CHANGE_ENTITY): the card refreshes its own actor.
-- Position rows: the prediction already shifts the hand. The one shift left in the list, from the played card leaving,
-  can't change the order of the cards.
+- Position rows: the prediction itself shifts the cards in hand and on the board around the played card. A card that
+  entered the zone after the drop misses that shift and can be off by one, but that can only tie it with a neighbour.
+  The client breaks a tie by the entity's position tag, which still applies, so the order stays right.
 - A Secret, quest or Sigil: it moves from hand straight to SECRET. The client predicts PLAY, so that list is never
   paired.
 

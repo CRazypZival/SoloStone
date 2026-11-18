@@ -52,7 +52,6 @@ internal static partial class Program
         }
 
         private readonly Stack<bool> blocks = new(); // per open block: is it the dragged card's own PLAY block
-        private int subSpells;
 
         private void Apply(List<PowerHistoryData> rows)
         {
@@ -69,8 +68,7 @@ internal static partial class Program
                     continue;
                 }
                 if (row.HasPowerEnd) { open = null; if (blocks.Count > 0) blocks.Pop(); continue; }
-                if (row.HasSubSpellStart) { open = null; subSpells++; continue; }
-                if (row.HasSubSpellEnd) { open = null; subSpells = Math.Max(0, subSpells - 1); continue; }
+                if (row.HasSubSpellStart || row.HasSubSpellEnd) { open = null; continue; }
                 if (open == null) { open = new List<PowerHistoryData>(); lists.Add((blocks.Count > 0 && blocks.Peek(), open)); }
                 open.Add(row);
                 if (row.HasMetaData && (int)row.MetaData.Type == 21) open = null;
@@ -92,7 +90,7 @@ internal static partial class Program
         private void Move(int id, int zone, bool ignore)
         {
             EntityZone[id] = zone;
-            if (!ignore || id == oldHero) CardZone[id] = zone; // The old hero is exempt from the predicted list; other cards need a processed list.
+            if (!ignore || id == oldHero) { CardZone[id] = zone; stale.Remove(id); } // The old hero is exempt from the predicted list; other cards need a processed list (which loads a fresh actor).
         }
 
         private void Row(PowerHistoryData row, bool ignoreCardZones)
@@ -100,7 +98,8 @@ internal static partial class Program
             if (row.HasFullEntity || row.HasShowEntity || row.HasChangeEntity)
             {
                 var snapshot = Snapshot(row);
-                if (row.HasShowEntity && snapshot.Entity != played)
+                if (row.HasChangeEntity) stale.Remove(snapshot.Entity); // a transform refreshes its own actor, in any list
+                else if (row.HasShowEntity && snapshot.Entity != played)
                 {
                     int now = EntityZone.GetValueOrDefault(snapshot.Entity, -1);
                     int to = snapshot.Tags.Where(t => t.Name == (int)GameTag.ZONE).Select(t => t.Value).DefaultIfEmpty(now).Last();
