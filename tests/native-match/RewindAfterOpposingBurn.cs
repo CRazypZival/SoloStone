@@ -70,4 +70,42 @@ internal static partial class Program
         }
         Console.WriteLine("PASS Rewind after an opposing burn: the burned card stays in GRAVEYARD, End Turn offered (#80)");
     }
+
+    // An opposing card burned DURING the attempt (Loot Hoarder dies to Chrono Daggers while the NPC's hand is full) is restored
+    // to the deck by the reset and may be shown again by the replay. The client holds it milled, so the reset must give such a
+    // card a fresh private actor and keep the burned one in GRAVEYARD.
+    private static void RewindAfterAttemptBurn()
+    {
+        int burning = 0;
+        for (int seed = 1; seed <= 6; seed++)
+        {
+            string name = "rewind after an attempt burn, seed " + seed;
+            var capture = new Capture();
+            var scenario = DebugScenario.Parse("humanSeat=first\noverdraw=npc\nnpcBoard=CORE_EX1_096\nhumanHand=TIME_001\nhumanMana=10");
+            var match = new NativeMatch(capture.Send, "mage", "mage", 8427) { DebugScenario = scenario, StartingPlayer = scenario.FirstPlayer };
+            match.Start();
+            match.SendChoices(capture.Last<EntityChoices>(17).Id, new List<int>());
+            var game = match.Game;
+            game.SetRandomSeed(seed);
+            var card = game.Player1.HandZone.First(c => c.Card.Id == "TIME_001");
+            var options = capture.Last<AllOptions>(14);
+            int play = options.Options.FindIndex(o => o.MainOption?.Id == match.WireReturnId(card.Id));
+            Check(play >= 0, name + ": play option offered");
+            int cursor = capture.WirePackets.Count;
+            match.SendOption(options.Id, play, 0, -1, 0);
+            Check(game.Rewind != null && game.Player1.Choice?.ChoiceAction == ChoiceAction.REWIND, name + ": Rewind offered");
+            int burned = BurnedCards(capture, cursor);
+            if (burned > 0) burning++;
+            match.SendChoices(capture.Last<EntityChoices>(17).Id, new List<int> { game.Rewind.RewindEntityId });
+            FlushFieldHistory(match);
+            Check(game.Rewind == null && game.Player1.Choice == null, name + ": Rewind settled");
+            var faults = RewindMillFaults(capture);
+            Check(faults.Count == 0, name + " (attempt burns " + burned + "): the burned opposing card never moves again: " + string.Join("; ", faults.Take(3)));
+            var after = capture.Last<AllOptions>(14);
+            Check(after.Options.Any(o => o.Type_ == PegasusGame.Option.Type.END_TURN), name + ": End Turn offered after Rewind");
+            capture.SerializeAll();
+        }
+        Check(burning > 0, "at least one seed burns an opposing card during the attempt");
+        Console.WriteLine("PASS Rewind after an opposing burn during the attempt: Loot Hoarder dies to Chrono Daggers, seeds 1-6 (#80)");
+    }
 }
