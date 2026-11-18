@@ -36,6 +36,7 @@ internal static partial class Program
         Issue26EffectRoutes();
         RottenAppleVisual();
         DeathrattleDamageVisuals();
+        ZeroTargetAreaVisuals();
         WeaponDamageVisuals();
         ConditionalBattlecryVisuals();
         EventTriggerDamageVisuals();
@@ -455,8 +456,7 @@ internal static partial class Program
                 "EDR_110" => "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1",
                 "EDR_421" => "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0",
                 "TLC_401" => "ReuseFX_Frost_Missile_Snowball_Medium_Fast_Super_Simultaneous:4fecda861d7d78b4186c3a3c3091c1e5",
-                "CORE_WC_701" => "Fel_AE_OpponentArea_FX:a7cfb128df225344e8deb859016577de",
-                "FIR_778" or "JAIL_007" => "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4",
+                "FIR_778" or "JAIL_007" or "CORE_WC_701" => "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4",
                 "JAIL_398" => "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341",
                 // Owner 2026-11-16: the client authors no Cinder / Destructive Blaze effect; a small Fireblast missile per hit.
                 "TLC_249" or "CATA_586" => "ReuseFX_Missile_Fire_Fireball_Small_Super:b8e7bb6e0944d204297efdc937967085",
@@ -472,6 +472,35 @@ internal static partial class Program
             capture.SerializeAll();
         }
         Console.WriteLine("PASS Deathrattle damage source, targets and public-origin guard, both seats");
+    }
+
+    // An area stand-in plays once on an empty side (retail Flamestrike on an empty board): the killer dies with the Deathrattle minion,
+    // so the "all enemy minions" Deathrattle finds no target, and the pulse still comes from the owner's hero, once, with no targets.
+    private static void ZeroTargetAreaVisuals()
+    {
+        foreach (bool bot in new[] { false, true })
+        foreach (string id in new[] { "CORE_WC_701", "FIR_778" })
+        {
+            var (match, capture) = AnimationMatch(botTurn: bot); var owner = match.Game.CurrentPlayer;
+            var attacker = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_200"), zone: owner.BoardZone);
+            attacker[GameTag.ATK] = 20; attacker.BaseHealth = 1; attacker.IsExhausted = false;
+            var dead = (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId(id), zone: owner.Opponent.BoardZone); dead.BaseHealth = 1; dead.Damage = 0; dead[GameTag.ATK] = 5;
+            FlushFieldHistory(match); int cursor = capture.Packets.Count;
+            var task = owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.MINION_ATTACK && t.Source?.Id == attacker.Id && t.Target?.Id == dead.Id);
+            InvokeProcess(match, task); FlushFieldHistory(match); var entries = History(capture, cursor);
+            Check(attacker.Zone.Type != SabberStoneCore.Enums.Zone.PLAY, id + " zero-target setup: the killer died with the Deathrattle minion");
+            int begin = entries.FindIndex(e => e.HasPowerStart && e.PowerStart.Source == dead.Id && (int)e.PowerStart.Type == (int)BlockType.TRIGGER
+                && e.PowerStart.TriggerKeyword == (int)GameTag.DEATHRATTLE);
+            Check(begin >= 0, id + " zero-target actual Deathrattle trigger"); int depth = 1, end = begin + 1;
+            for (; end < entries.Count && depth > 0; end++) { if (entries[end].HasPowerStart) depth++; if (entries[end].HasPowerEnd) depth--; }
+            var body = entries.Skip(begin + 1).Take(end - begin - 2).ToArray();
+            var shots = body.Where(e => e.HasSubSpellStart).Select(e => e.SubSpellStart).ToArray();
+            Check(shots.Length == 1 && shots[0].SourceEntityId == owner.Opponent.Hero.Id && shots[0].TargetEntityIds.Count == 0
+                && shots[0].SpellPrefabGuid == "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4",
+                id + " area pulse plays once with no targets from the owner's hero (got " + shots.Length + ")");
+            Check(body.Count(e => e.HasSubSpellStart) == body.Count(e => e.HasSubSpellEnd), id + " zero-target scopes balanced");
+        }
+        Console.WriteLine("PASS area stand-ins play once on an empty side, both seats");
     }
 
     private static void RottenAppleVisual()

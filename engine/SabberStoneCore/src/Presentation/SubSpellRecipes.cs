@@ -96,9 +96,9 @@ namespace SabberStoneCore.Presentation
             // (Sizzling Cinder, Destructive Blaze); one enemy-side pulse (the Flamestrike/Explosive Trap OpponentSide flood; fel for Felrattler) (Avatar of Destruction, Sewer Imp, Felrattler).
             Add("TLC_249 CATA_586", VisualPhase.Damage, "ReuseFX_Missile_Fire_Fireball_Small_Super:b8e7bb6e0944d204297efdc937967085", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
             Add("FIR_778 JAIL_007", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
-            // Felrattler (Fel, "all enemy minions") uses the one-side fel area effect the client authors as the trigger of Exploding Bloatbat
-            // (ICC_021, the same text), Despicable Dreadlord and CORE_BT_510; the group is shot from the owner's public hero, so its opponent area is the enemy side.
-            Add("CORE_WC_701", VisualPhase.Damage, "Fel_AE_OpponentArea_FX:a7cfb128df225344e8deb859016577de", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
+            // Felrattler (Fel, "all enemy minions"): the client authors no fel one-side area prefab that works as a sub-spell (Fel_AE_OpponentArea_FX,
+            // the Exploding Bloatbat trigger effect, washed the whole board in the live check), so it shares the proven enemy-side flood (owner call: fel colour).
+            Add("CORE_WC_701", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("JAIL_398", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("EDR_842", VisualPhase.Damage, "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1", block: BlockType.TRIGGER);
             Add("TLC_478", VisualPhase.Damage, "ReuseFX_Physical_DemonHunter_AE_Whirlwind_BothSides_Small_Super_Quick:bc23f3d70f7ba4a4aa4ec2f8b4163e46", VisualTargets.None, block: BlockType.TRIGGER, group: true);
