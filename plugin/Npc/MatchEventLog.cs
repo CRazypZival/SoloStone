@@ -135,6 +135,7 @@ internal sealed class MatchEventLog
         internal readonly Dictionary<int, HandEnteredFact> HandEntries = new Dictionary<int, HandEnteredFact>();
         internal readonly List<DiscoverCompletedFact> Discoveries = new List<DiscoverCompletedFact>();
         internal readonly HashSet<int> Reborn = new HashSet<int>();
+        internal readonly Dictionary<int, HashSet<int>> Payments = new Dictionary<int, HashSet<int>>();
     }
     // A Rewind restores an older ledger and regrows it inside the same batch, so sequence numbers alone cannot tell old from new.
     // Such a batch reads the whole (valid) ledger: entity-keyed burn/discard/entry facts stay correct, casts use the latest kind.
@@ -161,6 +162,9 @@ internal sealed class MatchEventLog
                     if (!facts.Casts.TryGetValue(cast.EntityId, out var list)) facts.Casts[cast.EntityId] = list = new List<HistoryCastKind>();
                     list.Add(cast.CasterKind); break;
                 case HandEnteredFact hand: facts.HandEntries[hand.EntityId] = hand; break;
+                case HeroHealthChangedFact health when health.Reason == HistoryHealthChangeReason.Payment:
+                    if (!facts.Payments.TryGetValue(health.HeroId, out var paid)) facts.Payments[health.HeroId] = paid = new HashSet<int>();
+                    paid.Add(health.NewHealth); break;
                 case MinionRebornFact reborn: facts.Reborn.Add(reborn.ReturnedEntityId); break;
                 case DiscoverCompletedFact discover:
                     // After a Rewind the ledger is the restored baseline: those picks are old history (already announced or
@@ -449,20 +453,31 @@ internal sealed class MatchEventLog
             case GameTag.DAMAGE:
                 {
                     int old = ent.Damage; ent.Damage = change.Value;
-                    if (ent.Guessed)
+                    bool guessed = ent.Guessed;
+                    if (guessed) ent.Guessed = false;
+                    if (setup || !guessed && old == change.Value) break;
+                    // Weapons and locations lose durability / charge through a DAMAGE write with no meta: not a hit, not a Health set.
+                    if (ent.Type == (int)CardType.WEAPON || ent.Type == (int)CardType.LOCATION)
                     {
-                        // Unknown "before" (the log lost its state): state only what is true.
-                        ent.Guessed = false;
-                        if (!setup) Emit(ent.Controller, "DAMAGE", "target=" + Ref(game, ent.Id, ent.Card) + " amount=? hp=?->" + (ent.Health - change.Value) + " before-unknown" + By(game, ent.Id));
+                        hitMeta.Remove(ent.Id); healMeta.Remove(ent.Id);
+                        if (!guessed) Emit(ent.Controller, "DURABILITY", "target=" + Ref(game, ent.Id, ent.Card) + " amount=" + Math.Abs(change.Value - old)
+                            + " damage=" + old + "->" + change.Value + By(game, ent.Id));
                         break;
                     }
-                    if (setup || old == change.Value) break;
                     int hpBefore = pendingStat == ent ? pendingStatFromHp : ent.Health - old, hpAfter = ent.Health - change.Value;
                     // Only the engine's own damage / heal meta marks a real hit or heal. Every other DAMAGE write (Reborn's 1-Health
-                    // return, set-Health, halving, swaps, resets) changes Health without damage or healing, so it is labelled apart.
+                    // return, set-Health, halving, swaps, resets, a Health cost) changes Health without damage or healing, so it is labelled apart.
                     bool hit = hitMeta.Remove(ent.Id), healed = healMeta.Remove(ent.Id);
-                    string kind = hit && change.Value > old ? "DAMAGE" : healed && change.Value < old ? "HEAL"
-                        : facts.Reborn.Contains(ent.Id) ? "REBORN" : "HEALTH_SET";
+                    // A late-attached entity has no trustworthy "before", so its direction is taken from the meta alone.
+                    string kind = hit && (guessed || change.Value > old) ? "DAMAGE" : healed && (guessed || change.Value < old) ? "HEAL"
+                        : facts.Reborn.Contains(ent.Id) ? "REBORN"
+                        : facts.Payments.TryGetValue(ent.Id, out var paid) && paid.Contains(hpAfter) ? "HEALTH_COST" : "HEALTH_SET";
+                    if (guessed)
+                    {
+                        // Unknown "before" (the log lost its state): state only what is true.
+                        Emit(ent.Controller, kind, "target=" + Ref(game, ent.Id, ent.Card) + " amount=? hp=?->" + hpAfter + " before-unknown" + By(game, ent.Id));
+                        break;
+                    }
                     Emit(ent.Controller, kind, "target=" + Ref(game, ent.Id, ent.Card)
                         + (kind == "HEALTH_SET" || kind == "REBORN" ? "" : " amount=" + Math.Abs(change.Value - old))
                         + " hp=" + hpBefore + "->" + hpAfter + By(game, ent.Id));
@@ -507,7 +522,7 @@ internal sealed class MatchEventLog
     private void OnMeta(EngineGame game, PowerHistoryMetaData meta)
     {
         if ((meta.Type == MetaDataType.DAMAGE || meta.Type == MetaDataType.HEALING) && meta.Info != null)
-            foreach (int id in meta.Info) (meta.Type == MetaDataType.DAMAGE ? hitMeta : healMeta).Add(id);
+            if (meta.Data > 0) foreach (int id in meta.Info) (meta.Type == MetaDataType.DAMAGE ? hitMeta : healMeta).Add(id);
         if (meta.Type != MetaDataType.TARGET || meta.Info == null || frames.Count == 0 || setup) return;
         var top = frames[frames.Count - 1];
         int draws = pendingDraws;

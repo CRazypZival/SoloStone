@@ -5,6 +5,7 @@ using SabberStoneCore.Actions;
 using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
+using SabberStoneCore.Tasks.PlayerTasks;
 using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 
 // Owner ruling 2026-11-18: only a real hit is DAMAGE and only a real heal is HEAL; Reborn's 1-Health return and every other
@@ -86,5 +87,122 @@ internal static partial class Program
         Check(((ICharacter)returned).Health == 1 && returned.Id != yeti.Id, "Reborn returned a 1-Health copy");
         Check(Kind(lines, "REBORN").Any(l => l.Contains("target=CS2_182#" + returned.Id) && l.Contains("hp=5->1")), "Reborn return is REBORN" + Dump(lines));
         Check(!Kind(lines, "DAMAGE").Any(l => l.Contains("#" + returned.Id)), "returned copy took no damage" + Dump(lines));
+    }
+
+    // ---- regression net: every real hit and heal keeps its DAMAGE / HEAL label exactly as before (probed identical on main) ----
+    private static void Ready(Minion m) { m.IsExhausted = false; m[GameTag.NUM_TURNS_IN_PLAY] = 1; }
+
+    private static void HealthLabelsCombatBothSides()
+    {
+        var (match, _, lines) = LoggedBoard();
+        var player = match.Game.Player1; var enemy = match.Game.Player2;
+        var mine = (Minion)EngineEntity.FromCard(player, Cards.FromId("CS2_182"), zone: player.BoardZone);
+        var theirs = (Minion)EngineEntity.FromCard(enemy, Cards.FromId("CS2_182"), zone: enemy.BoardZone);
+        Ready(mine); FlushHistory(match); lines.Clear();
+        Check(match.Game.Process(MinionAttackTask.Any(player, mine, theirs)), "attack"); FlushHistory(match);
+        Check(Kind(lines, "DAMAGE").Count(l => l.Contains("amount=4") && l.Contains("hp=5->1") && (l.Contains("target=CS2_182#" + mine.Id) || l.Contains("target=CS2_182#" + theirs.Id))) == 2, "both combatants take DAMAGE 4" + Dump(lines));
+        Check(!Kind(lines, "HEALTH_SET").Any(), "combat sets nothing" + Dump(lines));
+    }
+
+    private static void HealthLabelsAoeArmorAndDivineShield()
+    {
+        var (match, _, lines) = LoggedBoard();
+        var player = match.Game.Player1; var enemy = match.Game.Player2;
+        enemy.Hero.Armor = 2;
+        var plain = EngineEntity.FromCard(enemy, Cards.FromId("CS2_182"), zone: enemy.BoardZone);
+        var shield = EngineEntity.FromCard(enemy, Cards.FromId("CS2_182"), zone: enemy.BoardZone);
+        shield[GameTag.DIVINE_SHIELD] = 1;
+        var consecration = EngineEntity.FromCard(player, Cards.FromId("CS2_093"), zone: player.HandZone);
+        FlushHistory(match); lines.Clear();
+        PlayAndFlush(match, player, consecration);
+        Check(Kind(lines, "DAMAGE").Any(l => l.Contains("target=CS2_182#" + plain.Id) && l.Contains("amount=2") && l.Contains("hp=5->3")), "AoE damages the minion" + Dump(lines));
+        Check(!Kind(lines, "DAMAGE").Any(l => l.Contains("#" + shield.Id)) && !Kind(lines, "HEALTH_SET").Any(), "shield pop and absorbed armor hit are no health line" + Dump(lines));
+        Check(Kind(lines, "ARMOR").Any(l => l.Contains("2->0")), "armor absorbs the hero's hit" + Dump(lines));
+    }
+
+    private static void HealthLabelsFireballThroughArmor()
+    {
+        var (match, _, lines) = LoggedBoard();
+        var player = match.Game.Player1; var enemy = match.Game.Player2;
+        enemy.Hero.Armor = 3;
+        var fireball = EngineEntity.FromCard(player, Cards.FromId("CS2_029"), zone: player.HandZone);
+        FlushHistory(match); lines.Clear();
+        PlayAndFlush(match, player, fireball, enemy.Hero);
+        Check(Kind(lines, "DAMAGE").Any(l => l.Contains("target=HERO_08#") && l.Contains("amount=3") && l.Contains("hp=30->27")), "Fireball through 3 armor" + Dump(lines));
+        Check(!Kind(lines, "HEALTH_SET").Any(), "no health-set line" + Dump(lines));
+    }
+
+    private static void HealthLabelsFatigueTwice()
+    {
+        var (match, _, lines) = LoggedBoard();
+        var player = match.Game.Player1;
+        foreach (var card in player.DeckZone.ToArray()) player.SetasideZone.Add(player.DeckZone.Remove(card));
+        FlushHistory(match); lines.Clear();
+        Generic.Draw(player); FlushHistory(match);
+        Generic.Draw(player); FlushHistory(match);
+        var hits = Kind(lines, "DAMAGE");
+        Check(hits.Length == 2 && hits[0].Contains("amount=1") && hits[1].Contains("amount=2"), "fatigue 1 then 2 stays DAMAGE" + Dump(lines));
+    }
+
+    private static void HealthLabelsLifesteal()
+    {
+        var (match, _, lines) = LoggedBoard();
+        var player = match.Game.Player1; var enemy = match.Game.Player2;
+        var mine = (Minion)EngineEntity.FromCard(player, Cards.FromId("CS2_182"), zone: player.BoardZone);
+        mine[GameTag.LIFESTEAL] = 1; Ready(mine);
+        player.Hero.Damage = 10;
+        FlushHistory(match); lines.Clear();
+        Check(match.Game.Process(MinionAttackTask.Any(player, mine, enemy.Hero)), "attack"); FlushHistory(match);
+        Check(Kind(lines, "DAMAGE").Any(l => l.Contains("target=HERO_08#") && l.Contains("amount=4")), "lifesteal hit is DAMAGE" + Dump(lines));
+        Check(Kind(lines, "HEAL").Any(l => l.Contains("target=HERO_06#") && l.Contains("amount=4") && l.Contains("hp=20->24")), "lifesteal heal is HEAL" + Dump(lines));
+    }
+
+    // Pins the weapon rule: a swing loses durability through a DAMAGE write with no meta; it is neither damage nor a Health set.
+    private static void HealthLabelsWeaponSwingIsDurability()
+    {
+        var (match, _, lines) = LoggedBoard();
+        var player = match.Game.Player1; var enemy = match.Game.Player2;
+        var axe = EngineEntity.FromCard(player, Cards.FromId("CS2_106"), zone: player.HandZone);
+        PlayAndFlush(match, player, axe); lines.Clear();
+        Check(match.Game.Process(HeroAttackTask.Any(player, enemy.Hero)), "hero attack"); FlushHistory(match);
+        Check(Kind(lines, "DURABILITY").Any(l => l.Contains("target=CS2_106#" + axe.Id) && l.Contains("amount=1") && l.Contains("damage=0->1")), "swing is DURABILITY" + Dump(lines));
+        Check(!Kind(lines, "HEALTH_SET").Any() && !Kind(lines, "DAMAGE").Any(l => l.Contains("CS2_106#")), "weapon is not a Health set or damaged" + Dump(lines));
+        Check(Kind(lines, "DAMAGE").Any(l => l.Contains("target=HERO_08#") && l.Contains("amount=3")), "the swing's hit on the hero stays DAMAGE" + Dump(lines));
+    }
+
+    private static void HealthLabelsLocationUseIsDurability()
+    {
+        var (match, _, lines) = LoggedBoard();
+        var game = match.Game; var player = game.Player1;
+        int found = 0;
+        foreach (var card in Cards.All.Where(c => c.Type == CardType.LOCATION && c.Id != null && c.Implemented).OrderBy(c => c.Id, StringComparer.Ordinal))
+        {
+            var source = (BoardObject)EngineEntity.FromCard(player, Cards.FromId(card.Id), zone: player.BoardZone);
+            source[GameTag.EXHAUSTED] = 0; source[GameTag.LOCATION_ACTION_COOLDOWN] = 0;
+            FlushHistory(match); lines.Clear();
+            var task = player.Options().OfType<ActivateLocationTask>().FirstOrDefault(t => t.Source?.Id == source.Id);
+            if (task == null) continue;
+            game.Process(task);
+            for (int picks = 0; player.Choice != null && picks < 4; picks++) game.Process(ChooseTask.Pick(player, player.Choice.Choices[0]));
+            FlushHistory(match);
+            var own = lines.Where(l => l.Contains("target=" + card.Id + "#" + source.Id)).ToArray();
+            if (own.Any(l => l.Contains(" DURABILITY "))) found++;
+            Check(!own.Any(l => l.Contains(" HEALTH_SET ") || l.Contains(" DAMAGE ") || l.Contains(" HEAL ")), card.Id + " use is no health line" + Dump(lines));
+            source.Zone.Remove(source);
+            if (found >= 2) break;
+        }
+        Check(found > 0, "at least one location use reads DURABILITY");
+    }
+
+    private static void HealthLabelsHealthCostIsHealthCost()
+    {
+        var (match, _, lines) = LoggedBoard();
+        var player = match.Game.Player1;
+        var warloc = EngineEntity.FromCard(player, Cards.FromId("CATA_180"), zone: player.HandZone);
+        var murloc = EngineEntity.FromCard(player, Cards.FromId("CS2_168"), zone: player.HandZone);
+        PlayAndFlush(match, player, warloc); lines.Clear();
+        PlayAndFlush(match, player, murloc);
+        Check(Kind(lines, "HEALTH_COST").Any(l => l.Contains("target=HERO_06#") && l.Contains("amount=1") && l.Contains("hp=30->29") && l.Contains("by=CS2_168#" + murloc.Id)), "Health cost is HEALTH_COST" + Dump(lines));
+        Check(!Kind(lines, "HEALTH_SET").Any() && !Kind(lines, "DAMAGE").Any(l => l.Contains("HERO_06")), "payment is neither set nor damage" + Dump(lines));
     }
 }
