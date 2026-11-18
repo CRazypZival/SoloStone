@@ -21,6 +21,27 @@ internal sealed class TransportReplay
     public string EngineFingerprint { get; set; }
     public bool Focused { get; set; }
     public string FindingsSha { get; set; }
+    // Set only by a tail renewal (ReplayRenewal.cs): the steps before FromStep are the recorded ones, the rest was played by the
+    // seeded random policy with Seed.
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public TailRenewal Renewal { get; set; }
+}
+
+internal sealed class TailRenewal
+{
+    public int FromStep { get; set; }
+    public long Seed { get; set; }
+}
+
+// Input and outcome of one tail renewal run (Runner.Run with a plan).
+internal sealed class RenewPlan
+{
+    public int? FromStep;            // forced first re-played step; null = the first recorded action that is no longer legal
+    public ulong TailSeed;
+    public List<int> OldActions = new();
+    public List<string> OldShas = new();
+    public int Divergence = -1;      // first step played by the tail policy; -1 = the whole recording was kept
+    public int FirstHashDrift = -1;  // first step whose legal-move hash differs from the recorded one
 }
 
 internal sealed record Example(string Replay, int Checkpoint, int Turn, int Entity, int Packets);
@@ -55,9 +76,17 @@ internal sealed class Runner
     internal bool LightspawnDetected => Buckets.Values.Any(b => b.Card == "EX1_335" && b.Tag == "ATK");
     internal int ViolationCount => Buckets.Values.Sum(b => b.Occurrences);
 
-    internal HistoryShape Run(TransportReplay replay, bool verify = false, bool stopAfterForcedCard = false)
+    internal HistoryShape Run(TransportReplay replay, bool verify = false, bool stopAfterForcedCard = false, RenewPlan renew = null)
     {
         var record = replay.Game;
+        bool renewing = renew != null;
+        if (renewing && verify) throw new ArgumentException("a renewal does not verify");
+        if (renewing)
+        {
+            renew.OldActions = record.Actions.ToList(); renew.OldShas = record.LegalShas.ToList();
+            record.Actions.Clear(); record.LegalShas.Clear();
+        }
+        bool replaying = verify || renewing;
         string coverageCard = record.Player.StartsWith("standard-coverage-", StringComparison.Ordinal)
             ? Simulation.Deck(record.Player).Cards[0] : null;
         if (stopAfterForcedCard && (coverageCard == null || verify))
@@ -69,7 +98,7 @@ internal sealed class Runner
             throw new ArgumentException("transport game id must contain only ASCII letters, digits, '-' or '_'");
         if ((replay.PlayerDeck == null) != (replay.OpponentDeck == null))
             throw new ArgumentException("Transport replay requires both pinned decks or neither.");
-        var game = Simulation.Create(record, replay: verify, playerDeck: replay.PlayerDeck, opponentDeck: replay.OpponentDeck);
+        var game = Simulation.Create(record, replay: replaying, playerDeck: replay.PlayerDeck, opponentDeck: replay.OpponentDeck);
         NativeSession session = null;
         var match = new NativeMatch((id, packet) => session.Receive(id, packet));
         // Test seam: Start-equivalent factory + real Process/SendHistory, with both players seeded.
@@ -79,7 +108,7 @@ internal sealed class Runner
         session.History.Replay = path;
         session.History.RequireCorrelation = true;
         session.Flush();
-        var random = new PolicyRandom(unchecked((ulong)(long)record.Seed) ^ 0x485353494DUL);
+        var random = new PolicyRandom(renewing ? renew.TailSeed : unchecked((ulong)(long)record.Seed) ^ 0x485353494DUL);
         var findings = new StringBuilder();
         bool newBucket = false;
         int step = 0, forcedEntity = 0;
@@ -164,6 +193,19 @@ internal sealed class Runner
                     throw new InvalidOperationException($"replay.actions: {record.Id} checkpoint {step}");
                 index = record.Actions[step];
             }
+            else if (renewing && (renew.Divergence >= 0 || (renew.Divergence = TailStart(renew, step, legal.Count)) >= 0))
+            {
+                index = random.Index(legal.Count);
+                record.Actions.Add(index);
+                record.LegalShas.Add(hash);
+            }
+            else if (renewing)
+            {
+                index = renew.OldActions[step];
+                if (renew.FirstHashDrift < 0 && (step >= renew.OldShas.Count || hash != renew.OldShas[step])) renew.FirstHashDrift = step;
+                record.Actions.Add(index);
+                record.LegalShas.Add(hash);
+            }
             else
             {
                 index = random.Index(legal.Count);
@@ -247,13 +289,18 @@ internal sealed class Runner
         Packets += session.Packets.Count;
         foreach (var count in session.Client.EntryCounts) EntryCounts[count.Key] = EntryCounts.GetValueOrDefault(count.Key) + count.Value;
         // Keep every packet of representative games, not only the mismatching tag, so ordering can be inspected.
-        if (!verify && (newBucket || replay.Focused))
+        if (!replaying && (newBucket || replay.Focused))
         {
             Program.Save(path, replay);
             File.WriteAllLines(Path.ChangeExtension(path, ".packets.jsonl"), session.Packets.Select(p => JsonSerializer.Serialize(p, Program.Json)));
         }
         return session.History;
     }
+
+    // First step the tail policy plays, or -1 while the recording still applies: the forced step, the first recorded action that
+    // is no longer legal, or the end of a recording that stops before the game does.
+    private static int TailStart(RenewPlan renew, int step, int legalCount) =>
+        renew.FromStep == step || step >= renew.OldActions.Count || renew.OldActions[step] < 0 || renew.OldActions[step] >= legalCount ? step : -1;
 
     internal static IEnumerable<TransportReplay> Cases(string suite, int end)
     {

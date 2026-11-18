@@ -37,6 +37,8 @@ internal static class Program
                 return 0;
             }
             if (args is ["--card-state-only"]) { TransportHooks.Install(); CardStateChecks.Run(); return 0; }
+            if (args.Length >= 1 && args[0] == "--renew-replay") { TransportHooks.Install(); return ReplayRenewal.Run(args); }
+            if (args is ["--replay-renew-only"]) { TransportHooks.Install(); ReplayRenewProof.Run(); return 0; }
             if (args is ["--deathrattle-replay-only"])
             {
                 TransportHooks.Install();
@@ -153,6 +155,7 @@ internal static class Program
                 GodfreyHistoryProof.Run();
                 PrivateReturnProof.Run();
                 DeathrattleReplayProof.Run();
+                ReplayRenewProof.Run();
                 AutoCastProof.Run();
                 CenariusProof.Run();
                 ResultSettlementObserverProof.Run();

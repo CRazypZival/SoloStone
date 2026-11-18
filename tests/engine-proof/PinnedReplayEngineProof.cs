@@ -20,6 +20,7 @@ internal static class PinnedReplayEngineProof
         public string EngineFingerprint { get; set; }
         public bool Focused { get; set; }
         public string FindingsSha { get; set; }
+        public JsonElement? Renewal { get; set; } // written by a tail renewal (transport-invariants --renew-replay); not used here
     }
 
     private static readonly JsonSerializerOptions Json = new() {

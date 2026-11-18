@@ -287,6 +287,29 @@ and target metadata, attack and fatigue blocks, privacy, with their reviewed exc
 `transport-invariants` check every corpus game, but that suite needs a client and CI does not run it, so a maintainer
 runs it before merging a change to `engine/` or `plugin/`.
 
+### Renewing a pinned transport replay
+
+A pinned replay in `tests/transport-invariants/replays/` (see its README) can stop matching when a pinned retail rule
+changes the game it recorded: a recorded action is no longer legal, or the legal-move hashes and the state fingerprint
+move. The tool renews it from the first step that no longer plays; it needs a client like the suite does, and never runs
+in a normal test run:
+
+```
+dotnet TransportInvariants.dll --renew-replay PATH [--from-step N] [--seed N] [--write | --out FILE]
+```
+
+It replays the recorded actions on the current engine up to the first one that is no longer legal (or up to `--from-step N`),
+then plays the rest of the game with a seeded random policy (`--seed`, default derived from the game's seed) and re-records
+the legal-move hashes, the fingerprint, the findings hash, the turns and the winner. The decks, the pool pin and the game
+seed stay. The tail's step and seed are stored in the file (`renewal`) so it can be redone. It prints the before and after
+(turns, winner, actions, fingerprint), the first step whose legal-move hash differs and the count of unchanged steps, and
+writes nothing unless `--write` (replace the file) or `--out FILE` (write a copy) is given. A replay that still plays is
+written back byte for byte.
+
+The tool re-records, it does not decide: a renewal still needs a reviewed pinned retail rule and the same per-game review
+as a golden, and the replay's own proof (`--deathrattle-replay-only`, `--meta-pre-be-only`, `--private-return-only`) must
+pass afterwards. `--replay-renew-only` checks the tool itself.
+
 A golden file holds one game per line, with a blank line between games, so two changes that re-record different games
 merge without a conflict. Two changes that both move the same game do conflict: re-record that file on the merged
 engine rather than picking a side. `goldens check` refuses a file in the single-line form written before (with

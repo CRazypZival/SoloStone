@@ -37,11 +37,11 @@ suite, which needs no client: legal-move hashes and chosen moves at every step, 
 fingerprint for the 8 that store one (the history is checked by the packet half here, so a presentation fix renews
 no replay). A replay that drifts after an intended rules change cannot be renewed from CI. A
 maintainer with a client renews it, after the same per-game review as a golden (see "Goldens" in
-[TESTING.md](../../docs/TESTING.md)). The tool that re-records these replays is not in this repository yet.
+[TESTING.md](../../docs/TESTING.md)). `--renew-replay` re-records one from the first step that no longer plays (see "Renewing a pinned transport replay" in TESTING.md).
 
 ## Running
 
 `python3 tests/run.py --suite transport-invariants --client "/path/to/Hearthstone"`. It needs the card export built
 locally from a client (`data/carddb/<build>/cards.json.gz`), so it skips on most machines (see "Data built locally" in
 [TESTING.md](../../docs/TESTING.md)). Packet logs go to `sim/out/transport/`, which git ignores. Slices (run the built
-`TransportInvariants.dll` directly; `run.py` passes no arguments): `--meta-pre-be-only [name]`, `--private-return-only`, `--deathrattle-replay-only`, `--transport-debt-only [name]`.
+`TransportInvariants.dll` directly; `run.py` passes no arguments): `--meta-pre-be-only [name]`, `--private-return-only`, `--deathrattle-replay-only`, `--transport-debt-only [name]`, `--replay-renew-only`, `--renew-replay PATH ...`.
