@@ -147,5 +147,12 @@ namespace SabberStoneCore.Model
             var candidates = Candidates(manifest, heroClass, filter, sourceDbfId, destination, false);
             return candidates.Count == 0 ? null : candidates[random.Next(candidates.Count)];
         }
+
+        /// <summary>Pick with rejected cards left out first: the same pool and empty-pool fallback setting (off) as Pick, one Next(count) draw.</summary>
+        internal static Card Pick(Game game, OfflinePoolFilter filter, CardClass heroClass, int sourceDbfId, PoolDestination destination, Func<Card, bool> exclude)
+        {
+            var candidates = Candidates(Manifest(game), heroClass, filter, sourceDbfId, destination, false).Where(card => !exclude(card)).ToArray();
+            return candidates.Length == 0 ? null : candidates[game.Random.Next(candidates.Length)];
+        }
     }
 }
