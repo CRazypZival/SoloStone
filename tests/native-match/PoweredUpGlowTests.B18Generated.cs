@@ -65,6 +65,18 @@ internal static partial class PoweredUpGlowTests
             Check(f.Entries.SelectMany(e=>new[]{e.FullEntity,e.ShowEntity,e.ChangeEntity})
                 .Where(e=>e!=null && e.Entity==creation.Id).All(e=>string.IsNullOrEmpty(e.Name)
                     && e.Tags.All(t=>t.Name==50 || t.Name==49 || t.Name==53 || t.Name==263)),"actual opponent Creation stays hidden");
+            Check(f.Entries.SelectMany(e=>new[]{e.FullEntity,e.ShowEntity,e.ChangeEntity})
+                .Where(e=>e!=null && e.Entity==creation.Id).All(e=>e.DefTags.Count==0),"hidden opponent Creation carries no DefTags");
+            // #119: the client applies the DefTags of a SHOW_ENTITY too, so the reveal of a played Creation must carry the builder.
+            int hiddenRows=f.Entries.Count();
+            creation.Cost=0;
+            Check(g.Process(PlayCardTask.Any(owner,creation)),"opponent Creation play accepted");f.Flush();
+            var reveal=f.Entries.Skip(hiddenRows).Where(e=>e.HasShowEntity && e.ShowEntity.Entity==creation.Id && e.ShowEntity.Name=="CATA_470t1")
+                .Select(e=>e.ShowEntity).ToArray();
+            Check(reveal.Length>0,"opponent Creation reveal is a SHOW_ENTITY naming CATA_470t1");
+            Check(reveal.All(e=>e.DefTags.Any(t=>t.Name==782 && t.Value==14)
+                && e.Tags.Any(t=>t.Name==471 && t.Value!=0) && e.Tags.Any(t=>t.Name==472 && t.Value!=0)),
+                "opponent Creation reveal carries DefTags 782=14 and both part tags");
         }
         Console.WriteLine("PASS generated native definition tags and hidden hand/deck privacy");
     }
