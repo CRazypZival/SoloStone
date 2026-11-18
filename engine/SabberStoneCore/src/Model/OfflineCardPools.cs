@@ -97,7 +97,7 @@ namespace SabberStoneCore.Model
         }
 
         // Native class 14 has no named value in the legacy engine enum.
-        private static string ClassName(CardClass value) => (int)value == 14 ? "DEMONHUNTER" : value.ToString();
+        internal static string ClassName(CardClass value) => (int)value == 14 ? "DEMONHUNTER" : value.ToString();
         private static int School(string school)
         {
             switch (school)

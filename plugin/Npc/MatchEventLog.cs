@@ -529,7 +529,8 @@ internal sealed class MatchEventLog
                     // An automatic play picks among the legal targets with the engine's RNG (it draws even for one candidate), so
                     // the engine states how many there were: random only when more than one.
                     var note = game.PowerHistory.AutoChoiceOf(block) ?? (LegalTargets: -1, Mode: 0, ModeCardId: (string)null, ModeRandom: false);
-                    string pick = note.LegalTargets == -2 ? (block.Target != 0 ? " pick=rule random=no" : "")
+                    string pick = note.LegalTargets == -3 ? (block.Target != 0 ? " pick=chosen random=no" : "")
+                        : note.LegalTargets == -2 ? (block.Target != 0 ? " pick=rule random=no" : "")
                         : block.Target != 0 || note.LegalTargets >= 0
                         ? " pick=auto legal=" + (note.LegalTargets >= 0 ? note.LegalTargets.ToString(CultureInfo.InvariantCulture) : "?")
                             + " random=" + (note.LegalTargets < 0 ? "unknown" : note.LegalTargets > 1 ? "yes" : "no") : "";
