@@ -108,15 +108,19 @@ internal static class Unpinned_TwigSecretsDormantProof
 
     private static void TricksySecondSeat()
     {
-        var g = StandardGame(1); const string id = "JAIL_321"; var pool = PoolOf(g, id); End(g);
-        var player = g.Player2; Verify(g.CurrentPlayer == player, "second seat's turn");
-        AutomaticCastProof.Cast(g, (Spell)Entity.FromCard(player, Cards.FromId("GAME_005")));
-        LostCityPoolProof.WithPool(g, id, pool, () => {
-            var active = (Spell)Entity.FromCard(player, Cards.FromId(pool[1])); AutomaticCastProof.Cast(g, active);
-            PlayEntity(g, player, Add(player, id));
-            Verify(player.SecretZone.Select(x => x.Card.Id).OrderBy(x => x).SequenceEqual(pool.OrderBy(x => x)), "second seat: Tricksy adds the two Secrets not active, none twice");
-            Verify(g.Player1.SecretZone.Count == 0, "the other seat is untouched");
-        });
+        const string id = "JAIL_321"; var pool = PoolOf(StandardGame(1), id);
+        foreach (int seed in Enumerable.Range(1, 12))
+        {
+            var g = StandardGame(seed); End(g);
+            var player = g.Player2; Verify(g.CurrentPlayer == player, "second seat's turn");
+            AutomaticCastProof.Cast(g, (Spell)Entity.FromCard(player, Cards.FromId("GAME_005")));
+            LostCityPoolProof.WithPool(g, id, pool, () => {
+                var active = (Spell)Entity.FromCard(player, Cards.FromId(pool[1])); AutomaticCastProof.Cast(g, active);
+                PlayEntity(g, player, Add(player, id));
+                Verify(player.SecretZone.Select(x => x.Card.Id).OrderBy(x => x).SequenceEqual(pool.OrderBy(x => x)), $"seed {seed}: second seat: Tricksy adds the two Secrets not active, none twice");
+                Verify(g.Player1.SecretZone.Count == 0, "the other seat is untouched");
+            });
+        }
     }
 
     private static void TricksyFullSecretZone()
@@ -129,6 +133,7 @@ internal static class Unpinned_TwigSecretsDormantProof
         LostCityPoolProof.WithPool(g, id, five.Take(3).ToArray(), () => {
             PlayEntity(g, p, Add(p, id));
             Verify(p.SecretZone.Count == 5 && p.BoardZone.Any(m => m.Card.Id == id), "full Secret zone: Tricksy plays and casts nothing, no error");
+            Verify(p.GraveyardZone.All(c => !five.Contains(c.Card.Id)), "full zone: no Secret cast attempt fizzled");
         });
     }
 
