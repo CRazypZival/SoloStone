@@ -95,7 +95,9 @@ namespace SabberStoneCore.Presentation
             // so each shows a substitute like the other Deathrattle routes above. One small Fireblast missile per hit from the public hero
             // (Sizzling Cinder, Destructive Blaze); one fire pulse for the whole enemy side (Avatar of Destruction, Sewer Imp, Felrattler).
             Add("TLC_249 CATA_586", VisualPhase.Damage, "ReuseFX_Missile_Fire_Fireball_Small_Super:b8e7bb6e0944d204297efdc937967085", block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE);
-            Add("FIR_778 JAIL_007 CORE_WC_701", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
+            Add("FIR_778 JAIL_007", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
+            // Felrattler is a Fel Demon Hunter card, so its pulse is Rain of Fire's (DRG_206, Fel, "all characters") authored green fel AoE.
+            Add("CORE_WC_701", VisualPhase.Damage, "ReuseFX_AE_FelFire_Fireball_Small_BothSides_Super:9c7dce379d56fee4ea100935d84b1a5e", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("JAIL_398", VisualPhase.Damage, "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341", VisualTargets.None, block: BlockType.TRIGGER, keyword: (int)GameTag.DEATHRATTLE, group: true);
             Add("EDR_842", VisualPhase.Damage, "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1", block: BlockType.TRIGGER);
             Add("TLC_478", VisualPhase.Damage, "ReuseFX_Physical_DemonHunter_AE_Whirlwind_BothSides_Small_Super_Quick:bc23f3d70f7ba4a4aa4ec2f8b4163e46", VisualTargets.None, block: BlockType.TRIGGER, group: true);
