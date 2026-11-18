@@ -15,6 +15,7 @@ internal static class ReturnToHandResetProof
         TwilightMistressBounce();
         PlainBuffsAndStateViaGenericBounce();
         ShuffleIntoDeckResets();
+        AuraPresentationsOnBounce();
         Console.WriteLine("PASS return to hand resets enchantments (#190)");
     }
 
@@ -92,5 +93,31 @@ internal static class ReturnToHandResetProof
         task.Process(g, p, p.Hero, m, null);
         L.Check(m.Zone is SabberStoneCore.Model.Zones.DeckZone && m.AttackDamage == 4 && m.Health == 5 && !m.CantBeTargetedBySpells
             && (m.AppliedEnchantments == null || m.AppliedEnchantments.Count == 0), "shuffled minion is fresh");
+    }
+
+    // Only aura presentations survive Reset: Crystal Core keeps working in hand; a board aura's (Stormwind Champion) is dropped.
+    private static void AuraPresentationsOnBounce()
+    {
+        var g = L.Game(); var p = g.Player1;
+        var core = Entity.FromCard(p, Cards.FromId("UNG_067t1"), zone: p.SetasideZone);
+        Generic.AddEnchantmentBlock(g, Cards.FromId("UNG_067t1e"), core, p);
+        g.DeathProcessingAndAuraUpdate();
+        var m = L.Minion(p, "CS2_182");
+        g.DeathProcessingAndAuraUpdate();
+        L.Check(m.AttackDamage == 5 && m.Health == 5, "Crystal Core on board 5/5");
+        L.Check(Generic.ReturnToHandBlock(p, m), "bounce Crystal Core minion");
+        g.DeathProcessingAndAuraUpdate();
+        L.Check(m.AttackDamage == 5 && m.Health == 5, $"Crystal Core minion stays 5/5 in hand ({m.AttackDamage}/{m.Health})");
+        L.Check(m.AppliedEnchantments != null && m.AppliedEnchantments.Any(e => e.Card.Id == "UNG_067t1e2"), "UNG_067t1e2 presentation kept");
+
+        var g2 = L.Game(); var q = g2.Player1;
+        L.Minion(q, "CS2_222"); // Stormwind Champion: +1/+1 to other friendly minions
+        var buffed = L.Minion(q, "CS2_182");
+        g2.DeathProcessingAndAuraUpdate();
+        L.Check(buffed.AttackDamage == 5 && buffed.Health == 6, "Champion aura on board");
+        L.Check(Generic.ReturnToHandBlock(q, buffed), "bounce Champion-buffed minion");
+        g2.DeathProcessingAndAuraUpdate();
+        L.Check(buffed.AttackDamage == 4 && buffed.Health == 5 && (buffed.AppliedEnchantments == null || buffed.AppliedEnchantments.Count == 0),
+            $"Champion buff dropped in hand ({buffed.AttackDamage}/{buffed.Health}, enchantments {buffed.AppliedEnchantments?.Count})");
     }
 }

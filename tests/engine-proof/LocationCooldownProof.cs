@@ -37,7 +37,7 @@ internal static class LocationCooldownProof
         var option = p.Options().OfType<ActivateLocationTask>().FirstOrDefault(t => t.Source == location);
         if (option == null) return false;
         L.Check(g.Process(option), "activate");
-        while (p.Choice != null) L.Check(g.Process(ChooseTask.Pick(p, p.Choice.Choices.First())), "answer choice");
+        for (int guard = 0; p.Choice != null && guard < 10; guard++) B16AutoplayProof.Answer(g);
         return true;
     }
 
@@ -77,7 +77,7 @@ internal static class LocationCooldownProof
     // Catches future locations: any implemented activation location with a non-final charge must be on cooldown after use.
     private static void Registry()
     {
-        var bad = new List<string>(); int tried = 0;
+        var bad = new List<string>(); var thrown = new List<string>(); int tried = 0;
         foreach (var card in Cards.All.Where(c => c.Type == CardType.LOCATION && c.Implemented && c.Power?.LocationActivation?.Task != null && c.Id != "TLC_100t1" && c.Id != "TLC_100t2" && c.Id != "TLC_100t3"))
         {
             try
@@ -91,8 +91,9 @@ internal static class LocationCooldownProof
                 if (location[GameTag.LOCATION_ACTION_COOLDOWN] != 1)
                     bad.Add(card.Id);
             }
-            catch (Exception) { }
+            catch (Exception e) { thrown.Add(card.Id + ": " + e.GetType().Name + " " + e.Message + " @ " + (e.StackTrace ?? "").Split('\n').FirstOrDefault()?.Trim()); }
         }
+        L.Check(thrown.Count == 0, "locations that throw on use: " + string.Join(" | ", thrown));
         L.Check(tried > 20, "registry sweep reached only " + tried + " locations");
         L.Check(bad.Count == 0, "locations still usable right after use / no cooldown: " + string.Join(",", bad));
     }
