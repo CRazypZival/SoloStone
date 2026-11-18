@@ -13,7 +13,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
     internal static class Mimiron
     {
         private static readonly string[] Tech = { "DRG_069", "EX1_066", "OG_254", "EX1_048", "CORE_EX1_002", "CORE_EX1_005" };
-        private static bool Ready(IPlayable source) => source.Controller.BoardZone.Interactable.Any(m=>m.Card.IsRace(Race.MECHANICAL));
+        private static bool Ready(IPlayable source) => source.Controller.BoardZone.AnyInteractable(m=>m.Card.IsRace(Race.MECHANICAL));
 
         [StandardCard("BE_588",132009)]
         internal static void Configure(Card card)

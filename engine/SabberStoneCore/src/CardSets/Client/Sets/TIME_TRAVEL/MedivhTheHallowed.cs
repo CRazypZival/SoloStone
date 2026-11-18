@@ -33,7 +33,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
         {
             card.Implemented=true;
             card.Power=new Power {
-                Aura=new AdaptiveCostEffect(s=>0,EffectOperator.SET,new SelfCondition(s=>s.Controller.BoardZone.Interactable.Any(m=>m.Card.Id=="TIME_890"))),
+                Aura=new AdaptiveCostEffect(s=>0,EffectOperator.SET,new SelfCondition(s=>s.Controller.BoardZone.AnyInteractable(m=>m.Card.Id=="TIME_890"))),
                 Trigger=new Trigger(TriggerType.EQUIP_WEAPON) { TriggerSource=TriggerSource.SELF,
                     SingleTask=new CustomTask((g,c,s,t,stack)=>new Aura(AuraType.CONTROLLER,
                         new Effect(GameTag.SPELLPOWER_DOUBLE,EffectOperator.ADD,1)).Activate((IPlayable)s)) } };

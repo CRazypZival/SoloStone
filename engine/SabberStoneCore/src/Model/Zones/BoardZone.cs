@@ -389,6 +389,29 @@ namespace SabberStoneCore.Model.Zones
 		/// </summary>
 		public Minion[] Interactable => GetAll();
 
+		/// <summary>True when an Interactable minion (see <see cref="Interactable"/>) satisfies the predicate (any one when null). Loops the zone without allocating, for condition and cost auras.</summary>
+		public bool AnyInteractable(Func<Minion, bool> predicate = null)
+		{
+			for (int i = 0; i < _count; i++)
+			{
+				var m = _entities[i];
+				if (!m.Untouchable && (predicate == null || predicate(m))) return true;
+			}
+			return false;
+		}
+
+		/// <summary>Counts the Interactable minions that satisfy the predicate (all when null), without allocating.</summary>
+		public int CountInteractable(Func<Minion, bool> predicate = null)
+		{
+			int n = 0;
+			for (int i = 0; i < _count; i++)
+			{
+				var m = _entities[i];
+				if (!m.Untouchable && (predicate == null || predicate(m))) n++;
+			}
+			return n;
+		}
+
 		/// <summary>
 		/// Gets all board minions except untouchables(dormant).
 		/// </summary>

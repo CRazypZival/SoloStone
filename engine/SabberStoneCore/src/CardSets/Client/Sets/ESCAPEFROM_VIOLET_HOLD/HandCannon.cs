@@ -17,7 +17,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
             card.ExcludeFromLegacyRandomPools = true;
             card.Power = new Power { Trigger = new Trigger(TriggerType.AFTER_ATTACK) {
                 TriggerSource = TriggerSource.HERO,
-                OwnerCondition = new SelfCondition(owner => owner.Controller.BoardZone.Interactable.Any(m => m.Card.Id == "CAP_107t" && !m.IsSilenced && !m.IsDead)),
+                OwnerCondition = new SelfCondition(owner => owner.Controller.BoardZone.AnyInteractable(m => m.Card.Id == "CAP_107t" && !m.IsSilenced && !m.IsDead)),
                 SingleTask = new CustomTask((g, c, s, t, stack) => {
                     foreach (var cannon in c.BoardZone.Interactable.Where(m => m.Card.Id == "CAP_107t").ToArray())
                         if (cannon.Zone == c.BoardZone && !cannon.IsSilenced && !cannon.Untouchable && !cannon.IsDead)

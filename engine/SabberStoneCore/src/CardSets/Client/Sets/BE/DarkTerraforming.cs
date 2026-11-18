@@ -19,7 +19,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
                 { PlayReq.REQ_TARGET_TO_PLAY, 0 }, { PlayReq.REQ_MINION_TARGET, 0 } });
             card.Power = new Power { PowerTask = new CustomTask((g, c, s, t, stack) => {
                 if (!(t is Minion target) || target.Zone != target.Controller.BoardZone) return;
-                // untouchable-ok: positional spread: an Untouchable minion keeps its slot and blocks the spread, the hit skips it (Permanent page)
+                // untouchable-ok: positional spread over physical slots: an Untouchable minion keeps its slot and its distance counts, but the hit skips it (Permanent page)
                 var slots = System.Linq.Enumerable.ToArray(target.Controller.BoardZone.Slots);
                 int center = Array.IndexOf(slots, target);
                 int damage = SpellDamageRules.Amount((IPlayable)s, 5);

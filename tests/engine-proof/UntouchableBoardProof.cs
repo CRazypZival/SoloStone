@@ -5,8 +5,9 @@ using static Core2026Proof;
 
 // "Skip Untouchable minions" as one engine rule: a card that counts, scales on, picks or affects board minions does not see
 // an Untouchable one (a Dormant minion, or a permanent such as Nether Portal), while occupancy still does (hearthstone.wiki.gg
-// "Permanent" and "Dormant" pages). Each part stages Nether Portal (UNG_829t2) and a Dormant minion next to ordinary minions and
-// runs one card. UntouchableBoardSourceCheck keeps new raw board reads out of CardSets/Client.
+// "Permanent" and "Dormant" pages). Each part stages Nether Portal (UNG_829t2) and a Dormant minion next to ordinary minions and runs one card; for the cards
+// that key on one specific card or on damage the sleeper is a sleeping copy of that card and the Portal is a bystander.
+// UntouchableBoardSourceCheck keeps new raw board reads out of CardSets/Client.
 internal static class UntouchableBoardProof
 {
     private static void Verify(bool condition, string message) => Core2026Proof.Check(condition, "UntouchableBoard: " + message);
@@ -91,7 +92,7 @@ internal static class UntouchableBoardProof
             var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
             var a = Summon(p, "CS2_182"); a.Damage = 1;
             var b = Summon(p.Opponent, "CS2_182"); b.Damage = 1;
-            var d = Sleeper(p.Opponent); d.Damage = 1;
+            var d = Sleeper(p.Opponent); d.Damage = 1; Portal(p);
             var heir = (Minion)Play(g, p, "TIME_871");
             Verify(heir.AttackDamage == 2 + 2 * 2, "Heir gains +2/+2 for the two ordinary damaged minions (attack " + heir.AttackDamage + ")");
         });
@@ -100,7 +101,7 @@ internal static class UntouchableBoardProof
         Parts(failures, "Medivh's Triumph", () => {
             var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
             Verify(CostOf(p, "CATA_308") == 5, "base cost 5");
-            Asleep(p, "EX1_572"); g.DeathProcessingAndAuraUpdate();
+            Asleep(p, "EX1_572"); Portal(p.Opponent); g.DeathProcessingAndAuraUpdate();
             Verify(CostOf(p, "CATA_308") == 5, "a sleeping Legendary does not discount it (cost " + CostOf(p, "CATA_308") + ")");
             Summon(p, "EX1_572"); g.DeathProcessingAndAuraUpdate();
             Verify(CostOf(p, "CATA_308") == 1, "an ordinary Legendary does");
@@ -111,7 +112,7 @@ internal static class UntouchableBoardProof
             var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
             int full = CostOf(p, "TIME_890t");
             Verify(full > 0, "Atiesh has a printed cost");
-            Asleep(p, "TIME_890"); g.DeathProcessingAndAuraUpdate();
+            Asleep(p, "TIME_890"); Portal(p); g.DeathProcessingAndAuraUpdate();
             Verify(CostOf(p, "TIME_890t") == full, "a sleeping Medivh does not make Atiesh free");
             Summon(p, "TIME_890"); g.DeathProcessingAndAuraUpdate();
             Verify(CostOf(p, "TIME_890t") == 0, "an ordinary Medivh does");
@@ -120,30 +121,33 @@ internal static class UntouchableBoardProof
         // "Give other Rafaams in your hand and battlefield +2/+2".
         Parts(failures, "Green Rafaam", () => {
             var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
-            var a = Summon(p, "TIME_005t1"); var d = Asleep(p, "TIME_005t1");
-            int atk = a.AttackDamage;
+            var a = Summon(p, "TIME_005t1"); var d = Asleep(p, "TIME_005t1"); var portal = Portal(p);
+            int atk = a.AttackDamage; int portalAtk = portal.AttackDamage;
             Cast(g, p, "TIME_005t2");
             Verify(a.AttackDamage == atk + 2, "the ordinary Rafaam gets +2/+2");
+            Verify(portal.AttackDamage == portalAtk, "the Portal is not buffed");
             Verify(d.AttackDamage == atk, "the sleeping Rafaam does not (attack " + d.AttackDamage + ")");
         });
 
         // "Give your Hydralodon Heads Rush".
         Parts(failures, "Hydralodon", () => {
             var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
-            var a = Summon(p, "TSC_950t"); var d = Asleep(p, "TSC_950t");
+            var a = Summon(p, "TSC_950t"); var d = Asleep(p, "TSC_950t"); var portal = Portal(p);
             Cast(g, p, "TSC_950");
             Verify(a.IsRush, "the ordinary Head gets Rush");
             Verify(!d.IsRush, "the sleeping Head does not");
+            Verify(!portal.IsRush, "the Portal does not");
         });
 
         // "At the start of your turn, combine with any other friendly Beetles": a sleeping Beetle is left alone.
         Parts(failures, "Nythendra Beetles", () => {
             var g = QuestLifecycleProof.Fixture(); var p = g.Player1;
-            Summon(p, "EDR_818t"); Summon(p, "EDR_818t"); var d = Asleep(p, "EDR_818t");
+            Summon(p, "EDR_818t"); Summon(p, "EDR_818t"); var d = Asleep(p, "EDR_818t"); var portal = Portal(p);
             End(g); End(g);
             var body = p.BoardZone.GetAll().SingleOrDefault(m => m.Card.Id == "EDR_818");
             Verify(body != null && body.AttackDamage == 2, "two ordinary Beetles reform a 2/2 Nythendra (" + (body == null ? "none" : body.AttackDamage.ToString()) + ")");
             Verify(d.Zone.Type == Zone.PLAY && d.Card.Id == "EDR_818t", "the sleeping Beetle stays as it was");
+            Verify(portal.Zone.Type == Zone.PLAY && portal.Card.Id == "UNG_829t2", "the Portal stays as it was");
         });
 
         // "If you control a Mech, Discover the perfect tech card": a sleeping Mech does not enable it.

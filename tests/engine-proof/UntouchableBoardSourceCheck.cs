@@ -12,14 +12,13 @@ internal static class UntouchableBoardSourceCheck
 
     private const string Marker = "untouchable-ok:";
 
-    // Member names after "BoardZone." that enumerate, index or count the raw zone.
-    private static readonly HashSet<string> RawMembers = new(StringComparer.Ordinal)
+    // Members after "BoardZone." that are not reads of minions: occupancy, the Interactable helpers, location and mutation members.
+    // Anything else (LINQ, Count, indexers, Slots, GetSlot, GetSpan, enumeration) is a raw read and needs Interactable or a marker.
+    private static readonly HashSet<string> NonReads = new(StringComparer.Ordinal)
     {
-        "Where", "Any", "All", "Count", "MinionCount", "Concat", "Select", "SelectMany", "First", "FirstOrDefault", "Last",
-        "LastOrDefault", "Single", "SingleOrDefault", "ToArray", "ToList", "ToDictionary", "ToHashSet", "OrderBy",
-        "OrderByDescending", "ThenBy", "Sum", "Max", "Min", "Skip", "Take", "Contains", "Cast", "OfType", "Append", "Prepend",
-        "Except", "Intersect", "Union", "Zip", "Reverse", "Distinct", "GroupBy", "Aggregate", "ElementAt", "ElementAtOrDefault",
-        "Slots", "GetSlot", "GetEnumerator", "ForEach", "FindAll", "Find", "Exists", "SkipWhile", "TakeWhile", "Average",
+        "Interactable", "AnyInteractable", "CountInteractable", "GetAll", "CountExceptUntouchables", "HasUntouchables", "Random",
+        "IsFull", "FreeSpace", "SlotCount", "LocationCount", "HasLocations", "GetLocations",
+        "Add", "Remove", "MoveTo", "Swap", "ChangeEntity", "Replace", "Controller", "Game", "Type", "AdjacentAuras",
     };
 
     internal static void Run()
@@ -77,7 +76,7 @@ internal static class UntouchableBoardSourceCheck
         var starts = new List<int> { 0 };
         for (int i = 0; i < code.Length; i++) if (code[i] == '\n') starts.Add(i + 1);
         int LineOf(int pos) { int lo = 0, hi = starts.Count - 1; while (lo < hi) { int mid = (lo + hi + 1) / 2; if (starts[mid] <= pos) lo = mid; else hi = mid - 1; } return lo; }
-        bool Marked(int line) => !ignoreMarkers && (HasMarker(raw[line]) || (line > 0 && HasMarker(raw[line - 1])));
+        bool Marked(int line) => !ignoreMarkers && (HasMarker(raw[line]) || (line > 0 && raw[line - 1].TrimStart().StartsWith("//", StringComparison.Ordinal) && HasMarker(raw[line - 1])));
 
         void Flag(int pos)
         {
@@ -98,7 +97,7 @@ internal static class UntouchableBoardSourceCheck
                 int q = SkipWs(code, p + 1);
                 int e = q; while (e < code.Length && (char.IsLetterOrDigit(code[e]) || code[e] == '_')) e++;
                 string name = code.Substring(q, e - q);
-                if (RawMembers.Contains(name)) Flag(m.Index);
+                if (!NonReads.Contains(name)) Flag(m.Index);
                 continue;
             }
             // A bare BoardZone is only fine as one side of a zone comparison (x.Zone == c.BoardZone).
@@ -173,10 +172,24 @@ internal static class UntouchableBoardSourceCheck
             bool plain = c == '"' || (c == '$' && i + 1 < s.Length && s[i + 1] == '"');
             if (verbatim || plain)
             {
-                while (s[i] != '"') { sb.Append(' '); i++; }
+                bool interpolated = false;
+                while (s[i] != '"') { if (s[i] == '$') interpolated = true; sb.Append(' '); i++; }
                 sb.Append(' '); i++;
                 while (i < s.Length)
                 {
+                    // Interpolation holes are code: a raw board read inside {...} must still be seen.
+                    if (interpolated && s[i] == '{')
+                    {
+                        if (i + 1 < s.Length && s[i + 1] == '{') { sb.Append("  "); i += 2; continue; }
+                        int depth = 0;
+                        while (i < s.Length)
+                        {
+                            if (s[i] == '{') depth++;
+                            else if (s[i] == '}') { depth--; if (depth == 0) { sb.Append(' '); i++; break; } }
+                            sb.Append(s[i] == '{' ? ' ' : s[i]); i++;
+                        }
+                        continue;
+                    }
                     if (verbatim && s[i] == '"' && i + 1 < s.Length && s[i + 1] == '"') { sb.Append("  "); i += 2; continue; }
                     if (!verbatim && s[i] == '\\' && i + 1 < s.Length) { sb.Append("  "); i += 2; continue; }
                     if (s[i] == '"') { sb.Append(' '); i++; break; }
@@ -214,6 +227,15 @@ internal static class UntouchableBoardSourceCheck
         Expect("var s = c.BoardZone.Slots;", 1, "Slots");
         Expect("var d = m.IsDormant;", 1, "IsDormant");
         Expect("// untouchable-ok: occupancy\nvar a = c.BoardZone.Count;", 0, "marker on the line above");
+        Expect("var a = c.BoardZone.IsFull; // untouchable-ok: occupancy\nvar b = c.BoardZone.Count;", 1, "a trailing marker does not silence the next line");
+        Expect("var a = c.BoardZone.MinBy(m => m.Health);", 1, "MinBy");
+        Expect("var a = c.BoardZone.MaxBy(m => m.Health);", 1, "MaxBy");
+        Expect("var a = c.BoardZone.AsEnumerable();", 1, "AsEnumerable");
+        Expect("var a = c.BoardZone.GetSpan();", 1, "GetSpan");
+        Expect("var a = $\"n={c.BoardZone.Count(m => m.IsDead)}\";", 1, "read inside an interpolated hole");
+        Expect("var a = $\"BoardZone.Count {{x}} {c.BoardZone.Interactable.Length}\";", 0, "interpolated text and an Interactable hole");
+        Expect("var a = c.BoardZone.AnyInteractable(m => m.IsDead) || c.BoardZone.CountInteractable() > 1 || c.BoardZone.CountExceptUntouchables > 1;", 0, "non-allocating helpers");
+        Expect("var a = c.BoardZone?.Where(m => m.IsDead);", 1, "null-conditional chain");
         Expect("var a = c.BoardZone.Count; // untouchable-ok: occupancy", 0, "marker on the same line");
         Expect("var a = c.BoardZone.Count; // untouchable-ok:", 1, "marker without a reason");
         Expect("var a = c.BoardZone.GetAll().Where(m => m.IsDead).ToArray();", 0, "GetAll");

@@ -23,7 +23,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
                 for (int i = 0; i < 2; i++) ctx.Summon("EDR_810t", position + i);
             }) };
         }
-        private static int Amount(IPlayable source) => 1 + source.Controller.BoardZone.Interactable.Count(m =>
+        private static int Amount(IPlayable source) => 1 + source.Controller.BoardZone.CountInteractable(m =>
             m.Card.Id == "EDR_810" && !m.IsSilenced && !m.IsDead && !m.Untouchable);
 
         internal static void ConfigureLeech(Card card)
