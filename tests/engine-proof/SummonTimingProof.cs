@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using SabberStoneCore.Actions;
+using SabberStoneCore.Conditions;
 using SabberStoneCore.Enums;
 using SabberStoneCore.Kettle;
 using SabberStoneCore.Model;
@@ -21,7 +22,7 @@ internal static class SummonTimingProof
         var failures = new List<string>();
         foreach (var test in new Action[] { TidecallerDeathrattle, TidecallerThreeMurlocs, BuzzardDeathrattle, BuzzardMortallyWoundedInSameDeathPhase,
             KabalMastermindDeathrattleDraw, CollapsingStarDeathrattleDemon, UndertakerReborn, KnifeJugglerStillPerSummon,
-            ImpfernalOverdrawFiresOnce, ReactionsAfterAllDeathrattlesOfThePhase })
+            ImpfernalOverdrawFiresOnce, ReactionsAfterAllDeathrattlesOfThePhase, ReactionSummonGetsItsOwnPass })
             try { test(); } catch (Exception e) { failures.Add(test.Method.Name + ": " + e.Message); }
         failures.AddRange(Sweep());
         Verify(failures.Count == 0, string.Join("\n", failures));
@@ -173,6 +174,27 @@ internal static class SummonTimingProof
         Verify(sources.Count == 2 && sources[0] == hoarder.Id && sources[1] == buzzard.Id,
             $"the Hoarder's card is drawn before the Buzzard's, got draw sources [{string.Join(",", sources)}] (hoarder {hoarder.Id}, buzzard {buzzard.Id})");
         NothingLeft(g);
+    }
+
+    // Engine choice (Game.SummonResolutionStep): a summon made by a reaction resolves in another pass of the same step, not
+    // dropped and not left pending. No engine SUMMON reactor summons, so a test listener on a plain host stands in for one:
+    // "whenever you summon a Beast, summon a Murloc Scout".
+    private static void ReactionSummonGetsItsOwnPass()
+    {
+        var g = Fixture(); var p = g.Player1;
+        var first = Summon(p, "EX1_509");
+        var second = Summon(p, "EX1_509");
+        var host = Summon(p, "CS2_182");
+        new Trigger(TriggerType.SUMMON) { TriggerSource = TriggerSource.FRIENDLY, Condition = SelfCondition.IsRace(Race.BEAST),
+            SingleTask = new SummonTask("EX1_506a") }.Activate(host);
+        int a = first.AttackDamage, b = second.AttackDamage;
+        Summon(p, "CS2_172"); // one Beast: the host summons one Murloc Scout
+        Verify(p.BoardZone.Count(m => m.Card.Id == "EX1_506a") == 1, "the test listener summons one Murloc Scout");
+        Verify(first.AttackDamage - a == 1 && second.AttackDamage - b == 1,
+            $"each Tidecaller gains +1 for the Scout in the same step, got +{first.AttackDamage - a}/+{second.AttackDamage - b}");
+        NothingLeft(g);
+        g.DeathProcessingAndAuraUpdate();
+        Verify(first.AttackDamage - a == 1 && second.AttackDamage - b == 1, "a second cleanup fires nothing more");
     }
 
     // The innermost Hoarder/Buzzard block around each card entering the hand, in history order.

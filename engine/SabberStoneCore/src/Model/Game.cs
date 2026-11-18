@@ -1574,7 +1574,9 @@ namespace SabberStoneCore.Model
 
 		// Summon Resolution Step: "whenever you summon" triggers for the summons of the Phase that just ended.
 		// Each batch leaves the list before it fires: a reaction can reach a nested cleanup (an overdrawn IMPFERNAL!), which
-		// must not fire the same summons again. Summons made by the reactions get their own pass.
+		// must not fire the same summons again. Engine choice, not a rulebook rule (it does not cover summons made during
+		// this step): summons made by the reactions resolve in another pass of the same step, so no summon event is left
+		// pending when the action ends.
 		private void SummonResolutionStep()
 		{
 			for (int pass = 0; SummonedMinions.Count != 0; pass++)
