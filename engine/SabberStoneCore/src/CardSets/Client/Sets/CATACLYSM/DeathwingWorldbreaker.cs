@@ -39,7 +39,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
                         case 0:
                             new SummonTask("CATA_190t14").Process(g,c,s,t,k); break;
                         case 1:
-                            var enemies = c.Opponent.BoardZone.GetAll();
+                            var enemies = c.Opponent.BoardZone.GetAll().Where(m => !m.IsDead).ToArray();
                             if (enemies.Length != 0)
                             {
                                 int max = enemies.Max(m => m.Health);

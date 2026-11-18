@@ -6,6 +6,9 @@ using SabberStoneCore.Model;
 using SabberStoneCore.Tasks.PlayerTasks;
 
 if (args.Contains("--ai-frontier-only")) { AiFrontierProof.Run(); return; }
+if (args.Contains("--renew-replay")) { Environment.Exit(PinnedReplayEngineProof.Renew(args)); return; }
+if (args.Contains("--rerecord-replay")) { Environment.Exit(PinnedReplayEngineProof.Rerecord(args)); return; }
+if (args.Contains("--renew-replay-selftest")) { PinnedReplayEngineProof.RenewSelfTest(); return; }
 if (args.Contains("--pinned-replays-only")) { PinnedReplayEngineProof.Run(); return; }
 if (args.Contains("--canonical-policy-only")) { CanonicalPolicyChecks.Run(); return; }
 if (args.Contains("--shadow-trial-only")) { ShadowTrialProof.Run(); return; }
@@ -109,6 +112,7 @@ if (args.Contains("--b13-forced-cards-only")) { StandardSetsProof.Run(selectedPr
 if (args.Contains("--enemy-board-copy-only")) { EnemyBoardCopyProof.Run(); return; }
 if (args.Contains("--forced-attack-only")) { ForcedAttackBudgetProof.Run(); return; }
 if (args.Contains("--poisonous-only")) { PoisonousDamageProof.Run(); return; }
+if (args.Contains("--targeting-only")) { TargetingRulesProof.Run(); return; }
 if (args.Contains("--floop-taunt-only")) { FloopTauntProof.Run(); return; }
 if (args.Contains("--weapon-keywords-only")) { WeaponKeywordProof.Run(); return; }
 if (args.Contains("--weapon-damage-only")) { DamageWeaponTaskProof.Run(); return; }
@@ -596,6 +600,7 @@ for (int i = 0; i < parallel.Length; i++)
 Console.WriteLine("PASS parallel seeded game isolation");
 DeathAuraTimingProof.Run();
 PoisonousDamageProof.Run();
+TargetingRulesProof.Run();
 DamageWeaponTaskProof.Run();
 WeaponKeywordProof.Run();
 MultiAuraCleanupProof.Run();
@@ -656,5 +661,6 @@ CanonicalPolicyChecks.Run();
 ShadowTrialProof.Run();
 AiFrontierProof.Run();
 PinnedReplayEngineProof.Run();
+PinnedReplayEngineProof.RenewSelfTest();
 ClientExport.PrintSkips();
 Console.WriteLine("engine-proof: PASS");

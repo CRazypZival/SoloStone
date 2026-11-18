@@ -22,7 +22,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
                 c.Hero.TakeHeal((IPlayable)s, 3);
                 if (excess == 0) return;
                 stack = new TaskStack();
-                if (new RandomTask(1, EntityType.ENEMIES).Process(g, c, s, t, stack) == TaskState.STOP) return;
+                if (RandomTask.Harmful(1, EntityType.ENEMIES).Process(g, c, s, t, stack) == TaskState.STOP) return;
                 var enemy = (ICharacter)stack.Playables[0];
                 Generic.DamageCharFunc((IPlayable)s, enemy, excess, false);
             }) };
