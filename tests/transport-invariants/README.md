@@ -65,4 +65,12 @@ Run the built programs from the repository root:
 `python3 tests/run.py --suite transport-invariants --client "/path/to/Hearthstone"`. It needs the card export built
 locally from a client (`data/carddb/<build>/cards.json.gz`), so it skips on most machines (see "Data built locally" in
 [TESTING.md](../../docs/TESTING.md)). Packet logs go to `sim/out/transport/`, which git ignores. Slices (run the built
-`TransportInvariants.dll` directly; `run.py` passes no arguments): `--meta-pre-be-only [name]`, `--private-return-only`, `--deathrattle-replay-only`, `--transport-debt-only [name]`.
+`TransportInvariants.dll` directly; `run.py` passes no arguments): `--meta-pre-be-only [name]`, `--private-return-only`, `--deathrattle-replay-only`, `--transport-debt-only [name]`, `--replay-tail-renew-only`.
+
+### Renewing a replay's tail
+
+`dotnet TransportInvariants.dll --renew-replay-tail PATH [--from-step N] [--seed N] [--write | --out FILE]`, run from the
+repository root: when a pinned replay's game legitimately changes under a reviewed retail rule, it replays the recorded steps up to the
+first one that no longer plays (an illegal action, or the first legal-move hash that differs), plays the rest with a seeded random
+policy and records the seed in the file (`renewals`). Dry run by default. See "Renewing a pinned transport replay" in
+[TESTING.md](../../docs/TESTING.md). Replays renewed before this tool existed carry no `renewals` record.

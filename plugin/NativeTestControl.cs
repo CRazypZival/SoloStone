@@ -532,7 +532,7 @@ internal sealed partial class NativeTestControl
             if (request.Command == "craft-token-grant" || request.Command == "collection-jump") { HandleCraftingTest(envelope); return; }
             if (request.Command == "clipboard-set" || request.Command == "collection-paste-check") { HandleDeckImportTest(envelope); return; }
             if (request.Command == "squelch" || request.Command == "unsquelch" || request.Command == "emote" || request.Command == "npc-emote" || request.Command == "npc-concede"
-                || request.Command == "human-defeat" || request.Command == "premium-unlock-prepare" || request.Command == "achievement-prime" || request.Command == "turn-timer-debug" || request.Command == "spell-stall-arm")
+                || request.Command == "human-defeat" || request.Command == "premium-unlock-prepare" || request.Command == "achievement-prime" || request.Command == "turn-timer-debug" || request.Command == "spell-stall-arm" || request.Command == "cancel-target")
             { HandlePresence(envelope, view); return; }
             // Lookup before busy/stale checks: a retry must return prior status even after the board changed.
             var prior = ledger.Find(request.Id);
@@ -658,6 +658,12 @@ internal sealed partial class NativeTestControl
                 {
                     NativeSpellWatchdog.Arm(view.MatchId);
                     operation.Detail["armed"] = true;
+                }
+                else if (request.Command == "cancel-target")
+                {
+                    // One main-thread step: the mode is read and cancelled together, so no key can land after the turn ended (physical Escape can).
+                    operation.Detail["was"] = NativeGameplayDrag.CancelWaitingMode();
+                    mutations++;
                 }
                 else if (request.Command == "turn-timer-debug")
                 {
@@ -1934,7 +1940,7 @@ internal sealed partial class NativeTestControl
         view.State["achievementToast"] = NativeAchievementToast.State();
         view.State["scene"] = scene?.GetMode().ToString(); view.State["screen"] = LocalLadder.Screen;
         view.ClientGameOver = front?.IsGameOver() == true;
-        view.State["responseMode"] = front?.GetResponseMode().ToString(); view.State["concedeRequested"] = front?.WasConcedeRequested() ?? false; view.State["humanOptionsId"] = view.OptionsId;
+        var gameMenu = GameMenu.Get(); view.State["gameMenuShown"] = gameMenu != null && gameMenu.GameMenuIsShown(); view.State["responseMode"] = front?.GetResponseMode().ToString(); view.State["concedeRequested"] = front?.WasConcedeRequested() ?? false; view.State["humanOptionsId"] = view.OptionsId;
         view.State["clientOptionsId"] = front?.GetOptionsPacket()?.ID ?? -1; view.State["choiceId"] = view.ChoiceId;
         view.State["clientChoiceId"] = front?.GetFriendlyEntityChoices()?.ID ?? -1;
         view.State["inputEnabled"] = input?.IsInputEnabled() ?? false;

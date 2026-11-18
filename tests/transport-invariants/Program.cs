@@ -37,6 +37,8 @@ internal static class Program
                 return 0;
             }
             if (args is ["--card-state-only"]) { TransportHooks.Install(); CardStateChecks.Run(); return 0; }
+            if (args.Length >= 1 && args[0] == "--renew-replay-tail") { TransportHooks.Install(); return ReplayRenewal.Run(args); }
+            if (args is ["--replay-tail-renew-only"]) { TransportHooks.Install(); ReplayRenewProof.Run(); return 0; }
             if (args.Length >= 1 && args[0] == "--search-deathrattle-replay")
             {
                 // Looks for a game on the current engine that holds the Felhunter case: Ravenous Felhunter (EDR_891) in a deck, exactly the accepted
@@ -178,6 +180,7 @@ internal static class Program
                 GodfreyHistoryProof.Run();
                 PrivateReturnProof.Run();
                 DeathrattleReplayProof.Run();
+                ReplayRenewProof.Run();
                 AutoCastProof.Run();
                 CenariusProof.Run();
                 ResultSettlementObserverProof.Run();
