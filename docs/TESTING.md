@@ -176,6 +176,37 @@ comparison and a `SKIPPED n x ...` total at the end. The comparisons that need t
 hero powers) are skipped in `engine-proof` even when the export is there, and run in `engine-proof-client`. Nothing is skipped silently. The client half builds with
 `-p:ClientTransport=true`, which defines `CLIENT_TRANSPORT`, adds the client's libraries and links the plugin's native match.
 
+## Client drop prediction
+
+When you drag a card from your hand and drop it, the client doesn't wait for the game. It moves the card to the board at
+once, as a prediction. When the play's history arrives, the client pairs it with that prediction and then **ignores every
+card zone change in the play block's own task list that moves the played card to PLAY**, because it thinks it has
+already done them. Rows inside nested blocks are processed normally.
+
+Retail sends whatever happens to other cards during a play in nested blocks, so nothing is lost. If SoloStone leaves such a
+row in that list, the client silently drops it. Seen so far:
+- a card created in hand gets no actor: it counts as in hand but never shows, and the queue can hang (#118, #82, #116, #183);
+- a hero card's new hero power never replaces the old one (#169, #88).
+
+**The rule:** in a human PLAY block, the list that moves the played card to PLAY may move no other card. R7 allows two:
+the hero a hero card replaces, and a weapon the played weapon replaces. A creation, zone move, hide, reveal or controller
+change of any other card goes into a nested block (see `NativeMatch.NestPredictedPlayCreations`). Opponent plays aren't
+predicted, so their shape is free.
+
+**Why the usual checks miss it:** the test-control `act` command and the headless suites play the card directly, so the
+client makes no prediction and ignores nothing. A history bug of this kind passed every packet suite before R7, and it
+still passes a live check that uses `act`.
+
+**How to check a change to what the plugin sends during a play:**
+- The `native-match` suite (client tier; its program's `--admission-only` slice runs just this sweep). Admission rule R7
+  (`tests/native-match/NativeAdmission.cs`) reports any such row in a predicted PLAY list, over every Standard loaner
+  fixture and both seats. A new kind of row needs a new R7 case, not an exemption.
+- A live check with a native drag of the card (test control's `entity-drag` without `click`, or a physical drag), never
+  `act`.
+
+R7 doesn't cover yet: a transform or reveal of another hand card in the matched list, position rows of cards that entered
+the hand earlier in the same play, drops into SECRET, and PLAY blocks that started in an earlier packet.
+
 ## You changed X, run Y
 
 | You changed | Run |
@@ -190,6 +221,7 @@ hero powers) are skipped in `engine-proof` even when the export is there, and ru
 | Native screens (`plugin/Native*.cs`, `plugin/Deck*.cs`) | `projection`, `deck-ui`, `shop`, `fx-harmony` |
 | Packs (`data/packs/`, `plugin/FairPack*.cs`) | `fair-packs`, `cards` |
 | Native screens, the match flow or the client calls the plugin patches (`plugin/Native*.cs`, `plugin/client-bindings.txt`) | `native-bindings-logic`; with a client also `native-bindings`, `native-match`, `transport-invariants` |
+| What a play sends to the client (the history of a PLAY block, `plugin/NativeMatch.cs`) | As above (`native-match` runs admission rule R7), plus a live check with a real drag: see [Client drop prediction](#client-drop-prediction) |
 | Ranked ladder (`plugin/LadderRules.cs`) or rank rewards | `ladder-rules`, `tier-presentation`, `ladder`, `ladder-extended` |
 | The launcher, installer or their scripts (`installer/`) | `launcher`, `installer-python` |
 | The shared test code (`tests/shared/`, `tests/run.py`) | Everything (for `tests/run.py`, at least `run-tool`) |
