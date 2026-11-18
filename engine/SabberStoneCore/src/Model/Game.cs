@@ -1534,21 +1534,7 @@ namespace SabberStoneCore.Model
 			//Inter-Phase steps
 			
 			AuraUpdate();
-
-			// Summon Resolution Step
-			if (TriggerManager.HasOnSummonTrigger)
-			{
-				using var summonCatchUp = Resolution.Enter(ResolutionKind.SummonOn);
-                List<Minion> minions = SummonedMinions;
-				TaskQueue.StartEvent();
-				for (int i = 0; i < minions.Count; i++)
-				{
-					TriggerManager.OnSummonTrigger(minions[i]);
-				}
-				ProcessTasks();
-				TaskQueue.EndEvent();
-			}
-			SummonedMinions.Clear();
+			SummonResolutionStep();
 
 			TaskQueue.StartEvent();
 			do
@@ -1572,12 +1558,36 @@ namespace SabberStoneCore.Model
 				using (Resolution.Enter(ResolutionKind.DeathResolution))
                     ProcessTasks(); // Death Resolution Phase
 				ResolveReborns();
+				// The Death Phase ends: its Deathrattle and Reborn summons resolve before the next Death Creation Step.
+				if (SummonedMinions.Count != 0)
+				{
+					if (TriggerManager.HasOnSummonTrigger) AuraUpdate();
+					SummonResolutionStep();
+				}
 			} while (DeadMinions.Count != 0 || DeadBoardObjects.Count != 0);
 			TaskQueue.EndEvent();
             if (Actions.LifecycleRules.ContinueDeaths(this)) DeathProcessingAndAuraUpdate();
 
 			AuraUpdate();	// Aura Update (Other) step(Not implemented)
             Actions.Generic.ResolveDeferredSummons(this);
+		}
+
+		// Summon Resolution Step: "whenever you summon" triggers for the summons of the Phase that just ended.
+		private void SummonResolutionStep()
+		{
+			if (TriggerManager.HasOnSummonTrigger)
+			{
+				using var summonCatchUp = Resolution.Enter(ResolutionKind.SummonOn);
+                List<Minion> minions = SummonedMinions;
+				TaskQueue.StartEvent();
+				for (int i = 0; i < minions.Count; i++)
+				{
+					TriggerManager.OnSummonTrigger(minions[i]);
+				}
+				ProcessTasks();
+				TaskQueue.EndEvent();
+			}
+			SummonedMinions.Clear();
 		}
 
 
