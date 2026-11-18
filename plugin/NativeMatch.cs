@@ -6358,8 +6358,9 @@ public sealed class NativeMatch
         // shown ones with: send the shown stats as the definition too, so no stat is coloured and the answer is not given away.
         bool changedOffer = false;
 #if ENGINE_SOURCE
-        // Only while it is an offer: once picked, the card keeps its real stats, and a later buff colours normally.
-        changedOffer = entity.Name == "JAIL_EVENT_100t" && entity.Tags != null && entity.Tags.ContainsKey(GameTag.MODULAR_ENTITY_PART_1)
+        // Only while it is an offer: once picked, the card keeps its real stats, and a later buff colours normally. A partial
+        // snapshot (a delta) carries no ZONE and must not rewrite the definition.
+        changedOffer = completeSnapshot && entity.Name == "JAIL_EVENT_100t" && entity.Tags != null && entity.Tags.ContainsKey(GameTag.MODULAR_ENTITY_PART_1)
             && (!entity.Tags.TryGetValue(GameTag.ZONE, out int offerZone) || offerZone == (int)SabberStoneCore.Enums.Zone.SETASIDE);
         entity = SabberStoneCore.Actions.DiscoverRealRules.ProjectOfferForNative(entity);
 #endif

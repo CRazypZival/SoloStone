@@ -69,7 +69,7 @@ internal static class PluginSourcePins
         // #119: Nefarian's Creation draws the first-picked dragon's art; the hook must stay installed and read the part tag.
         string creationPath = Path.Combine(root, "plugin/NativeCreationPortrait.cs");
         string creation = File.Exists(creationPath) ? File.ReadAllText(creationPath) : "";
-        foreach (string required in new[] { "\"CATA_470t1\"", "FirstPartTag = 471", "\"UpdatePortraitTexture\"", "SetPortraitTexture(texture)" })
+        foreach (string required in new[] { "\"CATA_470t1\"", "FirstPartTag = 471", "\"UpdatePortraitTexture\"", "SetPortraitTexture(texture)", "\"HistoryCard\"", "\"LoadTile\"", "\"m_portraitTexture\"" })
             if (!creation.Contains(required)) failures.Add("Creation portrait hook lost: " + required);
         if (!File.ReadAllText(Path.Combine(root, "plugin/ClientBridge.cs")).Contains("NativeCreationPortrait.Install(harmony, log)"))
             failures.Add("Creation portrait hook is not installed by ClientBridge");

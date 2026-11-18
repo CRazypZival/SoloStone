@@ -568,3 +568,4 @@ site NativeBigCardWatchdog.ResolveBindings | Method | HistoryManager.m_showingBi
 skip NativeShopTilePrices.Mirror # cosmetic: copies price text style, and skips any field a client lacks (field != null)
 skip NativeCreationPortrait.Install # cosmetic: patches Actor.UpdatePortraitTexture only if it exists (self-adapting, ClientChecks.NoteSelfAdapting); a miss leaves the stock Creation art
 skip NativeCreationPortrait.PortraitOf # cosmetic: CardDef.GetPortraitTexture and AssetHandle.Asset (AssetHandle is outside references/game) are found by name, any failure is caught and leaves the stock art
+skip NativeCreationPortrait.InstallTile # cosmetic: patches HistoryCard.LoadTile only if it exists, with fields found by name (self-adapting, ClientChecks.NoteSelfAdapting); a miss leaves the stock history tile
