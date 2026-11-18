@@ -2427,7 +2427,17 @@ public sealed class NativeMatch
         npcDiagnosticDecision = null;
 #if ENGINE_SOURCE
         var scripted = DebugScenario?.NextNpcPlay(Game, tasks, DebugScenarioLog);
-        if (scripted != null) return scripted;
+        if (scripted != null)
+        {
+            // Same journal row the frame-sliced path writes (the recorder never reads the profile, so a plain bot's can be null).
+            try
+            {
+                matchRecorder.OnDecision(new GoldenContext(Game.Turn, ++decisionIndex, unchecked(997 * Game.Turn + decisionIndex * 31), npcProfile),
+                    new ReadyNpcDecision(DriverTrace.Forced("npc-play-next-scenario", scripted)).Result, "forced", false, 0, 0, 0);
+            }
+            catch (Exception error) when (!(error is OutOfMemoryException)) { BotTrace?.Invoke("npc-play-next-scenario journal fault=" + error.GetType().Name); }
+            return scripted;
+        }
 #endif
         if (DebugScenario?.HeroAttack == "npc")
         {

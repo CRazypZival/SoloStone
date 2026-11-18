@@ -36,7 +36,12 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 //       match ends, with one "DEBUG_SCENARIO npcPlayNext warning" per NPC turn; steps behind it wait. TARGET is hero (the human's hero),
 //       self (the NPC's hero), enemy (the human's first legal minion, left to right) or friend (the NPC's first legal minion); with none
 //       the human hero is preferred, then any legal target. Defaults: a minion goes to the leftmost slot, Choose One takes option 1.
-//       The card must be in the NPC's hand (npcHand, its deck, an opening hand). Up to 5 cards. Capture-only.)
+//       The card must be in the NPC's hand (npcHand, its deck, an opening hand). Up to 5 cards. Capture-only.
+//       Trap: when the AI itself plays the head card some other way (e.g. @enemy has no legal minion, so the step waits, and the AI casts
+//       that card elsewhere), the head can never be played again and stays blocked for the rest of the match: the steps behind it never run.)
+//   npcSkin=SKINID   (the NPC's hero skin; its BaseHero also becomes the NPC's class and hero power for this match, whatever its deck, so
+//       npcSkin=HERO_06 gives a Druid NPC (HERO_01 Warrior, 02 Shaman, 03 Rogue, 04 Paladin, 05 Hunter, 06 Druid, 07 Warlock, 08 Mage,
+//       09 Priest, 10 Demon Hunter, 11 Death Knight): the base hero ids are valid skin ids. The deck's cards stay the deck's.)
 //   humanHandClear=1   (discards the cards dealt to the human's hand, Coin kept, before humanHand places its own)
 //   humanManaRaw=CUR,MAX  npcManaRaw=CUR,MAX   (0..999: the mana counter's tags written directly after main-begin, past the engine's
 //       10 cap, for a counter gag such as 32/333. Needs humanSeat=first; excludes humanMana/npcMana; npcManaRaw CUR <= 10 (its own

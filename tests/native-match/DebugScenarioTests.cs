@@ -190,13 +190,14 @@ internal static partial class Program
         foreach (bool profile in new[] { false, true })
         {
             string path = profile ? "profile path" : "plain path";
-            NativeMatch Stage(string scenarioText, out List<string> logs, out Capture run)
+            NativeMatch Stage(string scenarioText, out List<string> logs, out Capture run, IMatchRecorder recorder = null)
             {
                 run = new Capture();
                 var log = logs = new List<string>();
                 var match = profile
                     ? new NativeMatch(run.Send, "mage", "showcase-demon-hunter-outcast", 7) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = log.Add, BotTrace = _ => { }, SynchronousNpc = true }
                     : new NativeMatch(run.Send, "mage", "warrior", 4242) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = log.Add };
+                if (recorder != null) match.Recorder = recorder;
                 match.Start();
                 match.SendChoices(run.Last<EntityChoices>(17).Id, new List<int>());
                 return match;
@@ -204,7 +205,8 @@ internal static partial class Program
             List<string> Played(List<string> logs) => logs.Where(l => l.Contains("npcPlayNext played")).ToList();
 
             // Both plays, in order, through the NPC's own path; Archer@self hurts its own hero.
-            var match = Stage("npcMana=10\nhumanMana=10\nnpcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182,CS2_189@self", out var logs, out var run);
+            var journal = new DecisionKinds();
+            var match = Stage("npcMana=10\nhumanMana=10\nnpcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182,CS2_189@self", out var logs, out var run, journal);
             var game = match.Game;
             SendEndTurn(match, run);
             Check(game.Turn >= 3 && game.State != State.COMPLETE, path + ": the NPC turn ran");
@@ -213,7 +215,15 @@ internal static partial class Program
             Check(!logs.Any(l => l.Contains("warning")), path + ": no warning when both plays are legal");
             Check(game.Player2.Hero.Damage == 1, path + ": Elven Archer hit its own hero (target self)");
             Check(game.Player2.BoardZone.Any(m => m.Card.Id == "CS2_182"), path + ": Chillwind Yeti was played to the NPC's board");
+            Check(journal.Kinds.Count(k => k == "npc-play-next-scenario") == 2, path + ": each scripted play wrote its decision row: " + string.Join(",", journal.Kinds));
             run.SerializeAll();
+
+            // npcSkin swaps the NPC's class (the way to get a Druid NPC); the scripted play still goes through.
+            match = Stage("npcSkin=HERO_06\nnpcMana=10\nhumanMana=10\nnpcHand=EDR_519\nnpcPlayNext=EDR_519", out logs, out run);
+            game = match.Game;
+            Check(game.Player2.Hero.Card.Id == "HERO_06" && game.Player2.HeroClass == CardClass.DRUID, path + ": npcSkin=HERO_06 makes the NPC a Druid");
+            SendEndTurn(match, run);
+            Check(Played(logs).Count == 1 && game.State != State.COMPLETE, path + ": the Druid NPC played the scripted Wisprider: " + string.Join(" | ", logs));
 
             // Targets: hero, enemy (human's first legal minion), friend (NPC's first legal minion), and the default (human hero first).
             foreach (string target in new[] { "hero", "enemy", "friend", null })
@@ -258,6 +268,19 @@ internal static partial class Program
             SendEndTurn(match, run);
             Check(!logs.Any(l => l.Contains("npcPlayNext")), path + ": no npcPlayNext lines without the key");
         }
+    }
+
+    private sealed class DecisionKinds : IMatchRecorder
+    {
+        internal readonly List<string> Kinds = new List<string>();
+        public bool Enabled => true;
+        public void OnMulligan(int playerId, IReadOnlyList<int> kept) { }
+        public void OnDecision(GoldenContext context, GoldenDecision trace, string lethal, bool reuse, int nodes, double ms, double slice) => Kinds.Add(trace.DriverKind);
+        public void OnHumanAction(int turn, string action, int index, IReadOnlyList<int> choices, bool conceded) { }
+        public void OnEmote(int playerId, string emote, int eventIndex) { }
+        public void OnConcession(int playerId, int turn) { }
+        public void OnResult(string result, int turns) { }
+        public void OnPostAction(long sequence, string hash) { }
     }
 
     private const string RunA = "0b5e3a7e-2f64-4a43-8c3f-4f8b8d2f9a10", RunB = "1c6f4b8f-3a75-4b54-9d40-5a9c9e3ab021";
