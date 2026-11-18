@@ -52,8 +52,9 @@ internal static class NativeGameplayDrag
             case GameState.ResponseMode.OPTION_TARGET:
                 input.CancelTargetMode(); input.ReturnHeldCardToHand(); break;
             case GameState.ResponseMode.OPTION_REVERSE_TARGET:
-                // CancelTargetMode returns at once outside OPTION_TARGET; the client's own CancelOption calls this one for this mode.
-                input.CancelReverseTargetMode(false); input.ReturnHeldCardToHand(); break;
+                // CancelTargetMode returns at once outside OPTION_TARGET; the client's own CancelOption calls this one for this mode. With a card
+                // still held and force false it returns without cancelling, so the held card goes back first (force true would only refresh its cost text).
+                input.ReturnHeldCardToHand(); input.CancelReverseTargetMode(false); break;
             case GameState.ResponseMode.SUB_OPTION:
                 // May finish in a coroutine (a panel still opening, a weapon Choose One): the caller reads the state again.
                 input.CancelSubOptionMode(); return mode.ToString();
