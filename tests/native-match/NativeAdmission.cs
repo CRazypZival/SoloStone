@@ -161,9 +161,11 @@ internal static partial class NativeAdmission
         }
         // R7 (#118, #82, #116). A card the human drops from the hand has a local prediction (InputManager.DropHeldMinionLikeCard /
         // DropHeldSpellLikeCard add a HAND -> PLAY zone change). ZoneMgr.CheckAndIgnoreServerChangeList pairs it with the server's own
-        // initial PLAY task list when that list moves the same card to PLAY, and then ignores EVERY card zone change in that list
+        // first PLAY task list that moves the same card to PLAY (any of the block's own lists), and then ignores EVERY card zone change in that list
         // (ZoneChangeList.ShouldIgnoreZoneChange): a card created into the hand, discarded or moved by that list never gets an actor.
         // So a task list of a human PLAY block (its own rows between nested blocks) that holds the played card's move may move no other card.
+        // Also the SHOW_ENTITY actor refresh is skipped there: a card revealed in place in HAND/PLAY/SECRET keeps its old actor.
+        // A sub-spell list inside the block chains to the block's first list, so it can be the paired list too.
         void ValidatePredictedPlay(Segment segment, int row)
         {
             var start = segment.Block.Start;
@@ -225,6 +227,8 @@ internal static partial class NativeAdmission
                     int zone = ZoneTag(data, snapshot.Entity);
                     if (zone >= 0 && zone != Zone(snapshot.Entity))
                         faults.Add(new("R7", task.Row, start.Source, snapshot.Entity, $"card revealed into zone {zone} in the predicted PLAY list", played.Card));
+                    else if (data.HasShowEntity && Zone(snapshot.Entity) is 3 or 1 or 7)
+                        faults.Add(new("R7", task.Row, start.Source, snapshot.Entity, $"card revealed in place (zone {Zone(snapshot.Entity)}) in the predicted PLAY list: its actor is not refreshed", played.Card));
                     if (zone >= 0) zones[snapshot.Entity] = zone;
                 }
             }
@@ -246,7 +250,7 @@ internal static partial class NativeAdmission
             if (segments.TryGetValue(i, out var segment))
             {
                 ValidateSegment(segment, i);
-                if (segment.SubSpell == null) ValidatePredictedPlay(segment, i);
+                ValidatePredictedPlay(segment, i);
             }
             var create = data.CreateGame ?? data.ResetGame?.CreateGame;
             if (create != null)
