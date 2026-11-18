@@ -43,6 +43,7 @@ internal static class LocationProofs
         LocationTransformProof.Run();
         LocationActivationProof.Run();
         LocationCooldownProof.Run();
+        ReturnToHandResetProof.Run();
         LocationDeathProof.Run();
         LocationSnapshotProof.Run();
         SanguineDepthsProof.Run();
