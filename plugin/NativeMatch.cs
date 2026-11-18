@@ -2036,6 +2036,9 @@ public sealed class NativeMatch
                 task = ChooseBotTask(Game.Player2.Options());
             }
             Process(task);
+#if ENGINE_SOURCE
+            DebugScenario?.NpcPlayProcessed(task, DebugScenarioLog);
+#endif
             if (mulliganChoice != null) SendOpposingChosen(mulliganChoice, ((ChooseTask)task).Choices);
 #if ENGINE_SOURCE
             if (rewindChoice != null) SendChosen(rewindChoice, ((ChooseTask)task).Choices);
@@ -2210,6 +2213,9 @@ public sealed class NativeMatch
         npcDiagnosticDecision = decision;
         try { Process(task); }
         finally { npcDiagnosticDecision = null; }
+#if ENGINE_SOURCE
+        DebugScenario?.NpcPlayProcessed(task, DebugScenarioLog);
+#endif
 #if ENGINE_SOURCE
         if (rewindChoice != null) SendChosen(rewindChoice, ((ChooseTask)task).Choices);
 #endif

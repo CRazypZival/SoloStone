@@ -189,32 +189,74 @@ internal static partial class Program
 
         foreach (bool profile in new[] { false, true })
         {
-            string Run(string scenarioText, out SabberStoneCore.Model.Game game, out List<string> logs, out Capture run)
+            string path = profile ? "profile path" : "plain path";
+            NativeMatch Stage(string scenarioText, out List<string> logs, out Capture run)
             {
                 run = new Capture();
-                logs = new List<string>();
+                var log = logs = new List<string>();
                 var match = profile
-                    ? new NativeMatch(run.Send, "mage", "showcase-demon-hunter-outcast", 7) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = logs.Add, BotTrace = _ => { }, SynchronousNpc = true }
-                    : new NativeMatch(run.Send, "mage", "warrior", 4242) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = logs.Add };
+                    ? new NativeMatch(run.Send, "mage", "showcase-demon-hunter-outcast", 7) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = log.Add, BotTrace = _ => { }, SynchronousNpc = true }
+                    : new NativeMatch(run.Send, "mage", "warrior", 4242) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = log.Add };
                 match.Start();
                 match.SendChoices(run.Last<EntityChoices>(17).Id, new List<int>());
-                game = match.Game;
-                SendEndTurn(match, run);
-                return profile ? "profile" : "plain";
+                return match;
             }
-            string path = profile ? "profile path" : "plain path";
-            Run("npcMana=10\nhumanMana=10\nnpcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182,CS2_189@self", out var game, out var logs, out var run);
+            List<string> Played(List<string> logs) => logs.Where(l => l.Contains("npcPlayNext played")).ToList();
+
+            // Both plays, in order, through the NPC's own path; Archer@self hurts its own hero.
+            var match = Stage("npcMana=10\nhumanMana=10\nnpcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182,CS2_189@self", out var logs, out var run);
+            var game = match.Game;
+            SendEndTurn(match, run);
             Check(game.Turn >= 3 && game.State != State.COMPLETE, path + ": the NPC turn ran");
-            var plays = logs.Where(l => l.Contains("npcPlayNext playing")).ToList();
+            var plays = Played(logs);
             Check(plays.Count == 2 && plays[0].EndsWith("CS2_182") && plays[1].EndsWith("CS2_189@self"), path + ": both scripted plays ran in order: " + string.Join(" | ", logs));
             Check(!logs.Any(l => l.Contains("warning")), path + ": no warning when both plays are legal");
-            Check(game.Player2.Hero.Damage == 1 && game.Player2.GraveyardZone.All(c => c.Card.Id != "CS2_182"), path + ": Elven Archer hit its own hero (target self)");
+            Check(game.Player2.Hero.Damage == 1, path + ": Elven Archer hit its own hero (target self)");
             Check(game.Player2.BoardZone.Any(m => m.Card.Id == "CS2_182"), path + ": Chillwind Yeti was played to the NPC's board");
             run.SerializeAll();
 
-            Run("npcMana=3\nhumanMana=10\nnpcHand=CS2_182\nnpcPlayNext=CS2_182,CS2_189,CS2_189", out game, out logs, out run);
-            var warnings = logs.Where(l => l.Contains("npcPlayNext warning")).ToList();
-            Check(warnings.Count == 3 && warnings.All(w => w.Contains("not played:")) && !logs.Any(l => l.Contains("playing")), path + ": unplayable cards warn and are skipped: " + string.Join(" | ", logs));
+            // Targets: hero, enemy (human's first legal minion), friend (NPC's first legal minion), and the default (human hero first).
+            foreach (string target in new[] { "hero", "enemy", "friend", null })
+            {
+                match = Stage("npcMana=10\nhumanMana=10\n" + (target == "friend" ? "npcBoard" : "humanBoard") + "=CS2_182\nnpcHand=CS2_189\nnpcPlayNext=CS2_189" + (target == null ? "" : "@" + target), out logs, out run);
+                game = match.Game;
+                SendEndTurn(match, run);
+                string name = path + " target " + (target ?? "default");
+                Check(Played(logs).Count == 1 && !logs.Any(l => l.Contains("warning")), name + ": played once: " + string.Join(" | ", logs));
+                // The catalog AI keeps playing after the scripted step and may finish the Yeti off or hit faces itself, so on that path
+                // the check is "no undamaged Yeti left" / "the hero took damage"; the plain bot's turn is not that aggressive, so it is exact.
+                if (target == "enemy") Check(!game.Player1.BoardZone.Any(m => m.Card.Id == "CS2_182" && m.Damage == 0) && (profile || game.Player1.BoardZone.Count == 1), name + ": the human's Yeti was hit");
+                else if (target == "friend") Check(!game.Player2.BoardZone.Any(m => m.Card.Id == "CS2_182" && m.Damage == 0), name + ": the NPC's own Yeti was hit; npc board " + string.Join(",", game.Player2.BoardZone.Select(m => m.Card.Id + ":" + m.Damage)) + " | " + string.Join(" | ", logs));
+                else Check(game.Player1.Hero.Damage >= 1 && (profile || game.Player1.BoardZone.All(m => m.Damage == 0)), name + ": the human hero was hit, not the minion beside it");
+            }
+
+            // Mana: the second Yeti cannot be paid on turn 1 (5 crystals, 4+4), stays queued with ONE warning, and is played on the next NPC turn.
+            match = Stage("npcMana=5\nhumanMana=10\nnpcHand=CS2_182,CS2_182\nnpcPlayNext=CS2_182,CS2_182", out logs, out run);
+            game = match.Game;
+            SendEndTurn(match, run);
+            Check(Played(logs).Count == 1 && logs.Count(l => l.Contains("warning")) == 1 && logs.Any(l => l.Contains("stays queued")), path + ": unaffordable step warns once and stays queued: " + string.Join(" | ", logs));
+            SendEndTurn(match, run);
+            Check(Played(logs).Count == 2 && game.Player2.BoardZone.Count(m => m.Card.Id == "CS2_182") == 2, path + ": the queued step was played on the next NPC turn: " + string.Join(" | ", logs));
+
+            // A card that is not in hand blocks the head and warns (once per turn); nothing is played by the key.
+            match = Stage("npcMana=3\nhumanMana=10\nnpcHand=CS2_182\nnpcPlayNext=CS2_189,CS2_182", out logs, out run);
+            SendEndTurn(match, run);
+            Check(Played(logs).Count == 0 && logs.Count(l => l.Contains("warning")) == 1 && logs.Any(l => l.Contains("not in the NPC's hand")), path + ": missing card warns with its own reason: " + string.Join(" | ", logs));
+
+            // A Discover as step 1: step 2 waits for the choice (a pending choice consumes nothing), then plays.
+            match = Stage("npcMana=10\nhumanMana=10\nnpcHand=DS1_184,CS2_182\nnpcPlayNext=DS1_184,CS2_182", out logs, out run);
+            game = match.Game;
+            SendEndTurn(match, run);
+            plays = Played(logs);
+            Check(plays.Count == 2 && plays[0].EndsWith("DS1_184") && plays[1].EndsWith("CS2_182") && game.Player2.Choice == null
+                && game.Player2.BoardZone.Any(m => m.Card.Id == "CS2_182"), path + ": the step after a Discover played once the choice was resolved: " + string.Join(" | ", logs));
+
+            // Key absent: nothing is offered and nothing is logged.
+            match = Stage("npcMana=10\nhumanMana=10\nnpcHand=CS2_182", out logs, out run);
+            Check(match.DebugScenario.NextNpcPlay(match.Game, match.Game.Player2.Options(), logs.Add) == null && !logs.Any(l => l.Contains("npcPlayNext")),
+                path + ": no npcPlayNext key, no scripted decision");
+            SendEndTurn(match, run);
+            Check(!logs.Any(l => l.Contains("npcPlayNext")), path + ": no npcPlayNext lines without the key");
         }
     }
 

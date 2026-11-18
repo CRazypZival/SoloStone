@@ -29,12 +29,14 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 //       Knight Herald Soldier's gift does: a payment override, no enchantment. Needs humanSeat=first; every id must be in humanHand.
 //       Capture-only.)
 //   humanHandHealthWing=CARDID,...   (the same, as Onyxia's Wing's gift does: the Health cost hangs on a CATA_155e2 enchantment.)
-//   npcPlayNext=ID[@TARGET],...   (the NPC plays these cards as its first actions on its next turn(s), one per decision, through its normal
-//       play path (same engine task, history and transport as the AI's own plays), then the AI carries on. TARGET is hero (the human's
-//       hero), self (the NPC's hero), enemy (the human's first minion) or friend (the NPC's first minion); with none the human hero is
-//       preferred, then any legal target. A card that cannot be played (not in hand, mana, no legal target) logs a
-//       "DEBUG_SCENARIO npcPlayNext warning" and is skipped. The card must already be in the NPC's hand (npcHand, its deck, an opening hand).
-//       Up to 5 cards. Capture-only.)
+//   npcPlayNext=ID[@TARGET],...   (the NPC plays these cards as its first actions, one per decision, through its normal play path (same
+//       engine task, history and transport as the AI's own plays), then the AI carries on. A strict queue: the head step is tried at every
+//       main-action decision (a pending choice consumes nothing) and leaves the queue only when that play really went through, so a step
+//       that cannot be played yet (not in hand, mana, full board, no legal target) stays at the head across turns until it can, or the
+//       match ends, with one "DEBUG_SCENARIO npcPlayNext warning" per NPC turn; steps behind it wait. TARGET is hero (the human's hero),
+//       self (the NPC's hero), enemy (the human's first legal minion, left to right) or friend (the NPC's first legal minion); with none
+//       the human hero is preferred, then any legal target. Defaults: a minion goes to the leftmost slot, Choose One takes option 1.
+//       The card must be in the NPC's hand (npcHand, its deck, an opening hand). Up to 5 cards. Capture-only.)
 //   humanHandClear=1   (discards the cards dealt to the human's hand, Coin kept, before humanHand places its own)
 //   humanManaRaw=CUR,MAX  npcManaRaw=CUR,MAX   (0..999: the mana counter's tags written directly after main-begin, past the engine's
 //       10 cap, for a counter gag such as 32/333. Needs humanSeat=first; excludes humanMana/npcMana; npcManaRaw CUR <= 10 (its own
@@ -541,25 +543,35 @@ public sealed class DebugScenario
         return Fit(game.Player2, "NPC", NpcDeckTop.Count, NpcHand.Count) ?? Fit(game.Player1, "Human", HumanDeckTop.Count, HumanHand.Count);
     }
 
-    // The NPC's next scripted play, or null (no step left, or the NPC is not at a main-action decision: choices consume nothing).
-    // One step per call; a step that cannot be played is logged and dropped, then the next one is tried. The returned task is one of
-    // `tasks` (the engine's own legal options), so the caller processes it exactly as it would the AI's pick.
-    public SabberStoneCore.Tasks.PlayerTasks.PlayerTask NextNpcPlay(EngineGame game, IEnumerable<SabberStoneCore.Tasks.PlayerTasks.PlayerTask> tasks, Action<string> log)
+    // The NPC's next scripted play, or null (queue empty, or the NPC is not at a main-action decision: choices consume nothing).
+    // Only the head step is tried. It is NOT consumed here: NpcPlayProcessed advances the queue once that very play went through, so a
+    // cancelled or replaced decision leaves it queued. The returned task is one of `tasks` (the engine's own legal options).
+    public SabberStoneCore.Tasks.PlayerTasks.PlayerTask NextNpcPlay(EngineGame game, IList<SabberStoneCore.Tasks.PlayerTasks.PlayerTask> tasks, Action<string> log)
     {
-        var list = tasks.ToList();
-        if (NpcPlayNext.Count == 0 || game == null || list.All(t => t.PlayerTaskType != SabberStoneCore.Tasks.PlayerTasks.PlayerTaskType.END_TURN)) return null;
-        while (npcPlayIndex < NpcPlayNext.Count)
+        if (npcPlayIndex >= NpcPlayNext.Count || game == null) return null;
+        if (!tasks.Any(t => t.PlayerTaskType == SabberStoneCore.Tasks.PlayerTasks.PlayerTaskType.END_TURN)) return null;
+        var step = NpcPlayNext[npcPlayIndex];
+        var task = SelectNpcPlay(game, tasks, step, out string why);
+        if (task != null) { npcPlayPendingSource = task.Source.Id; npcPlayPendingTarget = task.Target?.Id ?? -1; return task; }
+        npcPlayPendingSource = -1;
+        if (npcPlayWarnedTurn != game.Turn)
         {
-            var step = NpcPlayNext[npcPlayIndex++];
-            var task = SelectNpcPlay(game, list, step, out string why);
-            if (task != null)
-            {
-                try { log?.Invoke("DEBUG_SCENARIO npcPlayNext playing " + step); } catch (Exception) { }
-                return task;
-            }
-            try { log?.Invoke("DEBUG_SCENARIO npcPlayNext warning: " + step + " not played: " + why); } catch (Exception) { }
+            npcPlayWarnedTurn = game.Turn;
+            try { log?.Invoke("DEBUG_SCENARIO npcPlayNext warning: " + step + " not played yet (stays queued): " + why); } catch (Exception) { }
         }
         return null;
+    }
+    private int npcPlayWarnedTurn = -1, npcPlayPendingSource = -1, npcPlayPendingTarget = -1;
+
+    // Called after the NPC processed a task: when it is the play NextNpcPlay offered, that step is done.
+    public void NpcPlayProcessed(SabberStoneCore.Tasks.PlayerTasks.PlayerTask task, Action<string> log)
+    {
+        if (npcPlayPendingSource < 0 || npcPlayIndex >= NpcPlayNext.Count || task == null
+            || task.PlayerTaskType != SabberStoneCore.Tasks.PlayerTasks.PlayerTaskType.PLAY_CARD
+            || task.Source?.Id != npcPlayPendingSource || (task.Target?.Id ?? -1) != npcPlayPendingTarget) return;
+        var step = NpcPlayNext[npcPlayIndex++];
+        npcPlayPendingSource = -1;
+        try { log?.Invoke("DEBUG_SCENARIO npcPlayNext played " + step); } catch (Exception) { }
     }
 
     internal static SabberStoneCore.Tasks.PlayerTasks.PlayerTask SelectNpcPlay(EngineGame game, IList<SabberStoneCore.Tasks.PlayerTasks.PlayerTask> tasks, NpcPlay step, out string why)
@@ -574,9 +586,18 @@ public sealed class DebugScenario
         why = null;
         if (step.Target == null)
             return plays.OrderBy(t => t.Target != null && t.Target.Id == game.Player1.Hero.Id ? 0 : t.Target != null ? 1 : 2).First();
-        SabberStoneCore.Model.Entities.ICharacter wanted = step.Target == "hero" ? game.Player1.Hero : step.Target == "self" ? game.Player2.Hero
-            : step.Target == "enemy" ? game.Player1.BoardZone.FirstOrDefault() : game.Player2.BoardZone.FirstOrDefault();
-        var targeted = plays.FirstOrDefault(t => wanted != null && t.Target != null && t.Target.Id == wanted.Id);
+        SabberStoneCore.Tasks.PlayerTasks.PlayerTask targeted = null;
+        if (step.Target == "hero" || step.Target == "self")
+        {
+            int id = step.Target == "hero" ? game.Player1.Hero.Id : game.Player2.Hero.Id;
+            targeted = plays.FirstOrDefault(t => t.Target != null && t.Target.Id == id);
+        }
+        else
+            foreach (var minion in step.Target == "enemy" ? game.Player1.BoardZone : game.Player2.BoardZone)
+            {
+                targeted = plays.FirstOrDefault(t => t.Target != null && t.Target.Id == minion.Id);
+                if (targeted != null) break;
+            }
         if (targeted == null) why = "no legal play at target " + step.Target;
         return targeted;
     }
