@@ -106,6 +106,7 @@ internal static partial class Program
         if (args.Contains("--hero-skin-only")) { HeroSkinPresentationTests(); return; }
         if (args.Contains("--board-identity-only")) { NativeMatch.ClockFreeBot = true; BoardIdentityHistory(); return; }
         if (args.Contains("--rewind-presentation-only")) { RewindPresentationTags(); return; }
+        if (args.Contains("--opposing-burn-rewind-only")) { NativeMatch.ClockFreeBot = true; RewindAfterOpposingBurn(); RewindAfterAttemptBurn(); return; }
         if (args.Contains("--announcer-rewind-only")) { NativeMatch.ClockFreeBot = true; AnnouncerRewindHistory(); return; }
         if (args.Contains("--hidden-hand-only")) { NativeMatch.ClockFreeBot = true; HiddenHandCardHistory(); return; }
         if (args.Contains("--morchie-rewind-only")) { NativeMatch.ClockFreeBot = true; MorchieRewindChoices(); return; }
@@ -261,6 +262,8 @@ internal static partial class Program
         BroxigarReturnHistory();
         KingLlanePlayHistory();
         AnnouncerRewindHistory();
+        RewindAfterOpposingBurn();
+        RewindAfterAttemptBurn();
         ForefatherGuessNative();
         AnnouncerRewindDeathKnightNative();
         ForefatherFromDiscoverNative();

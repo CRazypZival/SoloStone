@@ -482,6 +482,7 @@ public sealed class NativeMatch
 #if !ENGINE_SOURCE
     internal int WireReturnId(int id) => id;
     internal int EngineReturnId(int id) => id;
+    internal bool IsGhostActor(int wireId) => false;
 #endif
 
     public NativeMatch(Action<int, IProtoBuf> send)
@@ -4301,13 +4302,20 @@ public sealed class NativeMatch
     // HAS_DIAMOND_QUALITY, HAS_SIGNATURE_QUALITY.
     private static readonly int[] DeckFlightQualityTags = { 1932, 2589 };
 
+    // Opposing actors the client holds burned (DECK -> GRAVEYARD): Card.MillCard marks them as being drawn by the opponent for
+    // good, so any later zone or controller change, SHOW or reset diff of that actor stalls the client's power queue (#80).
+    private readonly HashSet<int> milledOpposingActors = new HashSet<int>();
+
     private void TrackClientState(PowerHistoryData data)
     {
         void Merge(int id, IEnumerable<NativeTag> values)
         {
             if (!clientTransportTags.TryGetValue(id, out var tags))
                 clientTransportTags[id] = tags = new Dictionary<int, int>();
+            bool fromDeck = tags.TryGetValue((int)GameTag.ZONE, out int before) && before == (int)EngineZone.DECK;
             foreach (var tag in values) tags[tag.Name] = tag.Value;
+            if (fromDeck && tags.TryGetValue((int)GameTag.ZONE, out int after) && after == (int)EngineZone.GRAVEYARD
+                && tags.TryGetValue((int)GameTag.CONTROLLER, out int owner) && owner == BotPlayerId) milledOpposingActors.Add(id);
         }
         var create = data.HasCreateGame ? data.CreateGame : data.HasResetGame ? data.ResetGame.CreateGame : null;
         if (create != null)
@@ -5045,6 +5053,20 @@ public sealed class NativeMatch
         var cards = new Dictionary<int, string>(clientTransportCards);
         if (rewindAnonymousEntities == null)
             rewindAnonymousEntities = new HashSet<int>(cards.Where(pair => string.IsNullOrEmpty(pair.Value)).Select(pair => pair.Key));
+        // An opposing card the client holds burned stays in GRAVEYARD for good. When the restored state needs it elsewhere (burned
+        // during the discarded attempt), its engine ID gets a fresh anonymous actor, as a Godfrey return does.
+        var milledBefore = new HashSet<int>(milledOpposingActors);
+        var stillMilled = new HashSet<int>();
+        foreach (var full in fulls)
+        {
+            int id = full.Entity.Id;
+            if (!milledBefore.Contains(id) || !previous.TryGetValue(id, out var held)
+                || !held.TryGetValue((int)GameTag.ZONE, out int heldZone) || heldZone != (int)EngineZone.GRAVEYARD) continue;
+            if (full.Entity.Tags.TryGetValue(GameTag.ZONE, out int restoredZone) && restoredZone == (int)EngineZone.GRAVEYARD) { stillMilled.Add(id); continue; }
+            NewBurnedActorAlias(id);
+            previous.Remove(id); wireEntities.Remove(id);
+        }
+        milledOpposingActors.Clear(); milledOpposingActors.UnionWith(stillMilled);
         revealedEntities.Clear(); visibleTransportTags.Clear(); clientTransportTags.Clear(); clientTransportCards.Clear();
         historicalControllers.Clear(); historicalZones.Clear(); historicalPositions.Clear(); historicalTemporaryVisuals.Clear(); temporaryDiscardVisuals.Clear();
         privacyTargets.Clear(); retiredChoiceActors.Clear(); opposingProxies.Clear(); deckChoiceOriginals.Clear(); privateDeckOffers.Clear(); privateChoiceOffers.Clear(); visibleSubSpells.Clear(); visualBlockSources.Clear(); revealedTriggerScopes.Clear(); pendingTriggerReveals.Clear(); lastSpellPower.Clear(); poweredUpHighlights.Clear();
@@ -5086,8 +5108,13 @@ public sealed class NativeMatch
         // Retire discarded actors before the native reset filters the old timeline.
         foreach (var pair in previous.OrderBy(pair => pair.Key))
         {
-            if (resetEntities.ContainsKey(pair.Key) || pair.Key == cosmeticPetEntityId || OpponentPetCard != null && pair.Key == opponentPetEntityId ||
-                pair.Value.TryGetValue((int)GameTag.ZONE, out int zone) && zone == (int)EngineZone.REMOVEDFROMGAME) continue;
+            if (resetEntities.ContainsKey(pair.Key) || pair.Key == cosmeticPetEntityId || OpponentPetCard != null && pair.Key == opponentPetEntityId) continue;
+            int zone = pair.Value.TryGetValue((int)GameTag.ZONE, out int held) ? held : 0;
+            if (zone == (int)EngineZone.REMOVEDFROMGAME) continue;
+            // An opposing actor burned from the deck (public display or the card itself): Card.MillCard leaves m_beingDrawnByOpponent
+            // set and ZoneChangeList waits on it forever, so moving it here wedges the power queue before GAME_RESET (#80). It has
+            // no visible actor, so leaving it in GRAVEYARD stays invisible. See AppendRetainedOverdraw.
+            if (zone == (int)EngineZone.GRAVEYARD && milledBefore.Contains(pair.Key)) continue;
             packet.List.Add(new PowerHistoryData { TagChange = new PegasusGame.PowerHistoryTagChange {
                 Entity = pair.Key, Tag = (int)GameTag.ZONE, Value = (int)EngineZone.REMOVEDFROMGAME
             } });
@@ -6063,6 +6090,19 @@ public sealed class NativeMatch
         return alias;
     }
 
+    // The engine ID names a card the client holds burned in GRAVEYARD. Point it at a fresh actor and leave the burned one alone:
+    // it is not a retired SETASIDE actor, because any move of it stalls the client.
+    private readonly HashSet<int> burnedActorAliases = new HashSet<int>();
+    private void NewBurnedActorAlias(int original)
+    {
+        int alias = nextDeckChoiceId--;
+        if (alias <= Game.IdEntityDic.Values.Max(entity => entity.Id))
+            throw new InvalidOperationException("Burned actor alias IDs exhausted.");
+        privateReturnOriginals.Remove(WireReturnId(original));
+        privateReturnIds[original] = alias; privateReturnOriginals[alias] = original;
+        burnedActorAliases.Add(original);
+    }
+
     private static PowerHistoryData AnonymousReturnActor(int id, int owner) => new PowerHistoryData {
         FullEntity = new PegasusGame.PowerHistoryEntity {
             Entity = id, Name = "", Tags = new List<NativeTag> {
@@ -6073,6 +6113,8 @@ public sealed class NativeMatch
             }
         }
     };
+    // A client actor whose engine card now has another wire actor (a retired return or a burned card's old actor): a ghost.
+    internal bool IsGhostActor(int wireId) => WireReturnId(EngineReturnId(wireId)) != wireId;
     internal int WireReturnId(int id) => privateReturnIds.TryGetValue(id, out int alias) ? alias : id;
     internal int EngineReturnId(int id) => privateReturnOriginals.TryGetValue(id, out int original) ? original : id;
 
@@ -6107,7 +6149,7 @@ public sealed class NativeMatch
             {
                 var row = history.List[index];
                 // Full replay starts a new client graph. Reset snapshots keep the existing anonymous identities.
-                if (row.HasCreateGame) { privateReturnIds.Clear(); privateReturnOriginals.Clear(); retiredReturnActors.Clear(); publicReturnReferences.Clear(); }
+                if (row.HasCreateGame) { privateReturnIds.Clear(); privateReturnOriginals.Clear(); retiredReturnActors.Clear(); publicReturnReferences.Clear(); burnedActorAliases.Clear(); milledOpposingActors.Clear(); }
                 if (row.HasResetGame)
                 {
                     // Reset snapshots are simultaneous; ordinary replay must retain historical visibility order.
@@ -6118,11 +6160,13 @@ public sealed class NativeMatch
                         if (!string.IsNullOrEmpty(snapshot.Name)) publicReturnReferences.Add(snapshot.Entity);
                     }
                 }
-                if ((row.HasResetGame || row.HasCreateGame) && privateReturnIds.Count == 0
+                if ((row.HasResetGame || row.HasCreateGame) && privateReturnIds.Keys.All(burnedActorAliases.Contains)
                     && !history.List.Any(r => r.HasSubSpellStart && r.SubSpellStart.SpellPrefabGuid == SabberStoneCore.Actions.DrawReplacementRules.ReturnPrefab))
                 {
                     // A reconnect can start with snapshots instead of replaying the return pulses.
                     retainedOverdrawEntities.UnionWith(Game.PowerHistory.Full.OfType<PowerHistoryRetainedOverdraw>().Select(burn => burn.Entity.Id));
+                    // Only a client with no alias at all reconstructs the returns; burn aliases alone must not re-alias a returned card.
+                    if (privateReturnIds.Count == 0)
                     foreach (int original in Game.PowerHistory.Full.OfType<SabberStoneCore.Kettle.PowerHistorySubSpellStart>()
                         .Where(s => s.SpellPrefabGuid == SabberStoneCore.Actions.DrawReplacementRules.ReturnPrefab
                             && Game.IdEntityDic.TryGetValue(s.Source, out var source) && source.Controller.PlayerId != HumanPlayerId)
@@ -6178,7 +6222,7 @@ public sealed class NativeMatch
             }
             // Snapshot order must be wire-ID order, never engine-ID order with aliases substituted in place.
             for (int i = 0; i < rows.Count; i++)
-                if (retiredReturnActors.Count > 0 && (rows[i].HasResetGame || rows[i].HasCreateGame))
+                if ((retiredReturnActors.Count > 0 || burnedActorAliases.Count > 0) && (rows[i].HasResetGame || rows[i].HasCreateGame))
                 {
                     int end = i + 1;
                     while (end < rows.Count && rows[end].HasFullEntity) end++;
