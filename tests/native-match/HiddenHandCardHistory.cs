@@ -26,6 +26,7 @@ internal static partial class Program
     {
         internal readonly Dictionary<int, int> EntityZone = new(), CardZone = new(), Controller = new();
         internal int IgnoredLists;
+        private readonly HashSet<int> stale = new(); // revealed in place inside an ignored list: the actor refresh was skipped
         private readonly int played, oldHero;
         private readonly bool predicted;
         private readonly Dictionary<int, int> cardTypes = new(), powerSlots = new();
@@ -70,7 +71,7 @@ internal static partial class Program
                 if (row.HasPowerEnd) { open = null; if (blocks.Count > 0) blocks.Pop(); continue; }
                 if (row.HasSubSpellStart) { open = null; subSpells++; continue; }
                 if (row.HasSubSpellEnd) { open = null; subSpells = Math.Max(0, subSpells - 1); continue; }
-                if (open == null) { open = new List<PowerHistoryData>(); lists.Add((subSpells == 0 && blocks.Count > 0 && blocks.Peek(), open)); }
+                if (open == null) { open = new List<PowerHistoryData>(); lists.Add((blocks.Count > 0 && blocks.Peek(), open)); }
                 open.Add(row);
                 if (row.HasMetaData && (int)row.MetaData.Type == 21) open = null;
             }
@@ -99,6 +100,13 @@ internal static partial class Program
             if (row.HasFullEntity || row.HasShowEntity || row.HasChangeEntity)
             {
                 var snapshot = Snapshot(row);
+                if (row.HasShowEntity && snapshot.Entity != played)
+                {
+                    int now = EntityZone.GetValueOrDefault(snapshot.Entity, -1);
+                    int to = snapshot.Tags.Where(t => t.Name == (int)GameTag.ZONE).Select(t => t.Value).DefaultIfEmpty(now).Last();
+                    if (!ignoreCardZones) stale.Remove(snapshot.Entity);
+                    else if (to == now && now is (int)EngineZone.HAND or (int)EngineZone.PLAY or (int)EngineZone.SECRET) stale.Add(snapshot.Entity);
+                }
                 foreach (var tag in snapshot.Tags)
                 {
                     if (tag.Name == (int)GameTag.CARDTYPE) cardTypes[snapshot.Entity] = tag.Value;
@@ -123,8 +131,10 @@ internal static partial class Program
             var shown = CardZone.Where(p => p.Value == (int)EngineZone.HAND && Controller.GetValueOrDefault(p.Key) == owner.PlayerId).Select(p => p.Key).ToHashSet();
             var engine = owner.HandZone.Select(c => c.Id).ToHashSet();
             var missing = engine.Except(shown).ToArray(); var ghosts = shown.Except(engine).ToArray();
-            return missing.Length == 0 && ghosts.Length == 0 ? null
-                : $"hand actor missing for [{string.Join(",", missing.Select(id => id + ":" + owner.Game.IdEntityDic[id].Card.Id))}], extra [{string.Join(",", ghosts)}]";
+            var old = shown.Intersect(stale).ToArray();
+            return missing.Length == 0 && ghosts.Length == 0 && old.Length == 0 ? null
+                : $"hand actor missing for [{string.Join(",", missing.Select(id => id + ":" + owner.Game.IdEntityDic[id].Card.Id))}], extra [{string.Join(",", ghosts)}]"
+                    + (old.Length > 0 ? $", hand actor stale for [{string.Join(",", old)}]" : "");
         }
     }
 
