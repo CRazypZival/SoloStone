@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"zhTW","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":["BOTA_518","BOTA_519"],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"zhTW","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":["BOTA_518","BOTA_519"],"text":{
 "AT_001":["96100494","對一個手下造成$8點傷害"],
 "AT_002":["c9f5cde4","<b>秘密：</b>當一個友方手下死亡時，隨機召喚一個相同消耗的手下"],
 "AT_003":["50797490","你的英雄能力所造成的傷害提高1點"],
@@ -4286,7 +4286,6 @@
 "LOOT_383":["7f48e8a1","[x]<b>嘲諷</b>\n<b>戰吼：</b>為對手召喚一個\n消耗為2的隨機手下"],
 "LOOT_388":["020d9eca","<b>戰吼：</b>恢復全部友方角色#2點生命值"],
 "LOOT_389":["b2c1e043","[x]<b>戰吼：</b>使你\n被摧毀的一把武器\n返回你的手中"],
-"LOOT_392":["be227910","<b>死亡之聲：</b>獲得10顆法力水晶"],
 "LOOT_394":["9a5da29d","在你的回合結束時，召喚一個消耗為1的隨機手下"],
 "LOOT_398":["443ae5bc","[x]在你的回合\n結束時，為你的英雄\n恢復#3點生命值"],
 "LOOT_410":["52c4829a","<b>戰吼：</b>若你手中有龍類，對全部其他手下造成3點傷害"],

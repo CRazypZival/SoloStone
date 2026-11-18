@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"esES","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":["CS1h_001","CATA_725"],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"esES","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":["CS1h_001","CATA_725"],"text":{
 "AT_001":["96100494","Inflige $8 p. de daño a un esbirro."],
 "AT_002":["c9f5cde4","<b>Secreto:</b> Cuando un esbirro amistoso muere, invoca a un esbirro aleatorio del mismo coste."],
 "AT_003":["50797490","Tu poder de héroe inflige\n1 p. de daño extra."],
@@ -4287,7 +4287,6 @@
 "LOOT_383":["7f48e8a1","[x]<b>Provocar</b>\n<b>Grito de batalla:</b> Invoca a\nun esbirro aleatorio de coste\n2 para tu oponente."],
 "LOOT_388":["020d9eca","[x]<b>Grito de batalla:</b>\nRestaura #2 p. de salud\na todos los personajes\namistosos."],
 "LOOT_389":["b2c1e043","[x]<b>Grito de batalla:</b> Devuelve\nuna de tus armas destruidas\na tu mano."],
-"LOOT_392":["be227910","<b>Último aliento:</b> Obtienes 10 cristales de maná."],
 "LOOT_394":["9a5da29d","Al final de tu turno invoca un esbirro aleatorio de coste 1."],
 "LOOT_398":["443ae5bc","[x]Al final de tu turno,\nrestaura #3 p. de salud\na tu héroe."],
 "LOOT_410":["52c4829a","<b>Grito de batalla:</b> Si hay un dragón en tu mano, inflige 3 p. de daño a todos los demás esbirros."],

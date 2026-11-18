@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"zhCN","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":["DALA_BOSS_45h","TU4e_005"],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"zhCN","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":["DALA_BOSS_45h","TU4e_005"],"text":{
 "AT_001":["96100494","对一个随从造成$8点伤害。"],
 "AT_002":["c9f5cde4","<b>奥秘：</b>当一个友方随从死亡时，随机召唤一个法力值消耗相同的随从。"],
 "AT_003":["50797490","你的英雄技能会额外造成1点伤害。"],
@@ -4287,7 +4287,6 @@
 "LOOT_383":["7f48e8a1","<b>嘲讽，战吼：</b>\n为你的对手随机召唤一个法力值消耗为（2）点的随从。"],
 "LOOT_388":["020d9eca","<b>战吼：</b>为所有友方角色恢复#2点生命值。"],
 "LOOT_389":["b2c1e043","<b>战吼：</b>将你的一把被摧毁的武器置入你的手牌。"],
-"LOOT_392":["be227910","<b>亡语：</b>获得十个法力水晶。"],
 "LOOT_394":["9a5da29d","在你的回合结束时，随机召唤一个法力值消耗为（1）点的\n随从。"],
 "LOOT_398":["443ae5bc","在你的回合结束时，为你的英雄恢复#3点生命值。"],
 "LOOT_410":["52c4829a","<b>战吼：</b>\n如果你的手牌中有龙牌，则对所有其他随从造成3点伤害。"],

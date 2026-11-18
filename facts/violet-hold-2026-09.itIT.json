@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"itIT","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":[],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"itIT","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":[],"text":{
 "AT_001":["96100494","Infligge $8 danni a un servitore."],
 "AT_002":["c9f5cde4","<b>Segreto:</b> quando un tuo servitore muore, evoca un servitore casuale con lo stesso costo."],
 "AT_003":["50797490","Il tuo Potere Eroe infligge 1 danno aggiuntivo."],
@@ -4288,7 +4288,6 @@
 "LOOT_383":["7f48e8a1","[x]<b>Provocazione</b>.\n<b>Grido di Battaglia:</b> evoca un\nservitore casuale da 2 Mana sotto\nil controllo dell'avversario."],
 "LOOT_388":["020d9eca","[x]<b>Grido di Battaglia:</b>\nrigenera #2 Salute\nai tuoi personaggi."],
 "LOOT_389":["b2c1e043","[x]<b>Grido di Battaglia:</b>\nfa tornare nella tua mano\nuna tua Arma distrutta."],
-"LOOT_392":["be227910","<b>Rantolo di Morte:</b> fornisce 10\nCristalli di Mana."],
 "LOOT_394":["9a5da29d","Alla fine del tuo turno, evoca un servitore\ncasuale da 1 Mana."],
 "LOOT_398":["443ae5bc","Alla fine del tuo\nturno, rigenera\n#3 Salute al tuo eroe."],
 "LOOT_410":["52c4829a","[x]<b>Grido di Battaglia:</b>\ninfligge 3 danni a TUTTI\ngli altri servitori se hai\nun Drago in mano."],

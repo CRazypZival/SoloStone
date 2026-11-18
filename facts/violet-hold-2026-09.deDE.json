@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"deDE","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":["DALA_BOSS_45h"],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"deDE","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":["DALA_BOSS_45h"],"text":{
 "AT_001":["96100494","Fügt einem Diener $8 Schaden zu."],
 "AT_002":["c9f5cde4","<b>Geheimnis:</b> Wenn ein befreundeter Diener stirbt, ruft Ihr einen zufälligen Diener mit den gleichen Kosten herbei."],
 "AT_003":["50797490","Eure Heldenfähigkeit verursacht 1 Schaden mehr."],
@@ -4287,7 +4287,6 @@
 "LOOT_383":["7f48e8a1","[x]<b>Spott</b>. <b>Kampfschrei:</b>\nRuft für Euren Gegner einen\nzufälligen Diener herbei,\nder (2) kostet."],
 "LOOT_388":["020d9eca","<b>Kampfschrei:</b> Stellt bei allen befreundeten Charakteren #2 Leben wieder her."],
 "LOOT_389":["b2c1e043","[x]<b>Kampfschrei:</b> Lasst eine Eurer\nzerstörten Waffen auf Eure\nHand zurückkehren."],
-"LOOT_392":["be227910","<b>Todesröcheln:</b> Erhaltet 10 Manakristalle."],
 "LOOT_394":["9a5da29d","Ruft am Ende Eures\nZuges einen zufälligen Diener herbei, der (1) kostet."],
 "LOOT_398":["443ae5bc","[x]Stellt am Ende Eures\nZuges bei Eurem Helden\n#3 Leben wieder her."],
 "LOOT_410":["52c4829a","[x]<b>Kampfschrei:</b> Fügt allen\nanderen Dienern 3 Schaden zu,\nwenn Ihr einen Drachen\nauf der Hand habt."],

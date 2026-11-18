@@ -1,4 +1,4 @@
-{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"jaJP","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2"],"tokenMismatch":["DALA_713","DALA_BOSS_45h","DALA_BOSS_59t2","ULD_135"],"text":{
+{"schemaVersion":2,"meta":"violet-hold-2026-09","locale":"jaJP","baseSourceBuild":"38377","overlaySourceBuild":"37.0.0.254477","overlayLocaleSource":"hsdata 254477","overlayLocaleSha256":"de717fc210614be2033152cffae6052fb1cd6b85812dc598218ce75263ca9df3","excluded":[],"missing":["TB_BaconUps_101e","BE_008e","BE_221e2","CAP_002e","CAP_101e","CAP_402e","CAP_405t1","CAP_407e","CAP_800e","CAP_802e1","CATA_487e1","EDR_979e2","END_036e","GBL_999e","TIME_063e2","TLC_253e1","TSC_639e2","LOOT_392"],"tokenMismatch":["DALA_713","DALA_BOSS_45h","DALA_BOSS_59t2","ULD_135"],"text":{
 "AT_001":["96100494","[x]ミニオン1体に\n$8ダメージを\n与える。"],
 "AT_002":["c9f5cde4","<b>秘策:</b>\n 味方のミニオンが死亡\nした時ランダムな\n同コストのミニオン1体を召喚する。"],
 "AT_003":["50797490","[x]自分のヒーローパワーの\nダメージが1増加する。"],
@@ -4285,7 +4285,6 @@
 "LOOT_383":["7f48e8a1","<b>挑発</b>、<b>雄叫び:</b>\nランダムなコスト2の\nミニオン1体を相手の陣地に召喚する。"],
 "LOOT_388":["020d9eca","<b>雄叫び:</b>\n全ての味方の\nキャラクターの体力を#2回復する。"],
 "LOOT_389":["b2c1e043","<b>雄叫び:</b>\n自分の破壊された\n武器1つを自分の\n手札に戻す。"],
-"LOOT_392":["be227910","[x]<b>断末魔:</b>\nマナクリスタルを\n__10個獲得する。"],
 "LOOT_394":["9a5da29d","[x]自分のターンの終了時\nランダムなコスト1の\nミニオン1体を\n召喚する。"],
 "LOOT_398":["443ae5bc","自分のターンの終了時\n自分のヒーローの体力を#3回復する。"],
 "LOOT_410":["52c4829a","[x]<b>雄叫び:</b>\n自分の手札にドラゴンが\nいる場合、自身を除く\n全てのミニオンに\n___3ダメージを与える。"],
