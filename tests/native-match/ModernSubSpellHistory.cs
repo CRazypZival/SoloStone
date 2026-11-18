@@ -13,7 +13,7 @@ internal static partial class Program
 {
     // FIR_909 live cleanup clears direct spell missiles; non-spell/death routes still need live acceptance.
     // FIR_902/END_024 delayed (Sigil, Secret) routes were re-admitted after a live cleanup check, human and NPC.
-    // CATA_582/JAIL_307 keep area pulses; their single-target fallback uses the admitted missile.
+    // CATA_582/JAIL_307 play their area pulse for any number of targets (one included); the per-hit missile is not reached any more.
     private static readonly HashSet<string> QuarantinedFireRoutes = new HashSet<string>(
         "JAIL_458t2 FIR_955 TLC_220 FIR_904".Split(' '));
     private static bool FireQuarantined(string id) => QuarantinedFireRoutes.Contains(id);
@@ -38,6 +38,8 @@ internal static partial class Program
         DeathrattleDamageVisuals();
         DeathrattleSourceCases();
         EmptySideAreaVisuals();
+        DeathrattleNonDamageSources();
+        AreaSpellEdgeVisuals();
         OneTargetAreaVisuals();
         WeaponDamageVisuals();
         ConditionalBattlecryVisuals();
@@ -522,6 +524,19 @@ internal static partial class Program
                 Check(shots.Length == 1 && shots[0].Source == owner.Hero.Id,
                     "a Deathrattle fired from the hand falls back to the owner's public hero (got " + shots.Length + "" + ")");
             }
+            // Destroyed in the hand (DestroyOffboard): the card is in the GRAVEYARD but not because of a board death (fromDeath: false), so it has no
+            // board slot and the hero is the source. Without the DeathrattleFromDeath condition this would start at the card.
+            {
+                var (match, capture) = AnimationMatch(botTurn: bot); var owner = match.Game.CurrentPlayer;
+                var imp = (Minion)EngineEntity.FromCard(owner, Cards.FromId("JAIL_398"), zone: owner.HandZone);
+                FlushFieldHistory(match); int cursor = match.Game.PowerHistory.Full.Count;
+                var destroy = typeof(SabberStoneCore.Model.Game).Assembly.GetType("SabberStoneCore.Actions.DrawReplacementRules")
+                    .GetMethod("DestroyOffboard", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                Check((bool)destroy.Invoke(null, new object[] { imp }) && imp.Zone.Type == SabberStoneCore.Enums.Zone.GRAVEYARD, "setup: Impfernal destroyed in the hand is in the graveyard");
+                var shots = match.Game.PowerHistory.Full.Skip(cursor).OfType<SabberStoneCore.Kettle.PowerHistorySubSpellStart>().ToArray();
+                Check(shots.Length == 1 && shots[0].Source == owner.Hero.Id,
+                    "a Deathrattle of a card destroyed in the hand starts at the hero, not at the graveyard card (got " + shots.Length + ")");
+            }
         }
         Console.WriteLine("PASS Deathrattle origin: dying minion, living trigger and hero fallback, both seats");
     }
@@ -578,22 +593,78 @@ internal static partial class Program
         }
         foreach (bool bot in new[] { false, true })
         {
-            // Raze with exactly one enemy minion: still the half-board pulse (custom call site).
+            // Raze with no enemy minion at all: the half-board pulse still plays (it used to need a hit; one enemy played it already).
             const string halfBoard = "CATAFX_Deathwing_AE_HalfBoard_Super:6f6e7e32f2a0f2a4d906ef4aa79b185e";
             var (match, capture) = AnimationMatch(botTurn: bot); var owner = match.Game.CurrentPlayer;
-            var enemy = (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId("CS2_200"), zone: owner.Opponent.BoardZone); enemy.BaseHealth = 30;
             var source = EngineEntity.FromCard(owner, Cards.FromId("CATA_190h"), zone: owner.HandZone); source.Cost = 0;
             FlushFieldHistory(match); int cursor = capture.Packets.Count;
             InvokeProcess(match, owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id)); FlushFieldHistory(match);
             int raze = owner.Choice.Choices.First(c => match.Game.IdEntityDic[c].Card.Id == "CATA_190t12");
             InvokeProcess(match, ChooseTask.Pick(owner, raze)); FlushFieldHistory(match);
             var shots = History(capture, cursor).Where(e => e.HasSubSpellStart && e.SubSpellStart.SpellPrefabGuid == halfBoard).ToArray();
-            Check(shots.Length == 1, "CATA_190h Raze with one enemy plays one half-board pulse");
+            Check(shots.Length == 1, "CATA_190h Raze with no enemy minion plays one half-board pulse");
         }
         Console.WriteLine("PASS one-target area effects still play their area pulse, both seats");
     }
 
+    // CORE_BAR_310 (Heal) and EDR_261e (BoardBuff, a granted Deathrattle) took the Dying default too: their cue starts at the dying minion.
+    private static void DeathrattleNonDamageSources()
+    {
+        foreach (bool bot in new[] { false, true })
+        {
+            {
+                var (match, capture) = AnimationMatch(botTurn: bot); var owner = match.Game.CurrentPlayer;
+                var elemental = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CORE_BAR_310"), zone: owner.BoardZone);
+                owner.Hero.Damage = 10; FlushFieldHistory(match); int cursor = capture.Packets.Count;
+                elemental.ToBeDestroyed = true; match.Game.DeathProcessingAndAuraUpdate(); FlushFieldHistory(match);
+                var shots = History(capture, cursor).Where(e => e.HasSubSpellStart && e.SubSpellStart.SpellPrefabGuid == "ReuseFX_BuffImpact_HolyLight_Heal_Large_Super_WithIdle:5cf69a120464ec246bc7e14056fc11bc").ToArray();
+                Check(shots.Length >= 1 && shots.All(e => e.SubSpellStart.SourceEntityId == elemental.Id), "Lightshower Elemental's heal cue starts at the dying minion (got " + shots.Length + ")");
+            }
+            {
+                var (match, capture) = AnimationMatch(botTurn: bot); var owner = match.Game.CurrentPlayer;
+                var carrier = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_200"), zone: owner.BoardZone);
+                var other = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_200"), zone: owner.BoardZone);
+                var spell = EngineEntity.FromCard(owner, Cards.FromId("EDR_261"), zone: owner.HandZone); spell.Cost = 0;
+                FlushFieldHistory(match);
+                InvokeProcess(match, owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == spell.Id && t.Target?.Id == carrier.Id));
+                FlushFieldHistory(match); int cursor = capture.Packets.Count;
+                carrier.ToBeDestroyed = true; match.Game.DeathProcessingAndAuraUpdate(); FlushFieldHistory(match);
+                var shots = History(capture, cursor).Where(e => e.HasSubSpellStart && e.SubSpellStart.SpellPrefabGuid == "ReuseFX_Beast_BuffImpact_Paw_NatureGlow_Super:3dcd14b24f512c84fb7ac2a5ee3a7041").ToArray();
+                Check(shots.Length >= 1 && shots.All(e => e.SubSpellStart.SourceEntityId == carrier.Id), "Amphibian's Spirit's granted Deathrattle cue starts at the dying minion (got " + shots.Length + ")");
+            }
+        }
+        Console.WriteLine("PASS non-damage Deathrattle cues start at the dying minion, both seats");
+    }
+
+    // Area spells with no minion on the board, and Calamitous Rafaam's custom area site: the pulse plays whenever the effect runs.
+    private static void AreaSpellEdgeVisuals()
+    {
+        const string shockwave = "ReuseFX_Shadow_Fire_AE_Shockwave_Small_BothSides_Super:1f77cfbb2d94e3f4982cf07e849fa699";
+        const string flood = "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341";
+        foreach (bool bot in new[] { false, true })
+        {
+            foreach (var (id, prefab, pulses, victims) in new[] {
+                ("CATA_582", flood, 1, 0), ("CATA_581", shockwave, 1, 0), ("JAIL_307", flood, 2, 0), ("JAIL_307", flood, 2, 1),
+                ("TIME_005t6", flood, 1, 0), ("TIME_005t6", flood, 1, 1) })
+            {
+                var (match, capture) = AnimationMatch(botTurn: bot); var owner = match.Game.CurrentPlayer;
+                for (int i = 0; i < victims; i++)
+                { var m = (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId("CS2_200"), zone: owner.Opponent.BoardZone); m.BaseHealth = 30; }
+                var source = EngineEntity.FromCard(owner, Cards.FromId(id), zone: owner.HandZone); source.Cost = 0;
+                FlushFieldHistory(match); int cursor = capture.Packets.Count;
+                InvokeProcess(match, owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id)); FlushFieldHistory(match);
+                var entries = History(capture, cursor);
+                var all = entries.Where(e => e.HasSubSpellStart).Select(e => e.SubSpellStart).ToArray();
+                Check(all.Length == pulses && all.All(s => s.SpellPrefabGuid == prefab && s.TargetEntityIds.Count == 0),
+                    id + " with " + victims + " victim(s) plays its area pulse " + pulses + "x and no missile (got " + all.Length + ")");
+                Check(entries.Count(e => e.HasSubSpellStart) == entries.Count(e => e.HasSubSpellEnd), id + " edge scopes balanced");
+            }
+        }
+        Console.WriteLine("PASS area spells and Calamitous Rafaam play their pulse on an empty or one-victim board, both seats");
+    }
+
     private static void RottenAppleVisual()
+
     {
         foreach (bool bot in new[] { false, true })
         {
