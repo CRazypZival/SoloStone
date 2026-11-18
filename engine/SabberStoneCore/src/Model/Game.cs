@@ -1573,21 +1573,27 @@ namespace SabberStoneCore.Model
 		}
 
 		// Summon Resolution Step: "whenever you summon" triggers for the summons of the Phase that just ended.
+		// Each batch leaves the list before it fires: a reaction can reach a nested cleanup (an overdrawn IMPFERNAL!), which
+		// must not fire the same summons again. Summons made by the reactions get their own pass.
 		private void SummonResolutionStep()
 		{
-			if (TriggerManager.HasOnSummonTrigger)
+			for (int pass = 0; SummonedMinions.Count != 0; pass++)
 			{
-				using var summonCatchUp = Resolution.Enter(ResolutionKind.SummonOn);
-                List<Minion> minions = SummonedMinions;
-				TaskQueue.StartEvent();
-				for (int i = 0; i < minions.Count; i++)
+				var batch = SummonedMinions.ToArray();
+				SummonedMinions.Clear();
+				if (!TriggerManager.HasOnSummonTrigger) return;
+				if (pass == 64)
 				{
-					TriggerManager.OnSummonTrigger(minions[i]);
+					Log(LogLevel.WARNING, BlockType.PLAY, "Game", !Logging ? "" : $"Summon Resolution Step stopped after 64 passes; {batch.Length} summons dropped.");
+					return;
 				}
+				using var summonCatchUp = Resolution.Enter(ResolutionKind.SummonOn);
+				TaskQueue.StartEvent();
+				foreach (Minion minion in batch)
+					TriggerManager.OnSummonTrigger(minion);
 				ProcessTasks();
 				TaskQueue.EndEvent();
 			}
-			SummonedMinions.Clear();
 		}
 
 

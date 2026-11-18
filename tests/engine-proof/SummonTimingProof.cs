@@ -20,7 +20,8 @@ internal static class SummonTimingProof
     {
         var failures = new List<string>();
         foreach (var test in new Action[] { TidecallerDeathrattle, TidecallerThreeMurlocs, BuzzardDeathrattle, BuzzardMortallyWoundedInSameDeathPhase,
-            KabalMastermindDeathrattleDraw, CollapsingStarDeathrattleDemon, UndertakerReborn, KnifeJugglerStillPerSummon })
+            KabalMastermindDeathrattleDraw, CollapsingStarDeathrattleDemon, UndertakerReborn, KnifeJugglerStillPerSummon,
+            ImpfernalOverdrawFiresOnce, ReactionsAfterAllDeathrattlesOfThePhase })
             try { test(); } catch (Exception e) { failures.Add(test.Method.Name + ": " + e.Message); }
         failures.AddRange(Sweep());
         Verify(failures.Count == 0, string.Join("\n", failures));
@@ -138,6 +139,56 @@ internal static class SummonTimingProof
         g.DeathProcessingAndAuraUpdate();
         Verify(p.Opponent.Hero.Damage - before == 2, $"Knife Juggler throws one knife per Spider, got {p.Opponent.Hero.Damage - before}");
         Verify(juggler.Zone == p.BoardZone, "juggler alive");
+    }
+
+    // Review F1: a reaction that reaches a nested cleanup must not fire the same summon again. Buzzard draws for the Raptor
+    // into a full hand; the overdrawn IMPFERNAL!'s Deathrattle runs a nested cleanup (DrawReplacementRules.OffboardDeathrattle).
+    private static void ImpfernalOverdrawFiresOnce()
+    {
+        var g = Fixture(); var p = g.Player1;
+        foreach (var card in p.DeckZone.ToArray()) p.SetasideZone.Add(p.DeckZone.Remove(card));
+        for (int i = 0; i < 6; i++) Entity.FromCard(p, Cards.FromId("JAIL_398"), zone: p.DeckZone);
+        var buzzard = Summon(p, "CS2_237");
+        while (!p.HandZone.IsFull) Add(p, "CS2_182");
+        Summon(p, "CS2_172"); // one Beast
+        int overdrawn = p.GraveyardZone.Count(c => c.Card.Id == "JAIL_398");
+        Verify(p.DeckZone.Count == 5 && overdrawn == 1, $"one Beast draws one card (one IMPFERNAL! overdrawn), got deck {p.DeckZone.Count}, overdrawn {overdrawn}");
+        Verify(buzzard.Zone == p.GraveyardZone, "IMPFERNAL!'s 3 damage kills the Buzzard");
+        NothingLeft(g);
+    }
+
+    // Review F5: the step comes after all the Deathrattles of the Death Phase, not after each. Grandmother (earlier in play)
+    // summons a Beast, then the Hoarder draws; the Buzzard's draw comes after the Hoarder's.
+    private static void ReactionsAfterAllDeathrattlesOfThePhase()
+    {
+        var g = Fixture(); var p = g.Player1;
+        var buzzard = Summon(p, "CS2_237");
+        var grandmother = Summon(p, "KAR_005");
+        var hoarder = Summon(p, "EX1_096");
+        foreach (var card in p.HandZone.ToArray()) p.SetasideZone.Add(p.HandZone.Remove(card));
+        int from = g.PowerHistory.Full.Count;
+        Die(g, grandmother, hoarder);
+        var sources = DrawSources(g, from, p);
+        Verify(p.HandZone.Count == 2, $"the Hoarder and the Buzzard each draw one card in the death cleanup, got {p.HandZone.Count}");
+        Verify(sources.Count == 2 && sources[0] == hoarder.Id && sources[1] == buzzard.Id,
+            $"the Hoarder's card is drawn before the Buzzard's, got draw sources [{string.Join(",", sources)}] (hoarder {hoarder.Id}, buzzard {buzzard.Id})");
+        NothingLeft(g);
+    }
+
+    // The innermost Hoarder/Buzzard block around each card entering the hand, in history order.
+    private static List<int> DrawSources(Game g, int from, Controller p)
+    {
+        var stack = new List<int>(); var result = new List<int>(); var seen = new HashSet<int>();
+        var hand = p.HandZone.Select(c => c.Id).ToHashSet();
+        foreach (var entry in g.PowerHistory.Full.Skip(from))
+        {
+            if (entry is PowerHistoryBlockStart start) stack.Add(start.Source);
+            else if (entry is PowerHistoryBlockEnd && stack.Count != 0) stack.RemoveAt(stack.Count - 1);
+            else if (entry is PowerHistoryTagChange tag && tag.Tag == GameTag.ZONE && tag.Value == (int)Zone.HAND
+                     && hand.Contains(tag.EntityId) && seen.Add(tag.EntityId))
+                result.Add(stack.LastOrDefault(id => g.IdEntityDic.TryGetValue(id, out var e) && e is Minion));
+        }
+        return result;
     }
 
     // ---- Class sweep: every engine card with a SUMMON or AFTER_SUMMON listener, both seats, friendly and enemy summons.
