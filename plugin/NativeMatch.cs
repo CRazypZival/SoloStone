@@ -4241,13 +4241,20 @@ public sealed class NativeMatch
     // HAS_DIAMOND_QUALITY, HAS_SIGNATURE_QUALITY.
     private static readonly int[] DeckFlightQualityTags = { 1932, 2589 };
 
+    // Opposing actors the client holds burned (DECK -> GRAVEYARD): Card.MillCard marks them as being drawn by the opponent for
+    // good, so any later zone or controller change, SHOW or reset diff of that actor stalls the client's power queue (#80).
+    private readonly HashSet<int> milledOpposingActors = new HashSet<int>();
+
     private void TrackClientState(PowerHistoryData data)
     {
         void Merge(int id, IEnumerable<NativeTag> values)
         {
             if (!clientTransportTags.TryGetValue(id, out var tags))
                 clientTransportTags[id] = tags = new Dictionary<int, int>();
+            bool fromDeck = tags.TryGetValue((int)GameTag.ZONE, out int before) && before == (int)EngineZone.DECK;
             foreach (var tag in values) tags[tag.Name] = tag.Value;
+            if (fromDeck && tags.TryGetValue((int)GameTag.ZONE, out int after) && after == (int)EngineZone.GRAVEYARD
+                && tags.TryGetValue((int)GameTag.CONTROLLER, out int owner) && owner == BotPlayerId) milledOpposingActors.Add(id);
         }
         var create = data.HasCreateGame ? data.CreateGame : data.HasResetGame ? data.ResetGame.CreateGame : null;
         if (create != null)
@@ -5025,6 +5032,11 @@ public sealed class NativeMatch
         var cards = new Dictionary<int, string>(clientTransportCards);
         if (rewindAnonymousEntities == null)
             rewindAnonymousEntities = new HashSet<int>(cards.Where(pair => string.IsNullOrEmpty(pair.Value)).Select(pair => pair.Key));
+        // An opposing card the client holds burned stays in GRAVEYARD for good: it keeps its lock across the reset.
+        var milledBefore = new HashSet<int>(milledOpposingActors);
+        var stillMilled = new HashSet<int>(fulls.Where(full => milledBefore.Contains(full.Entity.Id)
+            && full.Entity.Tags.TryGetValue(GameTag.ZONE, out int restoredZone) && restoredZone == (int)EngineZone.GRAVEYARD).Select(full => full.Entity.Id));
+        milledOpposingActors.Clear(); milledOpposingActors.UnionWith(stillMilled);
         revealedEntities.Clear(); visibleTransportTags.Clear(); clientTransportTags.Clear(); clientTransportCards.Clear();
         historicalControllers.Clear(); historicalZones.Clear(); historicalPositions.Clear(); historicalTemporaryVisuals.Clear(); temporaryDiscardVisuals.Clear();
         privacyTargets.Clear(); retiredChoiceActors.Clear(); opposingProxies.Clear(); deckChoiceOriginals.Clear(); privateDeckOffers.Clear(); privateChoiceOffers.Clear(); visibleSubSpells.Clear(); visualBlockSources.Clear(); revealedTriggerScopes.Clear(); pendingTriggerReveals.Clear(); lastSpellPower.Clear(); poweredUpHighlights.Clear();
@@ -5066,8 +5078,13 @@ public sealed class NativeMatch
         // Retire discarded actors before the native reset filters the old timeline.
         foreach (var pair in previous.OrderBy(pair => pair.Key))
         {
-            if (resetEntities.ContainsKey(pair.Key) || pair.Key == cosmeticPetEntityId || OpponentPetCard != null && pair.Key == opponentPetEntityId ||
-                pair.Value.TryGetValue((int)GameTag.ZONE, out int zone) && zone == (int)EngineZone.REMOVEDFROMGAME) continue;
+            if (resetEntities.ContainsKey(pair.Key) || pair.Key == cosmeticPetEntityId || OpponentPetCard != null && pair.Key == opponentPetEntityId) continue;
+            int zone = pair.Value.TryGetValue((int)GameTag.ZONE, out int held) ? held : 0;
+            if (zone == (int)EngineZone.REMOVEDFROMGAME) continue;
+            // An opposing actor burned from the deck (public display or the card itself): Card.MillCard leaves m_beingDrawnByOpponent
+            // set and ZoneChangeList waits on it forever, so moving it here wedges the power queue before GAME_RESET (#80). It has
+            // no visible actor, so leaving it in GRAVEYARD stays invisible. See AppendRetainedOverdraw.
+            if (zone == (int)EngineZone.GRAVEYARD && milledBefore.Contains(pair.Key)) continue;
             packet.List.Add(new PowerHistoryData { TagChange = new PegasusGame.PowerHistoryTagChange {
                 Entity = pair.Key, Tag = (int)GameTag.ZONE, Value = (int)EngineZone.REMOVEDFROMGAME
             } });
@@ -5982,7 +5999,7 @@ public sealed class NativeMatch
             {
                 var row = history.List[index];
                 // Full replay starts a new client graph. Reset snapshots keep the existing anonymous identities.
-                if (row.HasCreateGame) { privateReturnIds.Clear(); privateReturnOriginals.Clear(); retiredReturnActors.Clear(); publicReturnReferences.Clear(); }
+                if (row.HasCreateGame) { privateReturnIds.Clear(); privateReturnOriginals.Clear(); retiredReturnActors.Clear(); publicReturnReferences.Clear(); milledOpposingActors.Clear(); }
                 if (row.HasResetGame)
                 {
                     // Reset snapshots are simultaneous; ordinary replay must retain historical visibility order.

@@ -18,17 +18,21 @@ public static class BoardActorInvariant
     {
         var client = new ClientModel { RepairNullToPlayActors = repairNullToPlayActors };
         var faults = new List<string>();
-        int packet = 0;
+        int packet = 0, milled = 0;
         foreach (var history in packets)
         {
             client.Apply(history);
-            faults.AddRange(Inspect(client).Select(detail => $"packet={packet} {detail}"));
+            faults.AddRange(InspectBoard(client).Select(detail => $"packet={packet} {detail}"));
+            faults.AddRange(client.MillFaults.Skip(milled).Select(detail => $"packet={packet} {detail}"));
+            milled = client.MillFaults.Count;
             packet++;
         }
         return faults;
     }
 
-    internal static IEnumerable<string> Inspect(ClientModel client)
+    internal static IEnumerable<string> Inspect(ClientModel client) => InspectBoard(client).Concat(client.MillFaults);
+
+    private static IEnumerable<string> InspectBoard(ClientModel client)
     {
         foreach (var pair in client.Entities)
         {
