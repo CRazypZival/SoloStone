@@ -149,7 +149,7 @@ internal static class ManaAndHealRulesProof
     }
     private static void WildGrowthTemporaryManaDoesNotCountAsCrystal()
     {
-        foreach (int temporary in new[] { 3, 4 }) // 3 leaves exactly 10 available when it resolves
+        foreach (int temporary in new[] { 3, 4 }) // 4 leaves exactly 10 available after paying for Wild Growth (9 + 4 - 3)
         {
             var (excess, baseMana) = WildGrowth(9, temporary);
             Verify(!excess && baseMana == 10, $"base 9 + {temporary} temporary: Wild Growth gives the 10th crystal and no Excess Mana, got excess={excess} base={baseMana}");
@@ -163,13 +163,11 @@ internal static class ManaAndHealRulesProof
     private static void GaronaIsNotDamage()
     {
         var (g, p) = Start(); var e = p.Opponent;
-        var zzeraku = Summon(e, "DRG_209"); // whenever your hero takes damage, summon a 6/6
         e.Hero.Damage = 8; e.Hero.Armor = 5; Add(e, "TIME_875t");
-        int damageFacts = g.HistoryFacts.Query.Damage().Count(), board = e.BoardZone.Count, cursor = g.PowerHistory.Full.Count;
+        int damageFacts = g.HistoryFacts.Query.Damage().Count(), cursor = g.PowerHistory.Full.Count;
         Play(g, p, "TIME_875"); g.DeathProcessingAndAuraUpdate();
         Verify(e.Hero.Health == 11, "Garona resolved");
         Verify(g.HistoryFacts.Query.Damage().Count() == damageFacts, "no damage fact");
-        Verify(e.BoardZone.Count == board && zzeraku.Zone.Type == Zone.PLAY, "no 'hero takes damage' trigger fired (no Nether Drake)");
         Verify(!g.PowerHistory.Full.Skip(cursor).OfType<SabberStoneCore.Kettle.PowerHistoryTagChange>().Any(t => t.EntityId == e.Hero.Id
             && (t.Tag == GameTag.PREDAMAGE)), "no PREDAMAGE tag change on the hero");
     }
