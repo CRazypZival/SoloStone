@@ -935,7 +935,7 @@ namespace SabberStoneCore.Kettle
         [NonSerialized] private int _noteCard, _noteLegal = -1, _noteMode;
         [NonSerialized] private bool _noteModeRandom;
         [NonSerialized] private string _noteModeCard;
-        // legalTargets: candidates the automatic play chose from; -1 unknown; -2 the card's own rule fixed the target.
+        // legalTargets: candidates the automatic play chose from; -1 unknown; -2 rule-fixed; -3 player-chosen.
         internal void NoteAutoChoice(int card, int legalTargets, int mode, string modeCardId, bool modeRandom)
         {
             if (!_enabled) return;
@@ -953,7 +953,7 @@ namespace SabberStoneCore.Kettle
             _noteCard = 0;
         }
         /// <summary>What an automatic play chose from (null: not recorded, e.g. a reloaded or cloned history). LegalTargets: candidates it chose
-        /// among (-1 unknown, -2 fixed by the card's own rule); Mode: the Choose One mode it picked (0 none) and that option's card id.</summary>
+        /// among (-1 unknown, -2 fixed by the card's own rule, -3 player-chosen); Mode: the Choose One mode it picked (0 none) and that option's card id.</summary>
         public (int LegalTargets, int Mode, string ModeCardId, bool ModeRandom)? AutoChoiceOf(IPowerHistoryEntry entry) =>
             _autoChoices != null && entry != null && _autoChoices.TryGetValue(entry, out var note) ? ((int, int, string, bool))note : ((int, int, string, bool)?)null;
         internal void ClearAutoChoice() { _noteCard = 0; }
