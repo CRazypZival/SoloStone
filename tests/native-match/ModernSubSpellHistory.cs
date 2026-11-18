@@ -455,8 +455,9 @@ internal static partial class Program
                 "EDR_110" => "ReuseFX_Decay_Missile_AcidGlob_Super_Simultaneous:1e8b03e89cf4f7a4d8dc823cf8132ad1",
                 "EDR_421" => "ReuseFX_Shadow_Missile_Blast_Small_Super_Simultaneous:e39b07044149c034d9b1d70182afe5b0",
                 "TLC_401" => "ReuseFX_Frost_Missile_Snowball_Medium_Fast_Super_Simultaneous:4fecda861d7d78b4186c3a3c3091c1e5",
-                "CORE_WC_701" => "ReuseFX_AE_FelFire_Fireball_Small_BothSides_Super:9c7dce379d56fee4ea100935d84b1a5e",
-                "JAIL_398" or "FIR_778" or "JAIL_007" => "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341",
+                "CORE_WC_701" => "Fel_AE_OpponentArea_FX:a7cfb128df225344e8deb859016577de",
+                "FIR_778" or "JAIL_007" => "ReuseFX_Fire_AE_Flood_OpponentSide_Super:0b9b3e4ef9b62a240b4cbf362c0511b4",
+                "JAIL_398" => "ReuseFX_Fire_AE_Flood_BothSides_Super:1d77444aaeef20d4494e2ad82c551341",
                 // Owner 2026-11-16: the client authors no Cinder / Destructive Blaze effect; a small Fireblast missile per hit.
                 "TLC_249" or "CATA_586" => "ReuseFX_Missile_Fire_Fireball_Small_Super:b8e7bb6e0944d204297efdc937967085",
                 _ => "ReuseFX_Fire_Missile_Fireball_Medium_Super_Simultaneous:161d5760bd9de1e41baf4c5611e61eed" };
