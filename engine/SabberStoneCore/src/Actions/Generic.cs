@@ -53,10 +53,8 @@ namespace SabberStoneCore.Actions
 		public static Func<Controller, int, bool> AddTempMana
 			=> delegate (Controller c, int amount)
 			{
-				if (c.RemainingMana + amount > c[GameTag.MAXRESOURCES])
-					c.TemporaryMana += c[GameTag.MAXRESOURCES] - c.RemainingMana;
-				else
-					c.TemporaryMana += amount;
+				// Patch 29.0: temporary Mana may go above maximum Mana (The Coin at 10/10 gives 11/10).
+				c.TemporaryMana += amount;
 				return true;
 			};
 

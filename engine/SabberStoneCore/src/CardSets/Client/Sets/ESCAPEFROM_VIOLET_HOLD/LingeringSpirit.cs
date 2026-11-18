@@ -17,7 +17,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
             card.Implemented = true;
             card.ExcludeFromLegacyRandomPools = true;
             card.Power = new Power { DeathrattleTask = new CustomTask((g, c, s, t, stack) => {
-                int healing = 3 * (int)Math.Pow(2, c.ControllerAuraEffects[GameTag.ALL_HEALING_DOUBLE]);
+                int healing = HealingRules.Amount((IPlayable)s, 3, c);
                 int excess = c.RestoreToDamage ? 0 : Math.Max(0, healing - c.Hero.Damage);
                 c.Hero.TakeHeal((IPlayable)s, 3);
                 if (excess == 0) return;
