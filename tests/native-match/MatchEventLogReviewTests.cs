@@ -23,12 +23,26 @@ internal static partial class Program
 {
     private static void MatchEventLogReview()
     {
-        int failed = 0;
+        int failed = 0, cases = 0;
         void Case(string name, Action body)
         {
+            cases++;
             try { body(); Console.WriteLine("PASS event-log review: " + name); }
             catch (Exception error) { failed++; Console.WriteLine("FAIL event-log review: " + name + "\n  " + error.Message.Replace("\n", "\n  ") + (error is InvalidOperationException && error.Message.StartsWith("TEST:") ? "" : "\n  at " + (error.StackTrace ?? "").Split('\n').FirstOrDefault(l => l.Contains("MatchEventLogReviewTests"))?.Trim())); }
         }
+        Case("health labels: real damage and heal stay DAMAGE and HEAL", HealthLabelsRealDamageAndHeal);
+        Case("health labels: Hunter's Mark is HEALTH_SET", HealthLabelsHuntersMarkIsHealthSet);
+        Case("health labels: Garona halving is not damage", HealthLabelsHalvingIsHealthSet);
+        Case("health labels: a DAMAGE write without a hit is HEALTH_SET", HealthLabelsDamageWriteWithoutHitIsHealthSet);
+        Case("health labels: combat on both sides", HealthLabelsCombatBothSides);
+        Case("health labels: AoE on armored hero and Divine Shield", HealthLabelsAoeArmorAndDivineShield);
+        Case("health labels: Fireball through armor", HealthLabelsFireballThroughArmor);
+        Case("health labels: fatigue twice", HealthLabelsFatigueTwice);
+        Case("health labels: Lifesteal", HealthLabelsLifesteal);
+        Case("health labels: weapon swing is DURABILITY", HealthLabelsWeaponSwingIsDurability);
+        Case("health labels: location use is DURABILITY", HealthLabelsLocationUseIsDurability);
+        Case("health labels: Health cost is HEALTH_COST", HealthLabelsHealthCostIsHealthCost);
+        Case("health labels: Reborn is REBORN", HealthLabelsRebornIsReborn);
         Case("F1 bounce + replay clears damage (no phantom HEAL)", BounceReplayDamage);
         Case("F1 polymorph resets tracked stats", PolymorphThenPing);
         Case("F1 cross-type hand transform updates the card type", CrossTypeTransform);
@@ -49,7 +63,7 @@ internal static partial class Program
         Case("sweep: no tracker drift or fault over real NPC play", NoDriftOverRealPlay);
         Case("sweep: fault mid-batch leaves no stale frames", FaultMidBatchNoStaleFrames);
         if (failed != 0) throw new InvalidOperationException("TEST: " + failed + " event-log review case(s) failed");
-        Console.WriteLine("PASS match event log review: " + 19 + " cases");
+        Console.WriteLine("PASS match event log review: " + cases + " cases");
     }
 
     private static (NativeMatch Match, Capture Capture, List<string> Lines) LoggedBoard(int seed = 1337)
