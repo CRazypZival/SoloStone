@@ -26,12 +26,23 @@ internal static partial class Program
     {
         internal readonly Dictionary<int, int> EntityZone = new(), CardZone = new(), Controller = new();
         internal int IgnoredLists;
-        private readonly int played;
-        internal DragClient(SabberStoneCore.Model.Entities.Controller owner, int played)
+        private readonly int played, oldHero;
+        private readonly bool predicted;
+        private readonly Dictionary<int, int> cardTypes = new(), powerSlots = new();
+        internal DragClient(SabberStoneCore.Model.Entities.Controller owner, int played, bool predicted = true)
         {
             this.played = played;
+            this.predicted = predicted;
+            oldHero = owner.Game.IdEntityDic[played].Card.Type == CardType.HERO ? owner.Hero.Id : 0;
+            foreach (var card in owner.HeroPowers.Cast<IPlayable>().Append(owner.Hero))
+            {
+                EntityZone[card.Id] = CardZone[card.Id] = (int)EngineZone.PLAY;
+                Controller[card.Id] = owner.PlayerId;
+                cardTypes[card.Id] = (int)card.Card.Type;
+                powerSlots[card.Id] = card[BasicHeroPowerRules.SecondaryIndex];
+            }
             foreach (var card in owner.HandZone) { EntityZone[card.Id] = CardZone[card.Id] = (int)EngineZone.HAND; Controller[card.Id] = owner.PlayerId; }
-            CardZone[played] = (int)EngineZone.PLAY; // the local prediction at the drop
+            if (predicted) CardZone[played] = (int)EngineZone.PLAY; // the local prediction at the drop
         }
 
         internal void Apply(IEnumerable<PowerHistory> packets)
@@ -65,7 +76,7 @@ internal static partial class Program
             }
             foreach (var (isPlay, list) in lists)
             {
-                bool movesPlayedToPlay = isPlay && list.Any(r => r.HasTagChange && r.TagChange.Entity == played && r.TagChange.Tag == (int)GameTag.ZONE
+                bool movesPlayedToPlay = predicted && isPlay && list.Any(r => r.HasTagChange && r.TagChange.Entity == played && r.TagChange.Tag == (int)GameTag.ZONE
                         && r.TagChange.Value == (int)EngineZone.PLAY
                     || (r.HasShowEntity || r.HasChangeEntity) && Snapshot(r).Entity == played
                         && Snapshot(r).Tags.Any(t => t.Name == (int)GameTag.ZONE && t.Value == (int)EngineZone.PLAY));
@@ -80,7 +91,7 @@ internal static partial class Program
         private void Move(int id, int zone, bool ignore)
         {
             EntityZone[id] = zone;
-            if (!ignore) CardZone[id] = zone; // ZoneChangeList.ProcessChanges: TransitionToZone only when the change is not ignored
+            if (!ignore || id == oldHero) CardZone[id] = zone; // The old hero is exempt from the predicted list; other cards need a processed list.
         }
 
         private void Row(PowerHistoryData row, bool ignoreCardZones)
@@ -90,6 +101,8 @@ internal static partial class Program
                 var snapshot = Snapshot(row);
                 foreach (var tag in snapshot.Tags)
                 {
+                    if (tag.Name == (int)GameTag.CARDTYPE) cardTypes[snapshot.Entity] = tag.Value;
+                    if (tag.Name == (int)BasicHeroPowerRules.SecondaryIndex) powerSlots[snapshot.Entity] = tag.Value;
                     if (tag.Name == (int)GameTag.ZONE) Move(snapshot.Entity, tag.Value, ignoreCardZones);
                     else if (tag.Name == (int)GameTag.CONTROLLER) Controller[snapshot.Entity] = tag.Value;
                 }
@@ -97,7 +110,12 @@ internal static partial class Program
             else if (row.HasHideEntity) Move(row.HideEntity.Entity, row.HideEntity.Zone, ignoreCardZones);
             else if (row.HasTagChange && row.TagChange.Tag == (int)GameTag.ZONE) Move(row.TagChange.Entity, row.TagChange.Value, ignoreCardZones);
             else if (row.HasTagChange && row.TagChange.Tag == (int)GameTag.CONTROLLER) Controller[row.TagChange.Entity] = row.TagChange.Value;
+            else if (row.HasTagChange && row.TagChange.Tag == (int)BasicHeroPowerRules.SecondaryIndex) powerSlots[row.TagChange.Entity] = row.TagChange.Value;
         }
+
+        internal int[] PowersInSlot(int owner, int slot) => CardZone.Where(p => p.Value == (int)EngineZone.PLAY
+            && Controller.GetValueOrDefault(p.Key) == owner && cardTypes.GetValueOrDefault(p.Key) == (int)CardType.HERO_POWER
+            && powerSlots.GetValueOrDefault(p.Key) == slot).Select(p => p.Key).Order().ToArray();
 
         // Cards the client shows in the human's hand (it has an actor there) against the engine's hand.
         internal string Compare(SabberStoneCore.Model.Entities.Controller owner)

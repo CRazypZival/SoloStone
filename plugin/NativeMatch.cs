@@ -4485,7 +4485,6 @@ public sealed class NativeMatch
     private void NormalizePublicIdentity(NativePowerHistory packet)
     {
         var list = packet.List;
-        NormalizeHeroPowerOwnership(list);
         // New FULLs initialize logical tags on receipt (Entity.OnRealTimeFullEntity); SHOWs do not.
         var receivedFulls = new HashSet<PowerHistoryData>(WireEntryComparer.Instance);
         foreach (var data in list)
@@ -4833,51 +4832,6 @@ public sealed class NativeMatch
         return new PowerHistoryData { MetaData = new PegasusGame.PowerHistoryMetaData {
             Type = (HistoryMeta.Type)0, Data = 0, Info = safe
         } };
-    }
-
-    // A played hero's replacement power is constructed before its battlecry POWER. Put that FULL in
-    // the hero's own effect list: strict native scanners (JaraxxusHeroSpell) cannot see the enclosing PLAY's FULL.
-    // Cross only unrelated tags under the same-source PLAY; never cross a use of the new entity.
-    private void NormalizeHeroPowerOwnership(List<PowerHistoryData> list)
-    {
-        var heroes = wireEntities.Where(p => p.Value.CardType == (int)CardType.HERO)
-            .ToDictionary(p => p.Key, p => p.Value.Controller);
-        var blocks = new Stack<PowerHistoryStart>();
-        for (int i = 0; i < list.Count; i++)
-        {
-            var data = list[i];
-            var snapshot = data.HasFullEntity ? data.FullEntity : data.HasShowEntity ? data.ShowEntity : data.HasChangeEntity ? data.ChangeEntity : null;
-            if (snapshot != null)
-            {
-                var type = snapshot.Tags.FirstOrDefault(t => t.Name == (int)GameTag.CARDTYPE);
-                if (type != null && type.Value != (int)CardType.HERO) heroes.Remove(snapshot.Entity);
-                else if (type?.Value == (int)CardType.HERO || heroes.ContainsKey(snapshot.Entity))
-                    heroes[snapshot.Entity] = snapshot.Tags.FirstOrDefault(t => t.Name == (int)GameTag.CONTROLLER)?.Value
-                        ?? (heroes.TryGetValue(snapshot.Entity, out int owner) ? owner : 0);
-            }
-            if (data.HasTagChange && data.TagChange.Tag == (int)GameTag.CONTROLLER && heroes.ContainsKey(data.TagChange.Entity))
-                heroes[data.TagChange.Entity] = data.TagChange.Value;
-            if (data.HasFullEntity && snapshot.Tags.Any(t => t.Name == (int)GameTag.CARDTYPE && t.Value == (int)CardType.HERO_POWER)
-                && blocks.Count > 0)
-            {
-                int nextIndex = i + 1;
-                while (nextIndex < list.Count && list[nextIndex].HasTagChange
-                    && list[nextIndex].TagChange.Entity != snapshot.Entity && list[nextIndex].TagChange.Value != snapshot.Entity
-                    && !(list[nextIndex].TagChange.Entity == blocks.Peek().Source && list[nextIndex].TagChange.Tag == (int)GameTag.CONTROLLER)) nextIndex++;
-                if (nextIndex >= list.Count || !list[nextIndex].HasPowerStart) continue;
-                var next = list[nextIndex].PowerStart;
-                var parent = blocks.Peek();
-                if ((int)next.Type == (int)BlockType.POWER && (int)parent.Type == (int)BlockType.PLAY
-                    && parent.Source == next.Source && heroes.TryGetValue(next.Source, out int owner)
-                    && owner != 0 && snapshot.Tags.Any(t => t.Name == (int)GameTag.CONTROLLER && t.Value == owner))
-                {
-                    list.RemoveAt(i); list.Insert(nextIndex, data);
-                    data = list[i];
-                }
-            }
-            if (data.HasPowerStart) blocks.Push(data.PowerStart);
-            else if (data.HasPowerEnd && blocks.Count > 0) blocks.Pop();
-        }
     }
 
     private static int HistoryEntity(PowerHistoryData data) => data.HasFullEntity ? data.FullEntity.Entity
@@ -5869,7 +5823,7 @@ public sealed class NativeMatch
             if (!list[start].HasPowerStart || (int)list[start].PowerStart.Type != (int)BlockType.PLAY) continue;
             int source = list[start].PowerStart.Source;
             if (!wireEntities.TryGetValue(source, out var played) || played.Controller != HumanPlayerId
-                || played.CardType is 1 or 2 or 3 or 6) continue;
+                || played.CardType is 1 or 2 or 6) continue;
             // The block's own task lists: rows outside nested blocks and sub-spells, split at each of them and after metadata 21.
             var lists = new List<List<int>>();
             List<int> open = null;
@@ -5897,14 +5851,18 @@ public sealed class NativeMatch
                     var snapshot = row.HasFullEntity ? row.FullEntity : row.HasShowEntity ? row.ShowEntity : row.HasChangeEntity ? row.ChangeEntity : null;
                     if (snapshot != null)
                     {
-                        if (snapshot.Tags.Any(t => t.Name == (int)GameTag.CARDTYPE && t.Value is 1 or 2 or 6)) cardless.Add(snapshot.Entity);
+                        if (snapshot.Tags.Any(t => t.Name == (int)GameTag.CARDTYPE && (t.Value is 1 or 2 or 6 || t.Value == 3 && played.CardType == (int)CardType.HERO))) cardless.Add(snapshot.Entity);
                         if (snapshot.Entity == source && snapshot.Tags.Any(t => t.Name == (int)GameTag.ZONE && t.Value == (int)EngineZone.PLAY)) entersPlay = true;
                     }
                     if (row.HasTagChange && row.TagChange.Entity == source && row.TagChange.Tag == (int)GameTag.ZONE
                         && row.TagChange.Value == (int)EngineZone.PLAY) entersPlay = true;
                 }
                 if (!entersPlay) continue;
-                bool Cardless(int id) => cardless.Contains(id) || wireEntities.TryGetValue(id, out var known) && known.CardType is 1 or 2 or 6;
+                // A hero card's swap rows (the old and the new hero) stay in PLAY: the client handles the retiring hero there even
+                // during a predicted drop. Its power rows do not: the retired primary power's zone change and the replacement power's
+                // FULL (in that order) go to a processed child list, or the old power actor stays and the new one is never placed.
+                bool Cardless(int id) => cardless.Contains(id) || wireEntities.TryGetValue(id, out var known)
+                    && (known.CardType is 1 or 2 or 6 || known.CardType == 3 && played.CardType == (int)CardType.HERO);
                 var moved = new HashSet<int>();
                 foreach (int at in rows)
                 {
