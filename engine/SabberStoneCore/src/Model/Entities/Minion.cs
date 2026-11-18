@@ -207,7 +207,8 @@ namespace SabberStoneCore.Model.Entities
 				if (removedHealth > 0)
 					Damage -= removedHealth;
 				BaseHealth = cardBaseHealth;
-				if (Damage >= BaseHealth) ToBeDestroyed = true;
+				// A damage-only mark stays a mark (the minion can still be rescued); anything else keeps main's explicit destroy.
+				if (Damage >= BaseHealth && !NativeTags.ContainsKey(Actions.HealingRules.DamageWound)) ToBeDestroyed = true;
 			}
 			else if (Health > cardBaseHealth)
 				Health = cardBaseHealth;
@@ -397,6 +398,36 @@ namespace SabberStoneCore.Model.Entities
             }
 
         }
+
+		/// <summary>The pending death comes from damage alone and Health is above 0 again: the death check spares it.</summary>
+		internal bool RescuedFromDamageWound => NativeTags.ContainsKey(Actions.HealingRules.DamageWound) && base.ToBeDestroyed && Health > 0;
+
+		/// <summary>Called by the death check: drops the damage mark (and the pending death when it was rescued).</summary>
+		internal void SettleDamageWound()
+		{
+			bool rescued = RescuedFromDamageWound;
+			NativeTags.Remove(Actions.HealingRules.DamageWound);
+			if (rescued)
+			{
+				base.ToBeDestroyed = false;
+				ClearPendingDeathCause();
+			}
+		}
+
+		internal void ClearPendingDeathCause()
+		{
+			ClearHistoryDeathCause();
+			NativeTags.Remove(Actions.DeathContextRules.PendingTracker);
+			NativeTags.Remove(Actions.DeathContextRules.FatalOrdinal);
+			NativeTags.Remove(Actions.DeathContextRules.FatalSource);
+		}
+
+		/// <summary>Forgets cached Attack and Health so the next read takes them from the current card.</summary>
+		internal void DropCachedStats()
+		{
+			_modifiedATK = null;
+			_modifiedHealth = null;
+		}
 
 		internal void ResetAttributes()
 		{
@@ -648,11 +679,14 @@ namespace SabberStoneCore.Model.Entities
 
 		public override bool ToBeDestroyed
 		{
-			get => base.ToBeDestroyed;
+			// A damage wound lifted above 0 Health before the death check no longer counts as pending.
+			get => base.ToBeDestroyed && !RescuedFromDamageWound;
 
 			set
 			{
 				if (value && IsDormant) return;
+				// Destroying it explicitly, or resetting it, ends the damage-only wound.
+				NativeTags.Remove(Actions.HealingRules.DamageWound);
 				if (value == base.ToBeDestroyed)
 					return;
 				base.ToBeDestroyed = value;
