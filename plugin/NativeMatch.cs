@@ -2071,6 +2071,9 @@ public sealed class NativeMatch
                 task = ChooseBotTask(Game.Player2.Options());
             }
             Process(task);
+#if ENGINE_SOURCE
+            DebugScenario?.NpcPlayProcessed(task, DebugScenarioLog);
+#endif
             if (mulliganChoice != null) SendOpposingChosen(mulliganChoice, ((ChooseTask)task).Choices);
 #if ENGINE_SOURCE
             if (rewindChoice != null) SendChosen(rewindChoice, ((ChooseTask)task).Choices);
@@ -2144,6 +2147,10 @@ public sealed class NativeMatch
     internal IGoldenDecisionJob BeginNpcDecision(GoldenContext context)
     {
         var tasks = NpcTasks();
+#if ENGINE_SOURCE
+        var scripted = DebugScenario?.NextNpcPlay(Game, tasks, DebugScenarioLog);
+        if (scripted != null) return new ReadyNpcDecision(DriverTrace.Forced("npc-play-next-scenario", scripted));
+#endif
         if (DebugScenario?.HeroAttack == "npc")
         {
             var attack = tasks.FirstOrDefault(t => t.PlayerTaskType == PlayerTaskType.HERO_ATTACK && t.Target == Game.Player1.Hero);
@@ -2241,6 +2248,9 @@ public sealed class NativeMatch
         npcDiagnosticDecision = decision;
         try { Process(task); }
         finally { npcDiagnosticDecision = null; }
+#if ENGINE_SOURCE
+        DebugScenario?.NpcPlayProcessed(task, DebugScenarioLog);
+#endif
 #if ENGINE_SOURCE
         if (rewindChoice != null) SendChosen(rewindChoice, ((ChooseTask)task).Choices);
 #endif
@@ -2450,6 +2460,20 @@ public sealed class NativeMatch
     private PlayerTask ChooseBotTask(List<PlayerTask> tasks)
     {
         npcDiagnosticDecision = null;
+#if ENGINE_SOURCE
+        var scripted = DebugScenario?.NextNpcPlay(Game, tasks, DebugScenarioLog);
+        if (scripted != null)
+        {
+            // Same journal row the frame-sliced path writes (the recorder never reads the profile, so a plain bot's can be null).
+            try
+            {
+                matchRecorder.OnDecision(new GoldenContext(Game.Turn, ++decisionIndex, unchecked(997 * Game.Turn + decisionIndex * 31), npcProfile),
+                    new ReadyNpcDecision(DriverTrace.Forced("npc-play-next-scenario", scripted)).Result, "forced", false, 0, 0, 0);
+            }
+            catch (Exception error) when (!(error is OutOfMemoryException)) { BotTrace?.Invoke("npc-play-next-scenario journal fault=" + error.GetType().Name); }
+            return scripted;
+        }
+#endif
         if (DebugScenario?.HeroAttack == "npc")
         {
             var attack = tasks.FirstOrDefault(t => t.PlayerTaskType == PlayerTaskType.HERO_ATTACK && t.Target == Game.Player1.Hero);
