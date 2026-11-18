@@ -107,6 +107,10 @@ if (args.Contains("--time-travel-s2-only")) { StandardSetsProof.Run(timeTravelS2
 if (args.Length > 0 && args[0] == "--split-effects-only") { SplitEffectProof.Run(args.Length > 1 ? args[1] : null); return; }
 
 if (args.Contains("--pool-caches-only")) { PoolCacheIsolationProof.Run(); return; }
+if (args.Contains("--match-random-pools-only")) { MatchRandomPoolProof.Run(); return; }
+if (args.Contains("--match-random-regressions-only")) { MatchRandomRegressionProof.Run(); return; }
+if (args.Contains("--match-random-percard-only")) { MatchRandomSamplerProof.PerCardOnly(); return; }
+if (args.Length >= 1 && args[0] == "--match-random-sampler-only") { MatchRandomSamplerProof.Run(args.Skip(1).ToArray()); return; }
 if (args.Length == 2 && args[0] == "--pool-criteria-child") { PoolCacheIsolationProof.CriteriaChild(int.Parse(args[1])); return; }
 if (args.Contains("--b13-forced-cards-only")) { StandardSetsProof.Run(selectedProofs: new Action[] { MythicalTerrorProof.Run, RampagingHoundProof.Run, IllidariInquisitorProof.Run, WarmaulChallengerProof.Run, TREEEESProof.Run, HighCultistHerennProof.Run, HoundsOfFuryProof.Run, BefuddledSummonerProof.Run, AnkylodonProof.Run }); return; }
 if (args.Contains("--enemy-board-copy-only")) { EnemyBoardCopyProof.Run(); return; }
@@ -466,6 +470,9 @@ OfflinePoolReplayProof.Run();
 LegacyPoolEligibilityProof.Run();
 OfflinePoolLegacyCompatibilityProof.Run();
 PoolCacheIsolationProof.Run();
+MatchRandomPoolProof.Run();
+MatchRandomRegressionProof.Run();
+MatchRandomSamplerProof.Run(quick: true);
 PoolInitOrderProof.Run();
 
 static void Check(bool condition, string message)

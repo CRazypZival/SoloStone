@@ -81,6 +81,9 @@ internal static partial class Program
         foreach (string moved in new[] { "--rematch-only", "--canonical-privacy-assertions-only" })
             if (args.Contains(moved)) throw new ArgumentException(moved + " moved to the native-match-logic suite");
         ControllerAdmissionInvariant.Install();
+        if (args.Contains("--choice-timeout-only")) { NativeMatch.ClockFreeBot = true; TimedChoiceCompletionNative(); return; }
+        if (args.Contains("--softlock-only")) { NativeMatch.ClockFreeBot = true; ForefatherGuessNative(); AnnouncerRewindDeathKnightNative(); ForefatherFromDiscoverNative(); ForefatherNpcGuessNative(); NpcGuessForcedPicksNative(); NpcGuessTwoHeldNative(); NpcGuessHeldThenHumanGuessNative(); GlimmerrootGuessNative(); TimedChoiceCompletionNative(); return; }
+        if (args.Contains("--ledgerline-only")) { NativeMatch.ClockFreeBot = true; NpcWorldIntegrationTests.LedgerlineForefatherGuess(); return; }
         if (args.Contains("--match-event-log-review-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogReview(); return; }
         if (args.Contains("--match-event-log-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogNative(); return; }
         if (args.Contains("--held-form-overlay-only")) { NativeMatch.ClockFreeBot = true; HeldFormOverlayHistory(); return; }
@@ -97,12 +100,14 @@ internal static partial class Program
         if (args.Contains("--locations-only")) { NativeMatch.ClockFreeBot = true; LocationActivationHistory(); LocationOptions(); return; }
         if (args.Contains("--plague-only")) { NativeMatch.ClockFreeBot = true; PlagueAttackShuffle(); FreshDeckShuffleHistory(); ArrivalCastsWhenDrawn(); return; }
         if (args.Contains("--shuffle-choice-only")) { NativeMatch.ClockFreeBot = true; DiscoveredShuffleCompletion(); return; }
+        if (args.Contains("--adaptive-tag-only")) { NativeMatch.ClockFreeBot = true; AdaptiveTagHistory(); return; }
         if (args.Contains("--shuffle-only")) { NativeMatch.ClockFreeBot = true; GeneratedShuffleHistory(); return; }
         if (args.Contains("--shuffle-batch-only")) { NativeMatch.ClockFreeBot = true; ShuffleBatchHistory(); return; }
         if (args.Contains("--hero-skin-only")) { HeroSkinPresentationTests(); return; }
         if (args.Contains("--board-identity-only")) { NativeMatch.ClockFreeBot = true; BoardIdentityHistory(); return; }
         if (args.Contains("--rewind-presentation-only")) { RewindPresentationTags(); return; }
         if (args.Contains("--announcer-rewind-only")) { NativeMatch.ClockFreeBot = true; AnnouncerRewindHistory(); return; }
+        if (args.Contains("--hidden-hand-only")) { NativeMatch.ClockFreeBot = true; HiddenHandCardHistory(); return; }
         if (args.Contains("--king-llane-only")) { NativeMatch.ClockFreeBot = true; KingLlanePlayHistory(); return; }
         if (args.Contains("--vanguard-only")) { NativeMatch.ClockFreeBot = true; VanguardDrawHistory(); return; }
         if (args.Contains("--broxigar-only")) { NativeMatch.ClockFreeBot = true; BroxigarReturnHistory(); return; }
@@ -220,6 +225,7 @@ internal static partial class Program
         AutomaticSecretHistory();
         FacelessEnigmaHistory();
         HeroReplacementHistory();
+        HiddenHandCardHistory();
         EnchantmentVisibilityHistory();
         BoardPositionContract();
         DiscoverSpellLifecycle("CORE_WON_350",scheduledRepeat:true);
@@ -232,6 +238,7 @@ internal static partial class Program
         ChaosStrikeHistory();
         CthunNativeProof();
         HolyBolaHistory();
+        AdaptiveTagHistory();
         GeneratedShuffleHistory();
         ShuffleBatchHistory();
         ModernSubSpellHistory();
@@ -248,6 +255,13 @@ internal static partial class Program
         BroxigarReturnHistory();
         KingLlanePlayHistory();
         AnnouncerRewindHistory();
+        ForefatherGuessNative();
+        AnnouncerRewindDeathKnightNative();
+        ForefatherFromDiscoverNative();
+        ForefatherNpcGuessNative();
+        NpcGuessForcedPicksNative(); NpcGuessTwoHeldNative(); NpcGuessHeldThenHumanGuessNative();
+        GlimmerrootGuessNative();
+        TimedChoiceCompletionNative();
         GroupProofs.Run(ProofKind.Native);
         if (args.Contains("--hand-buff-only")) return;
         OverloadManaParity();
@@ -1620,7 +1634,9 @@ internal static partial class Program
                 var discoverOwner = discoverGame.CurrentPlayer;
                 Check(new DiscoverTask().Process(discoverGame, discoverOwner, discoverGame.IdEntityDic[source.Id], null) == TaskState.COMPLETE
                     && discoverOwner.Choice?.Choices.Count > 0
-                    && discoverOwner.Choice.Choices.All(entity => discoverOwner.Wild.Contains(discoverGame.IdEntityDic[entity].Card)),
+                    // Discover reads the match's pool (the Standard policy), not the frozen legacy lists.
+                    && discoverOwner.Choice.Choices.All(entity => Cards.RandomPool(discoverGame, PoolDestination.Hand)
+                        .ClassAndNeutral(discoverOwner.HeroClass).Contains(discoverGame.IdEntityDic[entity].Card)),
                     "INVALID source Discover resolves controller class: " + id + "/" + loaner.Hero);
                 // Quest spells are deliberately absent from random pools; admitted dual-class cards use export membership.
                 bool admitted = game.OfflinePools.Standard.Any(member => member.CardId == id);
