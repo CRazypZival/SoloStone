@@ -939,6 +939,21 @@ namespace SabberStoneCore.Kettle
                 || snapshot.Tags[GameTag.CONTROLLER] != controller) return false;
             cardId = snapshot.Name; cost = snapshot.Tags[GameTag.COST]; return true;
         }
+        // #195: retail names a when-drawn card that leaves the hand in its DECK draw SHOW, with REVEALED=1. Whether it leaves
+        // is known only after the draw triggers ran (Eredar Deceptor can fill the board, and the Illusion then stays in
+        // hand), so Draw.CompleteDraw marks the SHOW when the card really leaves. Last is cleared per processed task, so a
+        // SHOW still in it has not been sent; one already sent stays anonymous, and the card is named in its TOPDECK block.
+        internal void RevealDrawShow(int entityId)
+        {
+            for (int i = Last.Count - 1; i >= 0; i--)
+                if (Last[i] is PowerHistoryShowEntity show && show.Entity.Id == entityId
+                    && show.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone) && zone == (int)Zone.DECK)
+                {
+                    show.Entity.Tags[GameTag.REVEALED] = 1;
+                    return;
+                }
+        }
+
         internal void RememberRevealedHand(IPlayable card)
         {
             if (card[GameTag.ZONE] == (int)Zone.HAND && card[GameTag.REVEALED] != 0)

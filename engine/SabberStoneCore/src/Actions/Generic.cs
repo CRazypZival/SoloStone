@@ -131,16 +131,13 @@ namespace SabberStoneCore.Actions
 				using var visual = c.Game.History && entryKind != HistoryHandEntryKind.Other
 					? c.Game.PowerHistory.Visual(c.Game, entryKind == HistoryHandEntryKind.Draw
 						? Presentation.VisualPhase.Draw : Presentation.VisualPhase.Create, target: playable) : null;
-				// Retail ordinary draws SHOW HAND; automatic draws SHOW DECK before HAND and the TOPDECK trigger, with
-				// REVEALED=1 when the card resolves out of the hand (retail SCH_307t/AT_035t draws, both seats).
+				// Retail ordinary draws SHOW HAND; automatic draws SHOW DECK before HAND and the TOPDECK trigger. A when-drawn
+				// card that then leaves the hand gets REVEALED on this SHOW from CompleteDraw (PowerHistory.RevealDrawShow).
 				if (c.Game.History && playable != null)
 				{
 					var show = PowerHistoryBuilder.ShowEntity(playable);
 					if (show.Entity.Tags[GameTag.ZONE] == (int)Zone.DECK && playable.Power?.TopdeckTask == null)
 						show.Entity.Tags[GameTag.ZONE] = (int)Zone.HAND;
-					else if (show.Entity.Tags[GameTag.ZONE] == (int)Zone.DECK && (entryKind == HistoryHandEntryKind.Draw
-						|| entryKind == HistoryHandEntryKind.TurnStartDraw) && LeavesHandWhenDrawn(c, playable))
-						show.Entity.Tags[GameTag.REVEALED] = 1;
 					c.Game.PowerHistory.Add(show);
 				}
 

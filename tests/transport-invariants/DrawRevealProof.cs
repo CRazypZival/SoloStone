@@ -38,12 +38,19 @@ internal static class DrawRevealProof
         void Expect(bool value, string message) { if (!value) failures.Add(message); }
         foreach (string card in drawn)
         foreach (int drawer in new[] { 1, 2 })
-        foreach (string mode in new[] { "room", "full-board", "full-hand" })
+        foreach (string mode in new[] { "room", "full-board", "full-hand", "draw-trigger-fills-board" })
         {
             var (game, session, traces) = Start(drawer);
             var owner = game.CurrentPlayer;
             if (mode == "full-board")
                 for (int i = 0; i < 7; i++) Generic.SummonBlock(game, (Minion)Entity.FromCard(owner, Cards.FromId("CS2_231")), -1, null);
+            // Eredar Deceptor's draw trigger runs after the draw SHOW and fills the seventh slot: an Illusion then stays in
+            // hand, so its SHOW must not have been revealed (review of 8f678b9).
+            if (mode == "draw-trigger-fills-board")
+            {
+                for (int i = 0; i < 5; i++) Generic.SummonBlock(game, (Minion)Entity.FromCard(owner, Cards.FromId("CS2_231")), -1, null);
+                Generic.SummonBlock(game, (Minion)Entity.FromCard(owner, Cards.FromId("CORE_TTN_843")), -1, null);
+            }
             if (mode == "full-hand")
                 while (owner.HandZone.Count < 10) Entity.FromCard(owner, Cards.FromId("CS2_182"), zone: owner.HandZone);
             var top = Entity.FromCard(owner, Cards.FromId(card), zone: owner.DeckZone);
@@ -83,12 +90,27 @@ internal static class DrawRevealProof
         Check(revealed > 0, "opponent draws exercised");
         FaceUpDrawRoutes();
         HiddenRetirements();
-        Console.WriteLine($"PASS draw reveal transport: {drawn.Length} when-drawn cards x both seats x room/full board/full hand = {cases} cases; opponent reveals={revealed}; no nameless public actor");
+        Console.WriteLine($"PASS draw reveal transport: {drawn.Length} when-drawn cards x both seats x room/full board/full hand/draw trigger filling the board = {cases} cases; opponent reveals={revealed}; no nameless public actor");
     }
 
     private static List<PowerHistoryData> Wire(NativeSession session, int cursor) => session.Packets.Skip(cursor).Where(p => p.Id == 19)
         .SelectMany(p => { var h = new NativeHistory(); using var s = new MemoryStream(Convert.FromBase64String(p.Base64)); h.Deserialize(s); return h.List; })
         .ToList();
+
+    // The client evaluates a drawn card's hold against the task lists it has queued, so the draw SHOW and its TOPDECK
+    // block must arrive in one native packet (#195 human-seat check).
+    private static string SplitTopdeck(NativeSession session, int cursor, int id)
+    {
+        int show = -1, trigger = -1, index = 0;
+        foreach (var packet in session.Packets.Skip(cursor).Where(p => p.Id == 19))
+        {
+            var h = new NativeHistory(); using (var s = new MemoryStream(Convert.FromBase64String(packet.Base64))) h.Deserialize(s);
+            if (show < 0 && h.List.Any(e => e.HasShowEntity && e.ShowEntity.Entity == id)) show = index;
+            if (trigger < 0 && h.List.Any(e => e.HasPowerStart && e.PowerStart.Source == id && e.PowerStart.TriggerKeyword == (int)GameTag.TOPDECK)) trigger = index;
+            index++;
+        }
+        return trigger >= 0 && show != trigger ? $"draw SHOW in packet {show}, TOPDECK block in packet {trigger}" : null;
+    }
 
     // #195: retail draws a Casts/Summoned When Drawn card with one SHOW at ZONE=DECK that names it and carries REVEALED=1,
     // then moves it to HAND, then opens the TOPDECK TRIGGER (Soul Fragment SCH_307t as friendly and as opponent, Nerubian
@@ -104,8 +126,8 @@ internal static class DrawRevealProof
         if (show < 0 || hand < show) return $"draw SHOW at {show} must precede the HAND move at {hand}";
         var snapshot = wire[show].ShowEntity;
         if (!leaves)
-            return opponent && (!string.IsNullOrEmpty(snapshot.Name) || Value(snapshot, GameTag.REVEALED) != 0)
-                ? "a when-drawn card held in the opponent's hand must stay private" : null;
+            return Value(snapshot, GameTag.REVEALED) != 0 || opponent && !string.IsNullOrEmpty(snapshot.Name)
+                ? $"a when-drawn card that stays in hand must not be revealed, got name='{snapshot.Name}' REVEALED={Value(snapshot, GameTag.REVEALED)}" : null;
         if (snapshot.Name != card || Value(snapshot, GameTag.REVEALED) != 1 || Value(snapshot, GameTag.ZONE) != (int)Zone.DECK)
             return $"draw SHOW must name {card} with REVEALED=1 at ZONE=DECK before the HAND move, got name='{snapshot.Name}' "
                 + $"REVEALED={Value(snapshot, GameTag.REVEALED)} ZONE={Value(snapshot, GameTag.ZONE)}";
@@ -143,7 +165,7 @@ internal static class DrawRevealProof
             int cursor = session.Packets.Count;
             session.Process(PlayCardTask.Any(owner, spell));
             var wire = Wire(session, cursor);
-            string effect = FaceUpDrawViolation(wire, top.Id, card, top.Zone?.Type != Zone.HAND, drawer == 2);
+            string effect = FaceUpDrawViolation(wire, top.Id, card, top.Zone?.Type != Zone.HAND, drawer == 2) ?? SplitTopdeck(session, cursor, top.Id);
             Check(effect == null, $"{card}-p{drawer} card-effect draw: " + effect);
             int power = wire.FindIndex(e => e.HasPowerStart && e.PowerStart.Source == spell.Id);
             Check(power >= 0 && power < wire.FindIndex(e => e.HasShowEntity && e.ShowEntity.Entity == top.Id),
@@ -154,7 +176,8 @@ internal static class DrawRevealProof
             Flush(game, session);
             cursor = session.Packets.Count;
             session.Process(EndTurnTask.Any(owner));
-            string turn = FaceUpDrawViolation(Wire(session, cursor), turnTop.Id, card, turnTop.Zone?.Type != Zone.HAND, next == game.Player2);
+            string turn = FaceUpDrawViolation(Wire(session, cursor), turnTop.Id, card, turnTop.Zone?.Type != Zone.HAND, next == game.Player2)
+                ?? SplitTopdeck(session, cursor, turnTop.Id);
             Check(turn == null, $"{card}-p{next.PlayerId} turn-start draw: " + turn);
             cases += 2;
         }

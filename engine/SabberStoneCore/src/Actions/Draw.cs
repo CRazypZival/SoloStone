@@ -110,7 +110,10 @@ namespace SabberStoneCore.Actions
                     game.PowerHistory.Add(PowerHistoryBuilder.BlockStart(BlockType.TRIGGER, playable.Id, "", 0, 0,
                         effectIndex: 0, triggerKeyword: (int)GameTag.TOPDECK));
                 if (LeavesHandWhenDrawn(controller, playable))
+                {
+                    if (game.History) game.PowerHistory.RevealDrawShow(playable.Id);
                     controller.SetasideZone.Add(controller.HandZone.Remove(playable));
+                }
                 game.Log(LogLevel.INFO, BlockType.TRIGGER, "TOPDECK",
                     !game.Logging ? "" : $"{playable}'s TOPDECK effect is activated.");
                 using (var cast = playable is Spell drawn && (drawn.Card[GameTag.CASTSWHENDRAWN] != 0
@@ -130,8 +133,11 @@ namespace SabberStoneCore.Actions
 
         // A when-drawn card leaves the hand for its TOPDECK effect (cast, summoned, or a summon that fails to the
         // graveyard); an Illusion with no room to summon keeps its hand residence. Such a draw is public: its draw SHOW
-        // carries REVEALED (AddHandPhase), as in retail, so the native client shows the drawn card face up (for the
-        // opponent too) and holds it there until the TOPDECK block moves it out of the hand.
+        // carries REVEALED, as in retail, so the native client shows the drawn card face up (for the opponent too) and
+        // holds it there until the TOPDECK block moves it out of the hand. This is the only "leaves the hand" rule and it
+        // is read once, after the draw triggers, where the card really moves: a card held in hand is never revealed.
+        // #165 merge rule: "When you draw this" minions without Summoned When Drawn (tag 3128; #165's staysInHand,
+        // e.g. Flame Leviathan, Sea Reaver) stay in hand, so that rule must live in this function, never beside it.
         internal static bool LeavesHandWhenDrawn(Controller controller, IPlayable playable) =>
             playable.Power?.TopdeckTask != null && (playable.Card.Id != "EDR_260t" || !controller.BoardZone.IsFull);
 
