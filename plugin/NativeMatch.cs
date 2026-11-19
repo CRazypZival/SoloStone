@@ -1097,8 +1097,9 @@ public sealed class NativeMatch
             .Select(id => toClient.TryGetValue(id, out int proxy) ? proxy : id).Where(shown.Entities.Contains).Distinct().ToList();
         var proxies = new HashSet<int>(picks.Where(opposingProxies.ContainsKey));
         NoteGuessResult(shown, shown.Entities, id => opposingProxies.TryGetValue(id, out int engine) ? engine : id, (opposingPicks ?? new List<int>()));
+        LogOpposingHold(true);
         opposingChoices = null; opposingChoiceSource = null; opposingChoiceOriginals = null; opposingPicks = null;
-        LogOpposingHold(true); opposingProxies.Clear(); opposingShownAt = opposingRevealedAt = -1; opposingPacing = null;
+        opposingProxies.Clear(); opposingShownAt = opposingRevealedAt = -1; opposingPacing = null;
         // Game over: the native OnGameOver cancels every shown choice itself.
         if (Game.State == State.COMPLETE) { deferredOpposing.Clear(); return (null, null, null); }
         if (deferredOpposing.Count > 0 || !OpposingChoiceReceived(shown.Index))
@@ -1210,7 +1211,7 @@ public sealed class NativeMatch
 
     // Before the NPC commits a pick, in milliseconds still to hold (0: go). All of it sits outside the runner's 4 s
     // artificial-delay budget and every wait is bounded (OpposingChoicePacing): the client has dealt this choice's backs
-    // (counted while its power queue is idle, so a busy client does not use the wait up), the choice source's play spell
+    // (3 s of unbroken power-queue idle before giving up), the decision-battlecry source's play spell
     // has ended (an answer that lands on a running spell restarts it, #238), then the beat. A late deal is still safe:
     // EntitiesChosen waits for it.
     internal double OpposingChoiceHold(BotAction action)
@@ -1220,13 +1221,14 @@ public sealed class NativeMatch
         bool powerIdle;
         try { powerIdle = NativeNpcPowerIdle?.Invoke() ?? true; } catch (Exception) { powerIdle = true; }
         int sourceId = opposingChoiceSource?.SourceId ?? 0;
-        bool gate = false;
-        try { gate = sourceId > 0 && Game.IdEntityDic.TryGetValue(sourceId, out var sourceEntity) && OpposingChoicePacing.SpellWaitApplies(sourceEntity.Card.Type); }
+        bool sourceIsDecisionBattlecry = false;
+        try { sourceIsDecisionBattlecry = sourceId > 0 && Game.IdEntityDic.TryGetValue(sourceId, out var sourceEntity)
+            && sourceEntity.Power?.PowerTask is SabberStoneCore.Tasks.SimpleTasks.DecisionBattlecryTask; }
         catch (Exception) { }
-        Func<bool> spell = NativeOpposingSourceSpellActive == null || !gate ? (Func<bool>)null
+        Func<bool> spell = NativeOpposingSourceSpellActive == null ? (Func<bool>)null
             : () => NativeOpposingSourceSpellActive(sourceId);
         double hold = opposingPacing.Hold(NpcClock(), opposingRevealedAt, OpposingChoiceBeatMilliseconds(npcProfile?.Personality),
-            powerIdle, spell, NpcTurnDeadlineLeft());
+            powerIdle, sourceIsDecisionBattlecry, spell, NpcTurnDeadlineLeft());
         if (hold <= 0) LogOpposingHold(false);
         return hold;
     }

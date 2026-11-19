@@ -1,12 +1,11 @@
 using System;
-using SabberStoneCore.Enums;
 
 // How long the NPC waits before it answers a choice the client shows as card backs (#162, #238).
 // A decision battlecry such as Elise the Navigator answers in several steps, and the client runs the card's one shared play
 // spell again for each step. If an answer lands while the spell of the step before is still alive, the client restarts the
 // spell on top of itself and a fullscreen part of it never ends. So the NPC waits, in this order:
-//  1. the deal: the client has dealt the backs. The wait counts only the time the client's power queue is idle (a busy
-//     client cannot deal), at most DealWaitMilliseconds of it;
+//  1. the deal: the client has dealt the backs, or its power queue has been idle for DealWaitMilliseconds
+//     without interruption (a busy client cannot deal and resets the idle wait);
 //  2. the source's play spell: it has ended, at most SpellWaitMilliseconds;
 //  3. the beat: a human-plausible look at the dealt backs, counted from the deal.
 // Steps 1 and 2 share one hard cap (WaitCapMilliseconds) from the first time the pick is ready, and end early when
@@ -24,12 +23,8 @@ internal sealed class OpposingChoicePacing
     // engine, not the timer's default answer.
     internal const double BeatDeadlineMarginMilliseconds = 500;
 
-    // Only a minion or hero source can restart a running play spell with its next answer: its battlecry choice closes
-    // the PLAY and POWER blocks and each answer opens a new POWER block (decision battlecries). A Discover spell, a location
-    // or a hero power keeps its block open across the choice, so its spell is still running by design and waiting for it
-    // would only run into the cap. TLC_100, CAP_405, CATA_470 are minions and CATA_190h is a hero card.
-    internal static bool SpellWaitApplies(CardType source) => source == CardType.MINION || source == CardType.HERO;
-
+    // Decision battlecries (minions, heroes and weapons) close PLAY/POWER blocks across choices; each answer opens a new
+    // POWER block and can restart the shared play spell. Ordinary Discover keeps its block open and must not wait for it.
     private double started = -1, idleSince = -1, spellSince = -1, spellWaited;
 
     internal bool Started => started >= 0;
@@ -42,9 +37,9 @@ internal sealed class OpposingChoicePacing
 
     // Milliseconds to keep holding the pick; 0 releases it. revealedAt < 0: not dealt yet. beat: the look at the backs.
     // sourceSpellActive may be null (nothing to probe) and may throw (counts as ended). deadlineLeft may be infinity.
-    internal double Hold(double now, double revealedAt, double beat, bool powerIdle, Func<bool> sourceSpellActive, double deadlineLeft)
+    internal double Hold(double now, double revealedAt, double beat, bool powerIdle, bool sourceIsDecisionBattlecry, Func<bool> sourceSpellActive, double deadlineLeft)
     {
-        double hold = Step(now, revealedAt, beat, powerIdle, sourceSpellActive, deadlineLeft);
+        double hold = Step(now, revealedAt, beat, powerIdle, sourceIsDecisionBattlecry, sourceSpellActive, deadlineLeft);
         if (hold <= 0 && Released == null) { Released = releaseReason ?? "deal"; WaitedMilliseconds = now - started; }
         return hold;
     }
@@ -59,7 +54,7 @@ internal sealed class OpposingChoicePacing
         Released = "canact"; WaitedMilliseconds = now - started;
     }
 
-    private double Step(double now, double revealedAt, double beat, bool powerIdle, Func<bool> sourceSpellActive, double deadlineLeft)
+    private double Step(double now, double revealedAt, double beat, bool powerIdle, bool sourceIsDecisionBattlecry, Func<bool> sourceSpellActive, double deadlineLeft)
     {
         if (started < 0) started = now;
         bool nearDeadline = deadlineLeft <= DeadlineMarginMilliseconds, capped = now - started >= WaitCapMilliseconds;
@@ -71,7 +66,7 @@ internal sealed class OpposingChoicePacing
             if (now - idleSince < DealWaitMilliseconds) return 100;
             releaseReason = "cap";
         }
-        if (waiting && SpellActive(sourceSpellActive))
+        if (waiting && sourceIsDecisionBattlecry && SpellActive(sourceSpellActive))
         {
             if (spellSince < 0) spellSince = now;
             spellWaited = now - spellSince;
