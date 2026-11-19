@@ -483,6 +483,7 @@ namespace SabberStoneCore.Model
 
 			foreach (BoardObject location in game.DeadBoardObjects)
                 DeadBoardObjects.Add((BoardObject)IdEntityDic[location.Id]);
+			CycleBudgetExhausted = game.CycleBudgetExhausted;
 
             // Resolve cross-entity references only after both controllers and the registry exist.
 			foreach (var pair in IdEntityDic)
@@ -1558,26 +1559,15 @@ namespace SabberStoneCore.Model
             using var deathContext = Actions.DeathContextRules.EnterDeaths(this);
 			//Inter-Phase steps
 			
+			using var cycles = new CleanupCycleScope(this);
 			AuraUpdate();
-
-			// Summon Resolution Step
-			if (TriggerManager.HasOnSummonTrigger)
-			{
-				using var summonCatchUp = Resolution.Enter(ResolutionKind.SummonOn);
-                List<Minion> minions = SummonedMinions;
-				TaskQueue.StartEvent();
-				for (int i = 0; i < minions.Count; i++)
-				{
-					TriggerManager.OnSummonTrigger(minions[i]);
-				}
-				ProcessTasks();
-				TaskQueue.EndEvent();
-			}
-			SummonedMinions.Clear();
+			SummonResolutionStep();
 
 			TaskQueue.StartEvent();
 			do
 			{
+				// Each Death Phase with deaths to resolve spends one cycle.
+				if ((DeadMinions.Count != 0 || DeadBoardObjects.Count != 0) && !SpendCleanupCycle()) break;
 				var playAuras = DeadMinions.Count != 0 || DeadBoardObjects.Count != 0 || ClearWeapons != null
 					? Auras.Where(aura => aura.Owner.Zone?.Type == Enums.Zone.PLAY
 						|| aura.Owner == Player1.Hero.Weapon || aura.Owner == Player2.Hero.Weapon).ToArray()
@@ -1597,12 +1587,91 @@ namespace SabberStoneCore.Model
 				using (Resolution.Enter(ResolutionKind.DeathResolution))
                     ProcessTasks(); // Death Resolution Phase
 				ResolveReborns();
+				// The Death Phase ends: its Deathrattle and Reborn summons resolve before the next Death Creation Step.
+				if (SummonedMinions.Count != 0)
+				{
+					if (TriggerManager.HasOnSummonTrigger) AuraUpdate();
+					SummonResolutionStep();
+				}
 			} while (DeadMinions.Count != 0 || DeadBoardObjects.Count != 0);
 			TaskQueue.EndEvent();
             if (Actions.LifecycleRules.ContinueDeaths(this)) DeathProcessingAndAuraUpdate();
 
 			AuraUpdate();	// Aura Update (Other) step(Not implemented)
             Actions.Generic.ResolveDeferredSummons(this);
+		}
+
+		// The outermost cleanup starts the budget; nested cleanups spend from it.
+		private readonly struct CleanupCycleScope : IDisposable
+		{
+			private readonly Game _game;
+			public CleanupCycleScope(Game game)
+			{
+				_game = game;
+				if (game._cleanupDepth++ == 0 && !game.CycleBudgetExhausted) game._cleanupCycles = 0;
+			}
+			public void Dispose() => _game._cleanupDepth--;
+		}
+
+		/// <summary>
+		/// Death Phases plus Summon Resolution passes that one outermost cleanup may run, nested cleanups included.
+		/// </summary>
+		public const int MaxCleanupCycles = 1000;
+		private int _cleanupDepth;
+		private int _cleanupCycles;
+
+		/// <summary>
+		/// True once a cleanup ran out of <see cref="MaxCleanupCycles"/>: the game ended in a draw, and later cleanups resolve nothing.
+		/// </summary>
+		public bool CycleBudgetExhausted { get; private set; }
+
+		// The rulebook repeats Death Phases "until no new Deaths occur" and states no limit. A loop that never stops on its own
+		// cannot be resolved, so the death loop and the Summon Resolution Step share one budget per outermost cleanup. Engine
+		// choice, not a rulebook rule: when it runs out the game ends in a draw, as an unbounded game does at the turn limit.
+		private bool SpendCleanupCycle()
+		{
+			if (!CycleBudgetExhausted && ++_cleanupCycles <= MaxCleanupCycles) return true;
+			if (!CycleBudgetExhausted)
+			{
+				CycleBudgetExhausted = true;
+				Log(LogLevel.WARNING, BlockType.PLAY, "Game", !Logging ? "" : $"Cleanup stopped after {MaxCleanupCycles} Death Phases and Summon Resolution passes: the effects loop forever; the game ends in a draw.");
+				CycleBudgetExhaustedDiagnostic?.Invoke($"Cleanup cycle limit={MaxCleanupCycles}");
+				if (State != State.COMPLETE)
+				{
+					Player1.PlayState = PlayState.TIED;
+					Player2.PlayState = PlayState.TIED;
+					NextStep = Step.FINAL_WRAPUP;
+				}
+			}
+			DeadMinions.Clear();
+			DeadBoardObjects.Clear();
+			SummonedMinions.Clear();
+			return false;
+		}
+
+		/// <summary>Called once, with a short reason, when a cleanup runs out of its cycle budget.</summary>
+		public Action<string> CycleBudgetExhaustedDiagnostic;
+
+		// Summon Resolution Step: "whenever you summon" triggers for the summons of the Phase that just ended.
+		// Each batch leaves the list before it fires: a reaction can reach a nested cleanup (an overdrawn IMPFERNAL!), which
+		// must not fire the same summons again. Engine choice, not a rulebook rule (it does not cover summons made during
+		// this step): summons made by the reactions resolve in another pass of the same step, so no summon event is left
+		// pending when the action ends.
+		private void SummonResolutionStep()
+		{
+			while (SummonedMinions.Count != 0)
+			{
+				if (!TriggerManager.HasOnSummonTrigger) { SummonedMinions.Clear(); return; }
+				if (!SpendCleanupCycle()) return;
+				var batch = SummonedMinions.ToArray();
+				SummonedMinions.Clear();
+				using var summonCatchUp = Resolution.Enter(ResolutionKind.SummonOn);
+				TaskQueue.StartEvent();
+				foreach (Minion minion in batch)
+					TriggerManager.OnSummonTrigger(minion);
+				ProcessTasks();
+				TaskQueue.EndEvent();
+			}
 		}
 
 
