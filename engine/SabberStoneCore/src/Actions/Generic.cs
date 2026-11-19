@@ -265,6 +265,27 @@ namespace SabberStoneCore.Actions
 			return ShuffleIntoDeck(c, sender, minion, alreadyHidden: true);
 		}
 
+		/// <summary>
+		/// Takes a minion out of the game for good (Escape Artist): off its board, Reset, ZONE_POSITION=0, HIDE_ENTITY, then
+		/// ZONE=REMOVEDFROMGAME, in the block of the effect that does it. The client has no zone for it and hides it at
+		/// once. The engine keeps it in its setaside zone, where nothing can return it.
+		/// </summary>
+		public static void RemoveMinionFromGame(Minion minion)
+		{
+			var owner = minion.Controller;
+			owner.BoardZone.Remove(minion);
+			minion.Reset();
+			if (owner.Game.History)
+			{
+				// Reset() has already zeroed the engine's tag without a row; the client still holds the board slot.
+				minion[GameTag.ZONE_POSITION] = 0;
+				owner.Game.PowerHistory.Add(PowerHistoryBuilder.TagChange(minion.Id, GameTag.ZONE_POSITION, 0));
+				owner.Game.PowerHistory.Add(PowerHistoryBuilder.HideEntity(minion.Id, Zone.REMOVEDFROMGAME));
+			}
+			owner.SetasideZone.AddWithoutZoneTag(minion);
+			minion[GameTag.ZONE] = (int)Zone.REMOVEDFROMGAME;
+		}
+
 		public static bool ShuffleIntoDeck(Controller c, IEntity sender, IPlayable playable, bool revealGenerated = false, bool alreadyHidden = false)
 			{
 				using var operation = c.Game.Facts.EnsureShuffle(sender?.Controller.Id ?? 0);
