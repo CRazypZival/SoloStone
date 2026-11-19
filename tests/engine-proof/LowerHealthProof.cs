@@ -63,6 +63,16 @@ internal static class LowerHealthProof
             Expect(damaged.Zone.Type == Zone.GRAVEYARD && healthy.BaseHealth == 4 && healthy.Health == 4, $"victims {S(damaged)} / {S(healthy)}");
             Expect(dax.Health == dax.Card.Health + 2, "gains 2: " + S(dax));
         });
+        Probe("TLC_831 Pterrordax Egg: nothing to steal from a minion Abomination left at 0 Health", () => {
+            var g = B15DrawReplacementProof.NewGame(); var p = g.Player1;
+            var victim = Victim(g, 3);                     // 2 current Health
+            var abomination = Summon(p, "EX1_097"); var egg = Summon(p, "TLC_831");
+            abomination.ToBeDestroyed = true; egg.ToBeDestroyed = true;
+            g.DeathProcessingAndAuraUpdate();              // Abomination's 2 damage leaves the Yeti at 0, then the Egg resolves
+            var dax = p.BoardZone.Single(m => m.Card.Id == "TLC_831t");
+            Expect(victim.AppliedEnchantments?.Any(e => e.Card.Id == "TLC_831e") != true && dax.Health == dax.Card.Health,
+                $"no steal from 0 Health: Pterrordax {dax.Health}/{dax.Card.Health}, victim {S(victim)}");
+        });
         Probe("BE_287 G'huun steals", () => {
             var g = B15DrawReplacementProof.NewGame(); var p = g.Player1;
             var damaged = Victim(g, 3); var healthy = Victim(g, 0, 20);
@@ -125,8 +135,8 @@ internal static class LowerHealthProof
             p.Opponent.Hero.Damage = p.Opponent.Hero.BaseHealth - 2;           // current 2: lowest Health enemy
             int mine = p.Hero.BaseHealth, theirs = p.Opponent.Hero.BaseHealth;
             End(g);
-            Expect(p.Hero.BaseHealth == mine + 2 && p.Hero.Health == p.Hero.BaseHealth - p.Hero.Damage
-                && p.Opponent.Hero.BaseHealth == theirs - 2 && p.Opponent.Hero.Health == 0 && p.Opponent.Hero.Damage == theirs - 2,
+            Expect(p.Hero.BaseHealth == mine + 2 && p.Opponent.Hero.BaseHealth == theirs - 2 && p.Opponent.Hero.Health == 0 && p.Opponent.Hero.Damage == theirs - 2
+                && p.Opponent.PlayState == PlayState.LOST,
                 $"hero gains 2, victim hero {p.Opponent.Hero.BaseHealth}/{p.Opponent.Hero.Health}");
         });
         Probe("EDR_810 Bloated Leech short victim", () => {
