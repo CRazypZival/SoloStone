@@ -1098,7 +1098,7 @@ public sealed class NativeMatch
         var proxies = new HashSet<int>(picks.Where(opposingProxies.ContainsKey));
         NoteGuessResult(shown, shown.Entities, id => opposingProxies.TryGetValue(id, out int engine) ? engine : id, (opposingPicks ?? new List<int>()));
         opposingChoices = null; opposingChoiceSource = null; opposingChoiceOriginals = null; opposingPicks = null;
-        opposingProxies.Clear(); opposingShownAt = opposingRevealedAt = -1; opposingPacing = null;
+        LogOpposingHold(true); opposingProxies.Clear(); opposingShownAt = opposingRevealedAt = -1; opposingPacing = null;
         // Game over: the native OnGameOver cancels every shown choice itself.
         if (Game.State == State.COMPLETE) { deferredOpposing.Clear(); return (null, null, null); }
         if (deferredOpposing.Count > 0 || !OpposingChoiceReceived(shown.Index))
@@ -1222,8 +1222,26 @@ public sealed class NativeMatch
         int sourceId = opposingChoiceSource?.SourceId ?? 0;
         Func<bool> spell = NativeOpposingSourceSpellActive == null || sourceId <= 0 ? (Func<bool>)null
             : () => NativeOpposingSourceSpellActive(sourceId);
-        return opposingPacing.Hold(NpcClock(), opposingRevealedAt, OpposingChoiceBeatMilliseconds(npcProfile?.Personality),
+        double hold = opposingPacing.Hold(NpcClock(), opposingRevealedAt, OpposingChoiceBeatMilliseconds(npcProfile?.Personality),
             powerIdle, spell, NpcTurnDeadlineLeft());
+        if (hold <= 0) LogOpposingHold(false);
+        return hold;
+    }
+
+    // One line per opposing choice, when its hold ends: why (deal, spell, cap, deadline, canact) and for how long, so a live
+    // check can tell a release at the spell's end from one at a cap.
+    private void LogOpposingHold(bool abandoned)
+    {
+        var pacing = opposingPacing;
+        if (pacing == null || !pacing.Started || pacing.Logged) return;
+        if (abandoned) pacing.Abandon(NpcClock());
+        if (pacing.Released == null) return;
+        pacing.Logged = true;
+        string card = null;
+        try { card = Game?.IdEntityDic.TryGetValue(opposingChoiceSource?.SourceId ?? 0, out var source) == true ? source.Card.Id : null; } catch (Exception) { }
+        BotTrace?.Invoke(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "NPC_CHOICE_HOLD card={0} released={1} waited={2:F2} spellWait={3:F2}",
+            card ?? "?", pacing.Released, pacing.WaitedMilliseconds / 1000, pacing.SpellWaitedMilliseconds / 1000));
     }
 #else
     internal int OpposingChoiceId => -1;
@@ -5075,7 +5093,7 @@ public sealed class NativeMatch
         revealedEntities.Clear(); visibleTransportTags.Clear(); clientTransportTags.Clear(); clientTransportCards.Clear();
         historicalControllers.Clear(); historicalZones.Clear(); historicalPositions.Clear(); historicalTemporaryVisuals.Clear(); temporaryDiscardVisuals.Clear();
         privacyTargets.Clear(); retiredChoiceActors.Clear(); opposingProxies.Clear(); deckChoiceOriginals.Clear(); privateDeckOffers.Clear(); privateChoiceOffers.Clear(); visibleSubSpells.Clear(); visualBlockSources.Clear(); revealedTriggerScopes.Clear(); pendingTriggerReveals.Clear(); lastSpellPower.Clear(); poweredUpHighlights.Clear();
-        opposingChoices = null; opposingChoiceSource = null; opposingChoiceOriginals = null; opposingPicks = null; deferredOpposing.Clear();
+        opposingChoices = null; opposingChoiceSource = null; opposingChoiceOriginals = null; opposingPicks = null; opposingPacing = null; deferredOpposing.Clear();
         decisionHandTargetSource = 0;
         substitutedTargetSource = 0;
         leylineTextEntities.Clear();

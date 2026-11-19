@@ -595,6 +595,7 @@ internal static partial class Program
             MatchId = "opposing-hold", NativeNpcStartingTaunt = () => false };
         match.NpcClock = () => now; match.NativeNpcIdle = () => true;
         match.NativeOpposingChoiceRevealed = id => revealed;
+        var traced = new List<string>(); match.BotTrace = traced.Add;
         match.NativeNpcPowerIdle = () => !busy;
         match.NativeOpposingSourceSpellActive = id => spell;
         match.Start();
@@ -647,6 +648,9 @@ internal static partial class Program
                     $"a spell that never ends holds the pick for its own cap only: hold={holdStart} answered={answered}");
                 break;
         }
+        string expected = mode == HoldMode.SpellRuns ? "spell" : mode == HoldMode.NeverDeals || mode == HoldMode.SpellNeverEnds ? "cap" : "deal";
+        var logged = traced.Where(l => l.StartsWith("NPC_CHOICE_HOLD")).ToList();
+        Check(logged.Count == 1 && logged[0].Contains("released=" + expected + " "), $"{mode}: one hold line with the release reason {expected}: {string.Join(" | ", logged)}");
         Check(match.NpcRunner.ArtificialDelayMilliseconds == 4000, "the wait spends no pacing budget: " + match.NpcRunner.ArtificialDelayMilliseconds);
         match.StopNpc();
         Console.WriteLine($"CHECK opposing choice backs: runner hold {mode} waited={answered - holdStart:F0}ms, budget untouched");

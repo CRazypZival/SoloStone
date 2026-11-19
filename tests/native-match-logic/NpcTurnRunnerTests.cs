@@ -1081,7 +1081,27 @@ internal static class NpcTurnRunnerTests
         // Near the turn's deadline the waits give way; the beat remains.
         var late = new OpposingChoicePacing();
         Check(late.Hold(0, -1, beat, false, () => true, OpposingChoicePacing.DeadlineMarginMilliseconds) == 0, "turn deadline: no wait for the deal");
-        Check(late.Hold(0, 0, beat, false, () => true, 100) == beat, "turn deadline: no wait for the spell, beat stays");
+        Check(late.Released == "deadline", "turn deadline: release reason");
+        // A beat that would end past the deadline is skipped: the NPC's own pick is submitted, not the timer's default.
+        var tight = new OpposingChoicePacing();
+        Check(tight.Hold(0, 0, beat, true, () => true, 100) == 0 && tight.Released == "deadline", "turn deadline: no wait for the spell, no beat");
+        var roomy = new OpposingChoicePacing();
+        Check(roomy.Hold(0, 0, beat, true, null, 4000) == beat, "a beat that fits before the deadline stays");
+        var edge = new OpposingChoicePacing();
+        Check(edge.Hold(0, 0, beat, true, null, beat + OpposingChoicePacing.BeatDeadlineMarginMilliseconds - 1) == 0, "a beat ending inside the margin is skipped");
+        // Release reasons and waits, for the NPC_CHOICE_HOLD log line.
+        var byDeal = new OpposingChoicePacing();
+        byDeal.Hold(0, 0, beat, true, null, inf); byDeal.Hold(beat, 0, beat, true, null, inf);
+        Check(byDeal.Released == "deal" && byDeal.WaitedMilliseconds == beat && byDeal.SpellWaitedMilliseconds == 0, "release reason deal");
+        var bySpell = new OpposingChoicePacing(); bool on = true;
+        bySpell.Hold(0, 0, beat, true, () => on, inf); bySpell.Hold(1000, 0, beat, true, () => on, inf); on = false;
+        Check(bySpell.Hold(3000, 0, beat, true, () => on, inf) == 0 && bySpell.Released == "spell" && bySpell.SpellWaitedMilliseconds == 3000, "release reason spell, spell wait");
+        var byCap = new OpposingChoicePacing();
+        byCap.Hold(0, 0, beat, true, () => true, inf);
+        Check(byCap.Hold(OpposingChoicePacing.SpellWaitMilliseconds, 0, beat, true, () => true, inf) == 0 && byCap.Released == "cap"
+            && byCap.SpellWaitedMilliseconds == OpposingChoicePacing.SpellWaitMilliseconds, "release reason cap");
+        var gone = new OpposingChoicePacing(); gone.Hold(0, -1, beat, false, null, inf); gone.Abandon(700);
+        Check(gone.Released == "canact" && gone.WaitedMilliseconds == 700, "release reason canact");
 
         // Through the runner with the 4 s artificial-delay budget spent: the beat is not cut by it.
         foreach (bool spellEnds in new[] { false, true })

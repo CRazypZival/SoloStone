@@ -657,7 +657,7 @@ internal static class ClientBridge
         object spell = card?.GetPlaySpell(0, false);
         if (spell == null || spell is UnityEngine.Object native && native == null || SpellActiveState == null) return false;
         var state = SpellActiveState.GetValue(spell);
-        return state != null && Convert.ToString(state, System.Globalization.CultureInfo.InvariantCulture) != "NONE";
+        return state != null && Convert.ToInt32(state, System.Globalization.CultureInfo.InvariantCulture) != 0; // SpellStateType.NONE = 0
     }
 
     // ChoiceCardMgr has dealt the opponent's choice cards (card backs) for this EntityChoices id. Until then the NPC
