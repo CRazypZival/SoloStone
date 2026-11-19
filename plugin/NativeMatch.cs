@@ -6010,9 +6010,10 @@ public sealed class NativeMatch
             int insert = entering && row.TagChange.Tag == (int)GameTag.DORMANT ? index : index + 1;
             // The client picks the Taunt frame when TAUNT arrives and its Immune check counts UNTOUCHABLE at that moment, so a
             // wake that restores keywords before UNTOUCHABLE=0 leaves the translucent frame: restore after those rows.
+            // 1090 is GameTag.DORMANT_VISUAL, which the legacy vendor SabberStoneCore.dll lacks (#215).
             if (wake)
                 while (insert < rows.Count && rows[insert].HasTagChange && rows[insert].TagChange.Entity == id
-                    && (rows[insert].TagChange.Tag == (int)GameTag.DORMANT_VISUAL || rows[insert].TagChange.Tag == (int)GameTag.UNTOUCHABLE))
+                    && (rows[insert].TagChange.Tag == 1090 || rows[insert].TagChange.Tag == (int)GameTag.UNTOUCHABLE))
                 { insert++; index++; }
             if (entering || wake || snapshotWake)
                 foreach (var tag in tags.Where(t => IsDormantVisualTag((GameTag)t.Key) && t.Value != 0).OrderBy(t => t.Key))
