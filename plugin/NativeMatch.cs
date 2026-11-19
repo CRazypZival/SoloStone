@@ -2200,6 +2200,7 @@ public sealed class NativeMatch
                 // one-ply fallback had no time to look at them (FastFinish.Fallback; other reasons keep the bounded fallback).
                 task = FastFinish.Fallback(view, tasks.Select(BotAction.From).ToArray(), reason,
                     () => npcRunner.SpendFallbackNode(), out fastFinish, out compared).Resolve(tasks);
+                view.ReportAllDiscarded();
             }
             catch (Exception error) when (!(error is OutOfMemoryException)) {
                 BotTrace?.Invoke("fallback-evaluation-fault=" + error.GetType().Name);

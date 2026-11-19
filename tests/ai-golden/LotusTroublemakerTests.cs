@@ -37,7 +37,8 @@ internal static class LotusTroublemakerTests
                 var pilot = new GoldenPilot(profile); int index = 0;
                 var decision = BotDriver.Decide(g, 1, DeckStyle.Tempo,
                     s => pilot.DecidePilot(s, new GoldenContext(g.Turn, index, 997 * g.Turn + index * 31, profile)), ref index, pilot.Options);
-                Check(decision.Trace.Kind == "search" && decision.Task.PlayerTaskType != PlayerTaskType.END_TURN,
+                // A broken run searches 18-24 nodes; a working one searches thousands.
+                Check(decision.Trace.Kind == "search" && decision.Task.PlayerTaskType != PlayerTaskType.END_TURN && decision.Trace.PilotDecision.Nodes >= 200,
                     $"Lotus with {twoManaPlays} two-Mana plays: NPC {profile.Id} must still play, got {decision.Task} trace={PlannerTests.Trace(decision.Trace)}");
             }
         }
@@ -144,6 +145,19 @@ internal static class LotusTroublemakerTests
         // CATA_131 Felwood Treant, CATA_140 Merithra of the Dream. The sweep must keep them.
         foreach (string id in new[] { "JAIL_470", "BE_012", "CATA_131", "CATA_140" })
             Check(cards.Any(c => c.Id == id), id + " is in the history-display sweep");
+        KnownCardSweep(cards, 3, "history-display");
+    }
+
+    // The same class beyond displays: every implemented card that reads history (hand auras, costs, Lotus family), one profile each.
+    public static void TestNpcActsWithAnyKnownHistoryCardInHumanHand()
+    {
+        var cards = Cards.All.Where(c => c.Implemented && c.ConsumesHistory && (c.Type == CardType.MINION || c.Type == CardType.SPELL || c.Type == CardType.WEAPON)).OrderBy(c => c.Id, StringComparer.Ordinal).ToList();
+        Check(cards.Count >= 70, "history cards found: " + cards.Count);
+        KnownCardSweep(cards, 1, "history-consuming");
+    }
+
+    private static void KnownCardSweep(System.Collections.Generic.List<Card> cards, int profiles, string label)
+    {
         int stuck = 0; var names = new System.Collections.Generic.List<string>();
         foreach (var card in cards)
         {
@@ -163,7 +177,7 @@ internal static class LotusTroublemakerTests
             var bot = g.Player1; bot.BaseMana = 10; bot.UsedMana = 0;
             Entity.FromCard(bot, Cards.FromId("CS2_182"), zone: bot.HandZone);
             Entity.FromCard(bot, Cards.FromId("CS2_120"), zone: bot.HandZone);
-            foreach (var profile in NpcCatalog.All.Take(3))
+            foreach (var profile in NpcCatalog.All.Take(profiles))
             {
                 var pilot = new GoldenPilot(profile); int index = 0;
                 var decision = BotDriver.Decide(g, 1, DeckStyle.Tempo,
@@ -171,8 +185,8 @@ internal static class LotusTroublemakerTests
                 if (decision.Task.PlayerTaskType == PlayerTaskType.END_TURN) { stuck++; names.Add(card.Id + "/" + profile.Id); }
             }
         }
-        Console.WriteLine($"  known history-display sweep: {cards.Count} cards, {stuck} passes");
-        Check(stuck == 0, "the NPC passed with a known history-display card in the human's hand: " + string.Join(", ", names));
+        Console.WriteLine($"  known {label} sweep: {cards.Count} cards, {stuck} passes");
+        Check(stuck == 0, "the NPC passed with a known " + label + " card in the human's hand: " + string.Join(", ", names));
     }
 
     // A decision whose every simulated action is discarded as private history was never searched; it must leave a fault line
@@ -198,5 +212,23 @@ internal static class LotusTroublemakerTests
         var quiet = View(Fixture()); var quietFaults = new System.Collections.Generic.List<string>(); quiet.FaultReporter = quietFaults.Add;
         quiet.Apply(quiet.Actions.First(a => a.Type == PlayerTaskType.END_TURN)); quiet.ReportAllDiscarded();
         Check(quietFaults.Count == 0, "a decision that applied actions reports no discard fault");
+    }
+
+    // The live NPC decides through GoldenPilot's decision job (NativeMatch.BeginNpcDecision), not BotDriver.Decide: the job must
+    // report the all-discarded decision itself, once.
+    public static void TestLiveGoldenJobReportsAllDiscardedPrivateHistory()
+    {
+        var g = Fixture(); g.Player1.BaseMana = 0; g.Player1.UsedMana = 0; // only END_TURN is legal
+        var state = View(g);
+        var faults = new System.Collections.Generic.List<string>();
+        state.FaultReporter = faults.Add;
+        var game = (Game)typeof(FairBotState).GetField("game", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(state);
+        var fire = Enchantment.GetInstance(game.Player1, game.Player1.Hero, game.Player1, Cards.FromId("CATA_EVENT_001e"));
+        fire[GameTag.TAG_SCRIPT_DATA_NUM_2] = 1;
+        var profile = NpcCatalog.All.First();
+        var pilot = new GoldenPilot(profile);
+        var decision = pilot.Decide(state, new GoldenContext(g.Turn, 0, 997 * g.Turn, profile));
+        Check(faults.Count(f => f.StartsWith("private-history-all-discarded", StringComparison.Ordinal)) == 1,
+            "the golden decision job reports an all-discarded decision once: [" + string.Join("|", faults) + "] decision=" + decision.Action);
     }
 }

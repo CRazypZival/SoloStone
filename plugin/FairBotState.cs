@@ -420,6 +420,8 @@ internal sealed class PrivateDiscardTally
     internal int Applied => Volatile.Read(ref applied);
     internal int Discarded => Volatile.Read(ref discarded);
     internal string First => first;
+    private int reported;
+    internal bool TryReport() => Interlocked.Exchange(ref reported, 1) == 0;
     internal void Apply() => Interlocked.Increment(ref applied);
     internal void Discard(Exception error)
     {
@@ -470,11 +472,11 @@ public sealed class FairBotState
     }
     internal Action<string> FaultReporter;
     // Shared by every state of one decision: how many simulated actions applied, and how many a fair view discarded as private history.
-    private PrivateDiscardTally discards = new PrivateDiscardTally();
+    private PrivateDiscardTally discards;
     // A decision whose every simulated action was discarded as private history has not been searched at all; say so (#81).
     internal void ReportAllDiscarded()
     {
-        if (discards.Discarded > 0 && discards.Applied == 0)
+        if (discards != null && discards.Discarded > 0 && discards.Applied == 0 && discards.TryReport())
             FaultReporter?.Invoke("private-history-all-discarded discarded=" + discards.Discarded + " error=" + discards.First);
     }
     // Card.HistoryDisplay targets that render a stored card's identity in its host's text.
@@ -909,6 +911,7 @@ public sealed class FairBotState
             new ReadOnlyDictionary<string, int>(new SortedDictionary<string, int>(known, StringComparer.Ordinal)),
             options?.MaterializeOwnDeckTriggers == true, secretSlots);
         result.fallbackEvaluator = options?.FallbackEvaluator;
+        result.discards = new PrivateDiscardTally();
         if (!exact && options?.TrackOwnDeck == true) {
             result.deckRoots = new[] { copy.Player1, copy.Player2 }.ToDictionary(p => p.PlayerId, p => new HashSet<int>(p.DeckZone.Select(c => c.Id)));
         }
@@ -1548,9 +1551,9 @@ public sealed class FairBotState
 #endif
         if (!clone.Process(task)) throw new InvalidOperationException("Simulation action rejected.");
         }
-        catch (Exception error) when (FairHistory.IsPrivate(error)) { discards.Discard(error); throw; }
+        catch (Exception error) when (FairHistory.IsPrivate(error)) { discards?.Discard(error); throw; }
         catch (Exception error) when (!(error is OutOfMemoryException)) { throw new SimulationFailureException(action, error); }
-        discards.Apply();
+        discards?.Apply();
 #if ENGINE_SOURCE
         SabberStoneCore.Actions.DiscoverRealRules.RedactSuspiciousOffers(clone);
 #endif

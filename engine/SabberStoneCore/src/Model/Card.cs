@@ -1087,7 +1087,7 @@ namespace SabberStoneCore.Model
         }
 
         // A display is presentation only. In a fair view it may need private residence the viewer lacks
-        // (HistoryFacts throws NotSupportedException); that must not abort the simulated action, so the
+        // (HistoryFacts throws its "Private historical ..." refusal); that must not abort the simulated action, so the
         // tag keeps its value. A real (non-projected) game still propagates every exception.
         private static void ApplyHistoryDisplays(IPlayable owner,HistoryDisplayRecipe[] displays)
         {
@@ -1095,7 +1095,7 @@ namespace SabberStoneCore.Model
             foreach (var display in displays)
             {
                 try { owner[display.Tag] = Math.Max(0,display.Value(owner)); }
-                catch (NotSupportedException) when (history.IsProjected) { }
+                catch (NotSupportedException e) when (history.IsProjected && HistoryFacts.IsPrivateRefusal(e)) { }
             }
         }
 
@@ -1138,7 +1138,7 @@ namespace SabberStoneCore.Model
 		internal void UpdateHistoryDisplays(IPlayable owner)
 		{
 			if (_historyDisplays == null) return;
-			if (owner.Game.HistoryFacts.ProjectedAwayFrom(owner.Controller.Id)) return;
+			if (owner.Zone?.Type == Zone.HAND && owner.Game.HistoryFacts.ProjectedAwayFrom(owner.Controller.Id)) return;
 			ApplyHistoryDisplays(owner,_historyDisplays);
 		}
 
