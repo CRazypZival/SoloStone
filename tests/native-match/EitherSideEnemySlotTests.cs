@@ -1,3 +1,4 @@
+extern alias TransportFixtures;
 using System;
 using System.Linq;
 using System.Reflection;
@@ -42,9 +43,11 @@ internal static partial class PoweredUpGlowTests
         for (int i = 0; i < enemyMinions; i++) f.Summon("CS2_182", enemy);
         var card = f.Draw(id); f.Flush();
         var before = enemy.BoardZone.Slots.ToList();
+        int sent = f.Packets.Count;
         Send(f, card, card.ChooseOnePlayables[1].Id, slot, scenario);
         Check(card.Controller == enemy && card.Zone == enemy.BoardZone, scenario + ": played on the enemy board");
         Placed(enemy.BoardZone, before, card, expected, scenario);
+        ClientFollows(f, sent, card, slot, scenario);
     }
 
     // A slot past the human's own board as well is no drop slot the client can send: still refused, nothing paid.
@@ -68,9 +71,11 @@ internal static partial class PoweredUpGlowTests
         SabberStoneCore.Model.Entities.Entity.FromCard(p.Opponent, Cards.FromId("JAIL_511"), zone: p.Opponent.BoardZone);
         var card = f.Draw(id); f.Flush();
         var before = p.BoardZone.Slots.ToList();
+        int sent = f.Packets.Count;
         Send(f, card, card.ChooseOnePlayables[0].Id, slot, scenario);
         Check(card.Controller == p && card.Zone == p.BoardZone, scenario + ": played on the friendly board");
         Placed(p.BoardZone, before, card, slot - 1, scenario);
+        ClientFollows(f, sent, card, slot, scenario);
     }
 
     // Disguised Executioner then destroys a random neighbour, so check the order of the survivors around the card:
@@ -85,6 +90,23 @@ internal static partial class PoweredUpGlowTests
             int j = after.IndexOf(before[i]);
             if (j >= 0) Check(i < expected == j < at, scenario + $": slot {expected}, got {at} of [{string.Join(",", after.Select(e => e.Card.Id))}]");
         }
+    }
+
+    // A dragged play: the client has already put the card at the drop slot of the human's own board before it sends the option,
+    // and it moves that card again only once the play's history pairs with that prediction. On the client model of that, the card
+    // must end where the engine put it, on either board, with both boards in the engine's order. Before the fix an enemy-side
+    // play at another slot left the prediction unpaired and the card on the human's board (live, lane 3).
+    private static void ClientFollows(Fixture f, int sent, IPlayable card, int slot, string scenario)
+    {
+        var view = TransportFixtures::TransportInvariants.BoardActorInvariant.DroppedCard(f.Packets.Take(sent), card.Id, slot, 1,
+            f.Packets.Skip(sent));
+        int[] Board(Controller side) => side.BoardZone.Slots.Select(e => e.Id).ToArray();
+        string boards = $"client [{string.Join(",", view.Board1)}] [{string.Join(",", view.Board2)}], engine [{string.Join(",", Board(f.Player))}] [{string.Join(",", Board(f.Player.Opponent))}]";
+        Check(view.Resolved, scenario + ": the client pairs its drop prediction with the play; " + boards);
+        Check(view.Zone == (int)SabberStoneCore.Enums.Zone.PLAY && view.Controller == card.Controller.PlayerId,
+            scenario + $": the client shows the card on the board of player {card.Controller.PlayerId}, not {view.Controller}; " + boards);
+        Check(view.Board1.SequenceEqual(Board(f.Player)) && view.Board2.SequenceEqual(Board(f.Player.Opponent)),
+            scenario + ": the client's boards match the engine's; " + boards);
     }
 
     private static void Send(Fixture f, IPlayable card, int sideEntity, int slot, string scenario)

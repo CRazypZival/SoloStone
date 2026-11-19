@@ -209,6 +209,15 @@ continue the block in a later packet. R7 checks all of them. Besides moves, it a
 (a SHOW_ENTITY of a card that stays in hand, on the board or in SECRET), because the client refreshes that card's actor
 only when it processes the list.
 
+A minion or location pairs only if that list gives the played card the slot it was dropped on: the card's next position
+row there, before any other zone change. If not, the prediction never resolves. The client puts the card back at the
+drop slot after every list and stops correcting the board, so the card stays where it was dropped for the rest of the
+game. An either-side minion dropped on your own board and placed at another slot of the enemy board stayed on your
+board (#194). `NativeMatch.AnchorPredictedDrop` gives the card the drop slot first in that list, the engine slot right
+after it; once the list is done the client moves the card there. The client model in
+`tests/transport-invariants/ClientModel.cs` holds an unpaired card at its drop slot, and the `either-side-enemy-slot-native`
+group of `native-match` checks there that every either-side play ends where the engine put it.
+
 These need no R7 case, because the client loses nothing there:
 - A transform in place (CHANGE_ENTITY): the card refreshes its own actor.
 - Position rows: the prediction itself shifts the cards in hand and on the board around the played card. A card that

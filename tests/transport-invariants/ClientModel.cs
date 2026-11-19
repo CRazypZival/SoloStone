@@ -113,7 +113,8 @@ internal sealed class ClientModel
     internal readonly List<string> MillFaults = new();
     // A fixture that moves a spell back into the deck by hand (no real game does) opts out of the mill lock.
     internal bool IgnoreMillLock;
-    // shortcut: ordered server moves only; add prediction/auto-correction before using as a general board oracle.
+    // shortcut: ordered server moves, plus a dropped card held at its drop slot while its prediction is unresolved; no other
+    // prediction or auto-correction, so check against it only boards whose history it models.
     // Zone.CardSortComparison sorts actor positions first, then entity positions.
     internal int[] BoardOrder(int owner) => Entities.Where(p => p.Value.CardZone == (int)EngineZone.PLAY &&
             p.Value.CardController == owner && p.Value.Get(GameTag.CARDTYPE) is 4 or 39)
@@ -125,17 +126,22 @@ internal sealed class ClientModel
     // CheckAndIgnoreServerChangeList only acknowledges PLAY/DECK_ACTION, not nested POWER or GAME_RESET.
     private int localSpell;
     private int localPosition;
-    private readonly Stack<(int Type, List<(int Entity, int? Zone, int? Position)> Changes)> localBlocks = new();
+    private int localController;
+    // Moves: a zone or controller change (ZoneChange.HasDestinationZoneChange), which ends ZoneMgr.FindNextDstPosChange's search.
+    private readonly Stack<(int Type, List<(int Entity, int? Zone, int? Position, bool Moves)> Changes)> localBlocks = new();
     internal bool HasUnresolvedLocalChange => localSpell != 0;
     // ZoneMgr.CheckAndIgnoreServerChangeList suppresses every card zone change in the matched PLAY list.
     internal readonly HashSet<int> IgnoredCardZoneChanges = new();
     internal void PredictLocalSpellPlay(int id) => PredictLocalPlay(id, 0);
-    internal void PredictLocalPlay(int id, int position)
+    // side: the controller whose board the card was dropped on (InputManager.DropHeldMinionLikeCard predicts on the board under
+    // the cursor, which for an either-side minion can be either one).
+    internal void PredictLocalPlay(int id, int position, int side = 1)
     {
         if (localSpell != 0 || Entities[id].Get(GameTag.ZONE) != (int)EngineZone.HAND)
             throw new InvalidOperationException("local spell prediction requires an idle hand card");
         localSpell = id;
         localPosition = position;
+        localController = side;
     }
     private void ObserveLocalChange(PowerHistoryData entry)
     {
@@ -143,25 +149,35 @@ internal sealed class ClientModel
         {
             if (localSpell == 0 || localBlocks.Count == 0) return;
             var (type, changes) = localBlocks.Peek();
-            if (type != (int)BlockType.PLAY && type != (int)BlockType.DECK_ACTION) return;
-            for (int i = 0; i < changes.Count; i++)
+            if (type == (int)BlockType.PLAY || type == (int)BlockType.DECK_ACTION)
+                for (int i = 0; i < changes.Count; i++)
+                {
+                    if (changes[i].Entity != localSpell || changes[i].Zone != (int)EngineZone.PLAY) continue;
+                    // ZoneMgr.FindNextDstPosChange stops at the next zone change or another entity's position.
+                    int position = Entities[localSpell].Get(GameTag.ZONE_POSITION);
+                    for (int j = i; j < changes.Count; j++)
+                    {
+                        if (j != i && changes[j].Moves) break;
+                        if (!changes[j].Position.HasValue) continue;
+                        if (changes[j].Entity == localSpell) position = changes[j].Position.Value;
+                        break;
+                    }
+                    if (position == localPosition)
+                    {
+                        IgnoredCardZoneChanges.UnionWith(changes.Where(c => c.Moves).Select(c => c.Entity));
+                        localSpell = 0;
+                        return;
+                    }
+                }
+            // Unpaired, the prediction stays: ZoneMgr.MergeServerChangeList puts a predicted card that a server list took off its
+            // drop board back at the drop slot, and AutoCorrectZones waits while it has a predicted position (#194).
+            if (changes.Count > 0 && localPosition > 0 && Entities.TryGetValue(localSpell, out var dropped)
+                && dropped.Get(GameTag.ZONE) == (int)EngineZone.PLAY
+                && (dropped.CardZone != (int)EngineZone.PLAY || dropped.CardController != localController))
             {
-                if (changes[i].Entity != localSpell || changes[i].Zone != (int)EngineZone.PLAY) continue;
-                // ZoneMgr.FindNextDstPosChange stops at the next zone change or another entity's position.
-                int position = Entities[localSpell].Get(GameTag.ZONE_POSITION);
-                for (int j = i; j < changes.Count; j++)
-                {
-                    if (j != i && changes[j].Zone.HasValue) break;
-                    if (!changes[j].Position.HasValue) continue;
-                    if (changes[j].Entity == localSpell) position = changes[j].Position.Value;
-                    break;
-                }
-                if (position == localPosition)
-                {
-                    IgnoredCardZoneChanges.UnionWith(changes.Where(c => c.Zone.HasValue).Select(c => c.Entity));
-                    localSpell = 0;
-                    return;
-                }
+                dropped.CardZone = (int)EngineZone.PLAY;
+                dropped.CardController = localController;
+                dropped.CardPosition = localPosition;
             }
             changes.Clear();
         }
@@ -182,14 +198,17 @@ internal sealed class ClientModel
             {
                 var tag = entry.TagChange;
                 changes.Add((tag.Entity, tag.Tag == (int)GameTag.ZONE ? tag.Value : null,
-                    tag.Tag == (int)GameTag.ZONE_POSITION ? tag.Value : null));
+                    tag.Tag == (int)GameTag.ZONE_POSITION ? tag.Value : null, tag.Tag is (int)GameTag.ZONE or (int)GameTag.CONTROLLER));
             }
             else if (entry.HasFullEntity || entry.HasShowEntity || entry.HasChangeEntity)
             {
                 var full = entry.HasFullEntity ? entry.FullEntity : entry.HasShowEntity ? entry.ShowEntity : entry.ChangeEntity;
                 int? Tag(GameTag tag) => full.Tags.FirstOrDefault(t => t.Name == (int)tag)?.Value;
-                changes.Add((full.Entity, Tag(GameTag.ZONE), Tag(GameTag.ZONE_POSITION)));
+                changes.Add((full.Entity, Tag(GameTag.ZONE), Tag(GameTag.ZONE_POSITION),
+                    Tag(GameTag.ZONE).HasValue || Tag(GameTag.CONTROLLER).HasValue));
             }
+            else if (entry.HasHideEntity)
+                changes.Add((entry.HideEntity.Entity, entry.HideEntity.Zone, null, true));
         }
     }
     internal ClientModel Copy()

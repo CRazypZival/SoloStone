@@ -895,12 +895,22 @@ public sealed class NativeMatch
         NoteHumanTimerAction();
         humanOptions = null;
         recorderOptionIndex = index;
+#if ENGINE_SOURCE
+        // A minion or location dropped on a board slot: the client has already put it there (see AnchorPredictedDrop).
+        predictedDrop = task is PlayCardTask { Source: Minion or BoardObject } && pos > 0 ? (WireReturnId(task.Source.Id), pos) : default;
+        try
+        {
+#endif
         try { Process(task); }
         finally { recorderOptionIndex = -1; }
 #if STANDARD_PROOF
         receivedOptions = -1; receivedIndex = -1;
 #endif
         SendHistory(Game.PowerHistory.Last);
+#if ENGINE_SOURCE
+        }
+        finally { predictedDrop = default; }
+#endif
         DriveUntilHumanInput();
     }
 
@@ -5857,6 +5867,7 @@ public sealed class NativeMatch
         NormalizeBurnTransitions(packet);
         NormalizeBurnedCards(packet);
         NestPredictedPlayCreations(packet);
+        AnchorPredictedDrop(packet);
         // PowerProcessor.BuildTaskList: END as a packet's last row falls out of its switch, enqueues the list twice and
         // replays the prefab. Blocks stay open across choices, so any recipe can reach this; zero SLUSH_TIME is inert.
         if (packet.List.Count > 0 && packet.List[packet.List.Count - 1].HasSubSpellEnd)
@@ -5960,6 +5971,55 @@ public sealed class NativeMatch
                 list.Insert(runs[run].From, new PowerHistoryData { PowerStart = new PowerHistoryStart {
                     Type = HistoryBlock.Type.TRIGGER, Source = Game.Player1.Id, EffectIndex = -1, SubOption = -1 } });
             }
+        }
+    }
+
+    // Wire id and one-based drop slot of the human's dragged minion or location, while SendOption runs.
+    private (int Source, int Slot) predictedDrop;
+
+    // #194: the client pairs its drop prediction with the PLAY list that moves the card to PLAY only when that list's position for
+    // the card equals the drop slot (ZoneMgr.FindLocalChangeListMatchingServerChangeList takes the card's next position row in the
+    // list, unless another zone change or another card's position comes first). Unpaired, the prediction never resolves:
+    // ZoneMgr.MergeServerChangeList puts the card back at the drop slot after every server list, and the auto-correction that would
+    // move it waits for the prediction. An either-side minion dropped on its own board at slot 4 and sent to the enemy board's
+    // slot 2 stayed on the human's board for good (live, lane 3). So when the card's position in that list is not the drop slot,
+    // the list first gives it the drop slot. The engine position follows in the same list, which the client applies to the entity;
+    // once the list is done, ZoneMgr.AutoCorrectZones moves the actor there, as it already does when the enemy slot equals the drop
+    // slot. Every other row stays as it was, so a drop the engine places at its own slot sends the same history as before.
+    private void AnchorPredictedDrop(NativePowerHistory packet)
+    {
+        if (predictedDrop.Source == 0) return;
+        var list = packet.List;
+        var (source, slot) = predictedDrop;
+        int start = list.FindIndex(row => row.HasPowerStart && (int)row.PowerStart.Type == (int)BlockType.PLAY && row.PowerStart.Source == source);
+        if (start < 0) return;
+        predictedDrop = default;
+        bool Boundary(PowerHistoryData row) => row.HasPowerStart || row.HasPowerEnd || row.HasSubSpellStart || row.HasSubSpellEnd
+            || row.HasMetaData && (int)row.MetaData.Type == 21;
+        for (int at = start + 1, depth = 0; at < list.Count; at++)
+        {
+            var row = list[at];
+            if (row.HasPowerStart) { depth++; continue; }
+            if (row.HasPowerEnd) { if (depth-- == 0) return; continue; }
+            if (depth > 0 || !row.HasTagChange || row.TagChange.Entity != source || row.TagChange.Tag != (int)GameTag.ZONE
+                || row.TagChange.Value != (int)EngineZone.PLAY) continue;
+            int position = 0;
+            for (int next = at + 1; next < list.Count && !Boundary(list[next]); next++)
+            {
+                var later = list[next];
+                var snapshot = later.HasFullEntity ? later.FullEntity : later.HasShowEntity ? later.ShowEntity : later.HasChangeEntity ? later.ChangeEntity : null;
+                if (later.HasHideEntity || later.HasTagChange && later.TagChange.Tag is (int)GameTag.ZONE or (int)GameTag.CONTROLLER
+                    || snapshot != null && snapshot.Tags.Any(t => t.Name is (int)GameTag.ZONE or (int)GameTag.CONTROLLER)) break;
+                int moved = later.HasTagChange && later.TagChange.Tag == (int)GameTag.ZONE_POSITION ? later.TagChange.Entity
+                    : snapshot != null && snapshot.Tags.Any(t => t.Name == (int)GameTag.ZONE_POSITION) ? snapshot.Entity : 0;
+                if (moved == 0) continue;
+                if (moved == source && later.HasTagChange) position = later.TagChange.Value;
+                break;
+            }
+            if (position != slot)
+                list.Insert(at + 1, new PowerHistoryData { TagChange = new PegasusGame.PowerHistoryTagChange {
+                    Entity = source, Tag = (int)GameTag.ZONE_POSITION, Value = slot } });
+            return;
         }
     }
 #endif
