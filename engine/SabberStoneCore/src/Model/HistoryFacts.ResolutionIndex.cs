@@ -50,6 +50,8 @@ namespace SabberStoneCore.Model
         [NonSerialized] private List<HistoryResolutionIndex[]> _indexChunks=new List<HistoryResolutionIndex[]>();
         [NonSerialized] private HistoryResolutionIndex[] _indexTail=new HistoryResolutionIndex[ChunkSize];
         private int _projectionOwner;
+        // Fair view: another player's hand displays need residence the viewer cannot know.
+        internal bool ProjectedAwayFrom(int controllerId)=>_projected && controllerId!=_projectionOwner;
         internal int ResidenceEntity(Entities.IPlayable entity,Zone zone,bool entered)
         {
             if(!_projected) return entity.Id;
