@@ -48,8 +48,8 @@ internal static partial class Program
             AssertRejectedWithoutMutation(match,capture,()=>match.SendOption(options.Id,index,0,-1,1));
             AssertRejectedWithoutMutation(match,capture,()=>match.SendOption(options.Id,index,p.Opponent.Hero.Id,sub,1));
             AssertRejectedWithoutMutation(match,capture,()=>match.SendOption(options.Id,index,0,sub,0));
-            // Past both boards. With a full friendly board slot 3 is a real drop slot the client sends, and it now lands at the
-            // enemy board's end (#194), so the stale slot there is 9.
+            // Past both boards. With a full friendly board slot 3 is a slot of the human's own board, so it now maps to the enemy
+            // board's end (#194); the slot no board has there is 9.
             AssertRejectedWithoutMutation(match,capture,()=>match.SendOption(options.Id,index,0,sub,friendlyFull?9:3));
             Check(p.UsedMana==0 && card.Zone==p.HandZone,"invalid native commands never pay or remove hand entity");
             match.SendOption(options.Id,index,0,sub,2);

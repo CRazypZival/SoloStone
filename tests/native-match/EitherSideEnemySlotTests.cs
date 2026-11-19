@@ -22,7 +22,8 @@ internal static partial class PoweredUpGlowTests
         {
             // The report: own board 5 minions, enemy board a location only, client slot 4.
             EnemySlot(id, own: 5, enemyMinions: 0, enemyLocation: true, slot: 4, expected: 1);
-            // Own board full: only the enemy side is offered, the client slot can be 8.
+            // Own board full: only the enemy side is offered. Engine-level case: live, the client does not let a full own board
+            // take the drop at all (a retail enemy-board drop option is a separate issue), so no client sends this slot today.
             EnemySlot(id, own: 7, enemyMinions: 2, enemyLocation: false, slot: 8, expected: 2);
             EnemySlot(id, own: 4, enemyMinions: 0, enemyLocation: false, slot: 3, expected: 0);
             // A slot that fits the enemy board is kept, and the friendly side is unchanged.

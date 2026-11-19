@@ -5985,7 +5985,10 @@ public sealed class NativeMatch
     // slot 2 stayed on the human's board for good (live check). So when the card's position in that list is not the drop slot,
     // the list first gives it the drop slot. The engine position follows in the same list, which the client applies to the entity;
     // once the list is done, ZoneMgr.AutoCorrectZones moves the actor there, as it already does when the enemy slot equals the drop
-    // slot. Every other row stays as it was, so a drop the engine places at its own slot sends the same history as before.
+    // slot. Every other row stays as it was. The row is added whenever the card's first position row in that list is not the drop
+    // slot: an either-side card placed elsewhere on the enemy board, but also a friendly drop whose list reaches another row first
+    // (a minion that goes Dormant on play: its enchantment's row comes first). The engine's own position row always follows, so
+    // the card still ends at the engine's slot.
     private void AnchorPredictedDrop(NativePowerHistory packet)
     {
         if (predictedDrop.Source == 0) return;

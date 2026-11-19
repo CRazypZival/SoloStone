@@ -214,7 +214,8 @@ row there, before any other zone change. If not, the prediction never resolves. 
 drop slot after every list and stops correcting the board, so the card stays where it was dropped for the rest of the
 game. An either-side minion dropped on your own board and placed at another slot of the enemy board stayed on your
 board (#194). `NativeMatch.AnchorPredictedDrop` gives the card the drop slot first in that list, the engine slot right
-after it; once the list is done the client moves the card there. The client model in
+after it; once the list is done the client moves the card there. It also adds that row to a friendly drop whose list
+reaches another row first, such as a minion that goes Dormant on play; the card still ends at the engine slot. The client model in
 `tests/transport-invariants/ClientModel.cs` holds an unpaired card at its drop slot, and the `either-side-enemy-slot-native`
 group of `native-match` checks there that every either-side play ends where the engine put it.
 
