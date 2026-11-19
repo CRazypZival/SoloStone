@@ -95,7 +95,7 @@ internal static partial class PoweredUpGlowTests
     // A dragged play: the client has already put the card at the drop slot of the human's own board before it sends the option,
     // and it moves that card again only once the play's history pairs with that prediction. On the client model of that, the card
     // must end where the engine put it, on either board, with both boards in the engine's order. Before the fix an enemy-side
-    // play at another slot left the prediction unpaired and the card on the human's board (live, lane 3).
+    // play at another slot left the prediction unpaired and the card on the human's board (live check).
     private static void ClientFollows(Fixture f, int sent, IPlayable card, int slot, string scenario)
     {
         var view = TransportFixtures::TransportInvariants.BoardActorInvariant.DroppedCard(f.Packets.Take(sent), card.Id, slot, 1,

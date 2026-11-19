@@ -5982,7 +5982,7 @@ public sealed class NativeMatch
     // list, unless another zone change or another card's position comes first). Unpaired, the prediction never resolves:
     // ZoneMgr.MergeServerChangeList puts the card back at the drop slot after every server list, and the auto-correction that would
     // move it waits for the prediction. An either-side minion dropped on its own board at slot 4 and sent to the enemy board's
-    // slot 2 stayed on the human's board for good (live, lane 3). So when the card's position in that list is not the drop slot,
+    // slot 2 stayed on the human's board for good (live check). So when the card's position in that list is not the drop slot,
     // the list first gives it the drop slot. The engine position follows in the same list, which the client applies to the entity;
     // once the list is done, ZoneMgr.AutoCorrectZones moves the actor there, as it already does when the enemy slot equals the drop
     // slot. Every other row stays as it was, so a drop the engine places at its own slot sends the same history as before.
