@@ -41,13 +41,13 @@ internal static partial class Program
             if (entries.Count > 0) Log.Observe(Game, entries);
         }
 
-        internal IPlayable Play(string cardId, IPlayable target = null)
+        internal IPlayable Play(string cardId, IPlayable target = null, bool observe = true)
         {
             var player = Game.Player1;
             player.UsedMana = 0;
             var card = Generic.DrawCard(player, Cards.FromId(cardId));
             Check(Game.Process(PlayCardTask.Any(player, card, (ICharacter)target)), "play " + cardId);
-            Observe();
+            if (observe) Observe();
             return card;
         }
 
@@ -71,8 +71,11 @@ internal static partial class Program
         EnchantedDriftStaysResync();
         PrivateCorrectionNotApplied();
         RecoverForgetsAuraStats();
-        Console.WriteLine("PASS match event log auras: aura gain and loss are STATS by=aura, other drift stays RESYNC, private corrections"
-            + " are skipped, a fault forgets aura state");
+        DriftUnderLiveAuraStaysResync();
+        PartlyExplainedAuraChangeStaysResync();
+        StaleAuraPartDoesNotSurviveABounce();
+        Console.WriteLine("PASS match event log auras: aura gain and loss are STATS by=aura, other drift stays RESYNC (also under a live aura"
+            + " and when partly explained), no stale aura part, private corrections are skipped, a fault forgets aura state");
     }
 
     // A Yeti beside Flametongue Totem: the +2 Attack arrives without a stat tag change, and so does its end. Both are an aura's
@@ -106,7 +109,7 @@ internal static partial class Program
     }
 
     // A correction that needs a public entity reaches the client only for one in play or in the human's hand; the log follows
-    // exactly what the client is sent, so it never learns a value from the opponent's hand.
+    // exactly what the client is sent, so an opponent's hand card gets no line from one.
     private static void PrivateCorrectionNotApplied()
     {
         var bench = new AuraLogBench();
@@ -116,12 +119,12 @@ internal static partial class Program
         bench.Lines.Clear();
         // Made-up values (the engine keeps 4 Attack), so a STATS line can only come from the correction.
         bench.Log.Corrections = (entries, index) => index != entries.Count ? Array.Empty<MatchEventLog.TransportCorrection>() : new[] {
-            new MatchEventLog.TransportCorrection(hidden.Id, new Dictionary<GameTag, int> { [GameTag.ATK] = 7 }, true),
+            new MatchEventLog.TransportCorrection(hidden.Id, new Dictionary<GameTag, int> { [GameTag.ARMOR] = 7 }, true),   // ARMOR is logged in any zone
             new MatchEventLog.TransportCorrection(yeti.Id, new Dictionary<GameTag, int> { [GameTag.ATK] = 6 }, true) };
         bench.Synthetic(PowerHistoryBuilder.TagChange(bench.Game.Id, GameTag.NEXT_STEP, (int)Step.MAIN_ACTION));
         bench.Log.Corrections = null;
         Check(bench.About(yeti.Id, "STATS").Any(l => l.Contains("stats=4/5->6/5")), "a public correction is followed:" + bench.Dump());
-        Check(!bench.Lines.Any(l => l.Contains("#" + hidden.Id)), "an opponent's hand card learns nothing:" + bench.Dump());
+        Check(!bench.Lines.Any(l => l.Contains("#" + hidden.Id)), "an opponent's hand card gets no line:" + bench.Dump());
     }
 
     // A fault forgets the tracked state; it must forget that a minion's stats held an aura too, or later drift reads as one.
@@ -139,5 +142,56 @@ internal static partial class Program
         bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ATK, 99));
         Check(bench.About(yeti.Id, "RESYNC").Length == 1 && !bench.Lines.Any(l => l.Contains("by=aura")),
             "after the fault, a drift on the Yeti is RESYNC, not an aura:" + bench.Dump());
+    }
+
+    // A live aura excuses only its own change: a made-up Attack on a minion under Flametongue is drift.
+    private static void DriftUnderLiveAuraStaysResync()
+    {
+        var bench = new AuraLogBench();
+        var yeti = bench.OnBoard("CS2_182");
+        bench.Play("EX1_565");
+        bench.Play("CS2_189", yeti);
+        Check(bench.About(yeti.Id, "STATS").Any(l => l.Contains("stats=4/4->6/4") && l.Contains("by=aura")), "the aura is tracked first:" + bench.Dump());
+        bench.Lines.Clear();
+        bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ATK, 99));
+        Check(bench.About(yeti.Id, "RESYNC").Length == 1 && !bench.Lines.Any(l => l.Contains("by=aura")),
+            "a drift under a live aura is RESYNC:" + bench.Dump());
+    }
+
+    // The aura's +2 Attack arrives together with tracker drift (the tracker is 1 Attack off the engine's base): the aura explains
+    // only part of the difference, so it is RESYNC.
+    private static void PartlyExplainedAuraChangeStaysResync()
+    {
+        var bench = new AuraLogBench();
+        var yeti = bench.OnBoard("CS2_182");
+        bench.Play("EX1_565", observe: false);   // the aura is in the engine, not yet in the log
+        bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ATK, 5));   // base 4 in the engine
+        Check(bench.About(yeti.Id, "RESYNC").Length == 1 && !bench.Lines.Any(l => l.Contains("RESYNC") && l.Contains("by=aura")),
+            "an aura change plus drift is RESYNC:" + bench.Dump());
+    }
+
+    // A bounce to hand and back must not carry the aura part along: the log's own stats come from the printed card when the batch
+    // changes them again, and an aura's part is not in those.
+    private static void StaleAuraPartDoesNotSurviveABounce()
+    {
+        var bench = new AuraLogBench();
+        var yeti = bench.OnBoard("CS2_182");
+        bench.Play("EX1_565");
+        bench.Play("CS2_189", yeti);
+        Check(bench.About(yeti.Id, "STATS").Any(l => l.Contains("by=aura")), "the Yeti's stats held the aura:" + bench.Dump());
+        bench.Lines.Clear();
+        // A stat tag write is the base value, without the aura: it must not leave the aura part behind either.
+        bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ATK, 4));
+        Check(!bench.Lines.Any(l => l.Contains(" RESYNC ")) && bench.About(yeti.Id, "STATS").Any(l => l.Contains("->6/4") && l.Contains("by=aura")),
+            "the aura comes back after a base write as STATS by=aura:" + bench.Dump());
+        bench.Lines.Clear();
+        // Out of play and back in the same breath (the engine's Yeti never moved): stats come from the printed card each time.
+        bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ZONE, (int)Zone.HAND), PowerHistoryBuilder.TagChange(yeti.Id, GameTag.DAMAGE, 1));
+        bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ZONE, (int)Zone.PLAY), PowerHistoryBuilder.TagChange(yeti.Id, GameTag.DAMAGE, 1));
+        Check(bench.About(yeti.Id, "STATS").Any(l => l.Contains("stats=4/4->6/4") && l.Contains("by=aura")) && !bench.Lines.Any(l => l.Contains(" RESYNC ")),
+            "the live aura is explained from the printed stats:" + bench.Dump());
+        bench.Lines.Clear();
+        bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ATK, 99));
+        Check(bench.About(yeti.Id, "RESYNC").Length == 1, "a drift after the bounce is RESYNC:" + bench.Dump());
     }
 }

@@ -85,6 +85,7 @@ internal static partial class Program
         if (args.Contains("--softlock-only")) { NativeMatch.ClockFreeBot = true; ForefatherGuessNative(); AnnouncerRewindDeathKnightNative(); ForefatherFromDiscoverNative(); ForefatherNpcGuessNative(); NpcGuessForcedPicksNative(); NpcGuessTwoHeldNative(); NpcGuessHeldThenHumanGuessNative(); GlimmerrootGuessNative(); TimedChoiceCompletionNative(); return; }
         if (args.Contains("--ledgerline-only")) { NativeMatch.ClockFreeBot = true; NpcWorldIntegrationTests.LedgerlineForefatherGuess(); return; }
         if (args.Contains("--match-event-log-review-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogReview(); return; }
+        if (args.Contains("--event-log-corrections-only")) { NativeMatch.ClockFreeBot = true; EventLogFollowsTransportCorrections(); return; }
         if (args.Contains("--match-event-log-only")) { NativeMatch.ClockFreeBot = true; MatchEventLogNative(); return; }
         if (args.Contains("--held-form-overlay-only")) { NativeMatch.ClockFreeBot = true; HeldFormOverlayHistory(); return; }
         if (args.Contains("--temporary-only")) { NativeMatch.ClockFreeBot = true; TemporaryVisualHistory(args.ElementAtOrDefault(1)); return; }
@@ -372,6 +373,7 @@ internal static partial class Program
         AuraQueuedCallerPathsRestoreCosts();
         AuraCorrectionOrderAndLifetime();
         AuraCorrectionsRespectReplayVisibility();
+        EventLogFollowsTransportCorrections();
         Console.WriteLine("PASS native match contract");
     }
 
@@ -3241,6 +3243,46 @@ internal static partial class Program
         Check(spell[GameTag.COST] == 3 && aura.AppliedEntities.Any(entity => entity.Id == spell.Id),
             "Sorcerer caller fixture did not apply exact hand discount");
         return (capture, match, game, owner, aura, spell);
+    }
+
+    // The real hook-up: NativeMatch hands the match event log the corrections recorded for the batch and position it observes, and
+    // consumes them after the log has read them. The log follows a correction the client is sent (a public human minion), skips one
+    // it is not (an opponent's hand card), ignores one recorded for another batch, and never sees one twice.
+    private static void EventLogFollowsTransportCorrections()
+    {
+        var capture = new Capture();
+        var match = StartFixture(capture, "CS2_231", null);
+        var lines = new List<string>();
+        match.EventTrace = lines.Add;
+        EngineGame game = match.Game;
+        var yeti = (Minion)SabberStoneCore.Model.Entities.Entity.FromCard(game.Player1, Cards.FromId("CS2_182"), zone: game.Player1.BoardZone);
+        var hidden = SabberStoneCore.Model.Entities.Entity.FromCard(game.Player2, Cards.FromId("CS2_182"), zone: game.Player2.HandZone);
+        SendHistoryEntries(match, new List<SabberStoneCore.Kettle.IPowerHistoryEntry> {
+            SabberStoneCore.Kettle.PowerHistoryBuilder.TagChange(game.Id, GameTag.TURN, 1),   // past the log's setup phase
+            SabberStoneCore.Kettle.PowerHistoryBuilder.FullEntity(yeti), SabberStoneCore.Kettle.PowerHistoryBuilder.FullEntity(hidden) });
+        lines.Clear();
+        var a6 = new Dictionary<GameTag, int> { [GameTag.ATK] = 6 };   // made-up: the engine's Yeti keeps 4 Attack
+        List<SabberStoneCore.Kettle.IPowerHistoryEntry> Batch() => new List<SabberStoneCore.Kettle.IPowerHistoryEntry> {
+            SabberStoneCore.Kettle.PowerHistoryBuilder.TagChange(game.Id, GameTag.NEXT_STEP, (int)Step.MAIN_ACTION) };
+        // The made-up 6 Attack reaches the log as a stat change, or as the RESYNC against the engine's 4 that follows it.
+        bool Followed(int id) => lines.Any(l => l.Contains("#" + id + "(") && (l.Contains(" STATS ") && l.Contains("->6/") || l.Contains(" RESYNC ") && l.Contains("tracked=6/")));
+
+        var other = Batch();
+        match.RecordTransportCorrection(other, 1, yeti.Id, a6, true);
+        SendHistoryEntries(match, Batch());
+        Check(!Followed(yeti.Id), "a correction recorded for another batch reached the log:\n" + string.Join("\n", lines));
+
+        var batch = Batch();
+        match.RecordTransportCorrection(batch, 1, yeti.Id, a6, true);
+        match.RecordTransportCorrection(batch, 1, hidden.Id, new Dictionary<GameTag, int> { [GameTag.ARMOR] = 3 }, true);   // ARMOR is logged in any zone
+        SendHistoryEntries(match, batch);
+        Check(Followed(yeti.Id), "the log did not follow a public correction:\n" + string.Join("\n", lines));
+        Check(!lines.Any(l => l.Contains("#" + hidden.Id + "(")), "the log followed a correction on an opponent's hand card:\n" + string.Join("\n", lines));
+
+        lines.Clear();
+        SendHistoryEntries(match, batch);
+        Check(!Followed(yeti.Id), "a consumed correction reached the log twice:\n" + string.Join("\n", lines));
+        Console.WriteLine("PASS event log follows the transport's corrections: public followed, hidden and foreign skipped, consumed once");
     }
 
     private static void AuraCorrectionsRespectReplayVisibility()

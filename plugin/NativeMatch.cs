@@ -3039,9 +3039,16 @@ public sealed class NativeMatch
                 try { EventTrace?.Invoke(line); } catch (Exception) { }
             }, HumanPlayerId.ToString(), BotPlayerId.ToString());
             // The log follows the transport corrections the client is sent at each history position (an aura's removal).
-            eventLog.Corrections = (entries, index) => copyCompletions
-                .Where(c => ReferenceEquals(c.Entries, entries) && c.HistoryIndex == index)
-                .Select(c => new MatchEventLog.TransportCorrection(c.EntityId, c.Tags, c.RequiresPublicReplay)).ToList();
+            eventLog.IsRevealed = revealedEntities.Contains;
+            eventLog.Corrections = (entries, index) =>
+            {
+                if (copyCompletions.Count == 0) return Array.Empty<MatchEventLog.TransportCorrection>();
+                var found = new List<MatchEventLog.TransportCorrection>();
+                foreach (var c in copyCompletions)
+                    if (c.HistoryIndex == index && ReferenceEquals(c.Entries, entries))
+                        found.Add(new MatchEventLog.TransportCorrection(c.EntityId, c.Tags, c.RequiresPublicReplay));
+                return found;
+            };
         }
         eventBatch.Clear();
         return true;
@@ -5477,12 +5484,11 @@ public sealed class NativeMatch
             ? (int)historicalZone
             : visibleTransportTags.TryGetValue(entityId, out var tags)
                 && tags.TryGetValue((int)GameTag.ZONE, out int visibleZone) ? visibleZone : (int)EngineZone.INVALID;
-        if (zone == (int)EngineZone.PLAY) return true;
         int controller = historicalControllers.TryGetValue(entityId, out int historicalController)
             ? historicalController
             : visibleTransportTags.TryGetValue(entityId, out tags)
                 && tags.TryGetValue((int)GameTag.CONTROLLER, out int visibleController) ? visibleController : 0;
-        return zone == (int)EngineZone.HAND && controller == HumanPlayerId;
+        return ReplayVisibility.IsPublicPlace((EngineZone)zone, controller, HumanPlayerId);
     }
 
     private PowerHistoryData ToNativeHistory(IPowerHistoryEntry entry)
