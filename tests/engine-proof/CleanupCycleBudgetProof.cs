@@ -14,7 +14,7 @@ using static Core2026Proof;
 // cleanup allocates a bounded amount.
 internal static class CleanupCycleBudgetProof
 {
-    private const long AllocationLimit = 256L << 20;
+    private const long AllocationLimit = 64L << 20; // the 1000-cycle loop allocates about 4 MB
     private static void Verify(bool condition, string message) => Core2026Proof.Check(condition, message);
 
     [GroupProof("cleanup-cycle-budget")]
@@ -24,6 +24,7 @@ internal static class CleanupCycleBudgetProof
         PlayedMinionCycleEndsInDraw();
         DeathLoopWithoutSummonReactionEndsInDraw();
         NestedCleanupsShareTheBudget();
+        HeroLostBeforeTheBudgetKeepsTheResult();
         FiniteCycleUnderTheBudgetResolves();
         Console.WriteLine($"PASS cleanup cycle budget: summon/death loops end in a draw after {Game.MaxCleanupCycles} cycles with bounded memory; finite chains resolve in one cleanup");
     }
@@ -83,7 +84,7 @@ internal static class CleanupCycleBudgetProof
         Drawn(g, diagnostics, allocated, "SummonDeathCycle");
         // One cycle per Death Phase and one per Summon Resolution pass: half the budget each.
         Verify(deaths() == Game.MaxCleanupCycles / 2, $"SummonDeathCycle: {Game.MaxCleanupCycles / 2} deaths before the stop, got {deaths()}");
-        Verify(g.PowerHistory.Full.Count - history < 40 * Game.MaxCleanupCycles,
+        Verify(g.PowerHistory.Full.Count - history < 15 * Game.MaxCleanupCycles,
             $"SummonDeathCycle: history stays bounded, got {g.PowerHistory.Full.Count - history} entries");
         // A later cleanup of the finished game resolves nothing and fires no second diagnostic.
         Summon(p, "CS2_231");
@@ -100,6 +101,11 @@ internal static class CleanupCycleBudgetProof
         long allocated = Allocated(() => accepted = g.Process(PlayCardTask.Any(p, card)));
         Verify(accepted, "PlayedMinionCycle: the play is accepted");
         Drawn(g, diagnostics, allocated, "PlayedMinionCycle");
+        var terminal = g.HistoryFacts.Query.Events<SabberStoneCore.Model.MatchTerminalFact>().ToArray();
+        Verify(terminal.Length == 1 && terminal[0].Player1State == PlayState.TIED && terminal[0].Player2State == PlayState.TIED,
+            $"PlayedMinionCycle: one terminal fact records the draw, got {terminal.Length}");
+        var clone = g.CloneExact(history: false);
+        Verify(clone.CycleBudgetExhausted && clone.State == State.COMPLETE, "PlayedMinionCycle: an exact clone keeps the exhausted budget");
     }
 
     private static void DeathLoopWithoutSummonReactionEndsInDraw()
@@ -136,6 +142,21 @@ internal static class CleanupCycleBudgetProof
         long allocated = Allocated(g.DeathProcessingAndAuraUpdate);
         Drawn(g, diagnostics, allocated, "NestedCleanups");
         Verify(nested > 0 && deaths == Game.MaxCleanupCycles, $"NestedCleanups: {Game.MaxCleanupCycles} Death Phases across the nested cleanups, got {deaths} ({nested} nested)");
+    }
+
+    // A hero that dies in the cleanup decides the game; running out of budget later in that cleanup keeps that result.
+    private static void HeroLostBeforeTheBudgetKeepsTheResult()
+    {
+        var g = Fixture(); var p = g.Player1;
+        var first = Summon(p, "CS2_231");
+        var deaths = LoopForever(g, p); var diagnostics = Diagnostics(g);
+        g.TriggerManager.Events.Subscribe<DeathEvent>(_ => { if (deaths() == 10) g.Player2.Hero.ToBeDestroyed = true; });
+        first.ToBeDestroyed = true;
+        g.DeathProcessingAndAuraUpdate();
+        Verify(g.State == State.COMPLETE && g.Player1.PlayState == PlayState.WON && g.Player2.PlayState == PlayState.LOST,
+            $"HeroLost: the earlier hero death decides the game, got p1={g.Player1.PlayState} p2={g.Player2.PlayState}");
+        Verify(g.CycleBudgetExhausted && diagnostics.Count == 1 && g.SummonedMinions.Count == 0 && g.DeadMinions.Count == 0,
+            $"HeroLost: the loop still stops at the budget, diagnostics={diagnostics.Count}");
     }
 
     // A long chain that stops on its own resolves completely in one cleanup, and the next cleanup gets a fresh budget:

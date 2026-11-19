@@ -609,7 +609,7 @@ namespace SabberStoneCore.Model
                  !LocationRules.CanActivate(activation.Controller, activation.Source, activation.ActionTarget))) return false;
 			if (Resolution.HasSuspendedEffect && !(gameTask is ConcedeTask)) return false;
             if (SpellCompletion != null && !(gameTask is ChooseTask) && !(gameTask is ConcedeTask)) return false;
-            // Rewind can settle overdue summon reactions before its snapshot; keep that history with this action.
+            // Rewind can settle summons left pending (after a choice) before its snapshot; keep that history with this action.
             bool prepareRewind = RewindRules.WouldBegin(this, gameTask) && !IsSnapshotBoundary;
             if (prepareRewind && !RewindRules.IsLegalTask(this, gameTask)) return false;
             bool preparedHistory = !preserveHistory && prepareRewind;
@@ -1617,36 +1617,43 @@ namespace SabberStoneCore.Model
 		[NonSerialized] private int _cleanupCycles;
 
 		/// <summary>
-		/// True once a cleanup ran out of <see cref="MaxCleanupCycles"/>: the game ended in a draw, and later cleanups resolve nothing.
+		/// True once a cleanup ran out of <see cref="MaxCleanupCycles"/>: the game is over, and later cleanups resolve nothing.
+		/// Runtime-only (never in a snapshot): it is only ever true on a finished game. Clone copies it so clones stay exact.
 		/// </summary>
 		[field: NonSerialized] public bool CycleBudgetExhausted { get; private set; }
 
-		// The rulebook repeats Death Phases "until no new Deaths occur" and states no limit. A loop that never stops on its own
-		// cannot be resolved, so the death loop and the Summon Resolution Step share one budget per outermost cleanup. Engine
-		// choice, not a rulebook rule: when it runs out the game ends in a draw, as an unbounded game does at the turn limit.
+		/// <summary>Called once, with a short reason, when a cleanup runs out of its cycle budget.</summary>
+		[field: NonSerialized] public Action<string> CycleBudgetExhaustedDiagnostic { get; set; }
+
+		// The rulebook repeats Death Phases "until no new Deaths occur" and states no limit, and no source says what retail
+		// does when they never stop. So the death loop and the Summon Resolution Step share one budget per outermost cleanup.
+		// Engine choice, not a rulebook rule: when it runs out the game ends in a draw (retail's turn limit also ends an
+		// unbounded game in a draw), unless a hero already lost in this cleanup.
 		private bool SpendCleanupCycle()
 		{
 			if (!CycleBudgetExhausted && ++_cleanupCycles <= MaxCleanupCycles) return true;
-			if (!CycleBudgetExhausted)
-			{
-				CycleBudgetExhausted = true;
-				Log(LogLevel.WARNING, BlockType.PLAY, "Game", !Logging ? "" : $"Cleanup stopped after {MaxCleanupCycles} Death Phases and Summon Resolution passes: the effects loop forever; the game ends in a draw.");
-				CycleBudgetExhaustedDiagnostic?.Invoke($"Cleanup cycle limit={MaxCleanupCycles}");
-				if (State != State.COMPLETE)
-				{
-					Player1.PlayState = PlayState.TIED;
-					Player2.PlayState = PlayState.TIED;
-					NextStep = Step.FINAL_WRAPUP;
-				}
-			}
 			DeadMinions.Clear();
 			DeadBoardObjects.Clear();
 			SummonedMinions.Clear();
+			if (CycleBudgetExhausted) return false;
+			CycleBudgetExhausted = true;
+			string message = $"Cleanup cycle limit={MaxCleanupCycles}";
+			Log(LogLevel.WARNING, BlockType.PLAY, "Game", !Logging ? "" : $"Cleanup stopped after {MaxCleanupCycles} Death Phases and Summon Resolution passes without settling; the game ends.");
+			if (State != State.COMPLETE)
+			{
+				bool decided = Player1.PlayState == PlayState.LOSING || Player1.PlayState == PlayState.CONCEDED
+					|| Player2.PlayState == PlayState.LOSING || Player2.PlayState == PlayState.CONCEDED;
+				if (!decided)
+				{
+					Player1.PlayState = PlayState.TIED;
+					Player2.PlayState = PlayState.TIED;
+				}
+				NextStep = Step.FINAL_WRAPUP;
+			}
+			try { CycleBudgetExhaustedDiagnostic?.Invoke(message); }
+			catch { } // Diagnostic sinks cannot interrupt an authoritative action.
 			return false;
 		}
-
-		/// <summary>Called once, with a short reason, when a cleanup runs out of its cycle budget.</summary>
-		[NonSerialized] public Action<string> CycleBudgetExhaustedDiagnostic;
 
 		// Summon Resolution Step: "whenever you summon" triggers for the summons of the Phase that just ended.
 		// Each batch leaves the list before it fires: a reaction can reach a nested cleanup (an overdrawn IMPFERNAL!), which
