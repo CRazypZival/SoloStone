@@ -69,6 +69,36 @@ internal static class ReprintIdentitySourceCheck
         ("CardSets/Client/Sets/TIME_TRAVEL/TalanjiOfTheGraves.cs", "e.Card.Id==Boons[i]", "enchantment ids"),
         ("CardSets/Client/Sets/EMERALD_DREAM/Shaladrassil.cs", "Ysera.Contains(m.Card.Id)", "a hand-written family that lists every Ysera printing"),
         ("CardSets/Client/Sets/CATACLYSM/GennCursedKing.cs", "power.Card.Id == BasicHeroPowerRules.PowerId", "hero power id"),
+        ("Actions/AssembleRules.cs", "c.DbfId == sourceDbfId", "pool declaration lookup by the declaring card's dbf"),
+        ("Actions/CompositeLocationRules.cs", "card.Cost).Distinct()", "distinct costs, not cards"),
+        ("Actions/DiscoverRealRules.cs", "watch[WatchedDefinition] == played.Card.AssetId", "witness tag of the exact definition a watch recorded"),
+        ("Actions/DiscoverRealRules.cs", "d.DbfId == (recipeDbfId ?? source.Card.AssetId)", "pool declaration lookup by the declaring card's dbf"),
+        ("Actions/ShatterRules.cs", "Shatter?.ParentId == card.Card.Id", "combine-half family by exact ids"),
+        ("Actions/SwapRules.cs", "selected.Contains(card)", "entities, not cards"),
+        ("Actions/SwapRules.cs", "ownAuras.Contains(card)", "entities, not cards"),
+        ("CardSets/Client/Sets/CATACLYSM/CataclysmHighlightConditions.cs", "card.Id != source.Id", "entity ids"),
+        ("CardSets/Client/Sets/CATACLYSM/SylvanassTriumph.cs", "p.DbfId == DbfId", "history of this very card (literal self)"),
+        ("CardSets/Client/Sets/EMERALD_DREAM/Ysondre.cs", "f.DbfId == DbfId", "history of this very card (literal self)"),
+        ("CardSets/Client/Sets/ESCAPEFROM_VIOLET_HOLD/IridaSinseeker.cs", "card.Id != survivor.Id", "entity ids of deck entities"),
+        ("CardSets/Client/Sets/ESCAPEFROM_VIOLET_HOLD/VoidSoul.cs", "c.DbfId == DbfId", "history of this very card (literal self)"),
+        ("CardSets/Client/Sets/TIME_TRAVEL/RangerGeneralSylvanas.cs", "f.DbfId == first", "two named partner cards with no reprint"),
+        ("Effects/DiscoverEntitiesWithDarkGiftThenContinueTask.cs", "p.Card.Identity).Distinct()", "already identity keys"),
+        ("Effects/EffectContext.cs", "card.DbfId == (recipeDbfId ?? Source.Card.AssetId)", "pool declaration lookup by the declaring card's dbf"),
+        ("Kettle/PowerHistory.cs", "Entity.Id == card.Id", "entity ids"),
+        ("Loader/AssembleCatalog.cs", "entry.DbfId == card.AssetId", "catalog lookup of one exact printing"),
+        ("Loader/ClientOverlay.cs", "c.AssetId == definition.DbfId", "overlay load integrity check"),
+        ("Loader/TargetingPredicates.cs", "ent[m] == span[i].Card.AssetId", "targeting table lookup by dbf"),
+        ("Model/DarkGifts.cs", "g.SpellId == spell.Card.Id", "gift registry lookup by gift spell id"),
+        ("Model/Entities/Minion.cs", "card.AssetId == enchantment.Card.AssetId", "aura to enchantment link"),
+        ("Model/OfflinePoolAdmission.cs", "id != source.CardId", "pool registry integrity"),
+        ("Model/OfflinePoolPolicy.cs", "id != dependency.DbfId", "pool registry integrity"),
+        ("Model/OfflinePoolPolicy.cs", "pair.Value == dependency.DbfId", "pool registry integrity"),
+        ("Model/OfflinePoolPolicy.cs", "card.AssetId != member.DbfId", "pool registry integrity"),
+        ("Model/OfflinePoolPolicy.cs", "card.AssetId != dependency.DbfId", "pool registry integrity"),
+        ("Model/Zones/HandZone.cs", "e.Id == card.Id", "entity ids"),
+        ("Tasks/SimpleTasks/DiscoverTask.cs", "cardsToDiscover[0].Distinct().ToArray()", "the frozen legacy-pool branch keeps its exact draws"),
+        ("Tasks/SpecificTask.cs", "id == m.Card.Id", "legacy entourage token ids"),
+        ("Tasks/SpecificTask.cs", "nextId == currentPower.Card.Id", "hero power id, Dr. Boom"),
     };
 
     internal static void Run()
@@ -113,6 +143,13 @@ internal static class ReprintIdentitySourceCheck
     private static readonly Regex Compare = new(@"\bCard\??\.(?:Id|AssetId)\s*(?:==|!=)\s*(?![\s""\d@-])", RegexOptions.Compiled);
     private static readonly Regex Group = new(@"GroupBy\([^;]*?\bCard\??\.(?:Id|AssetId)\b|GroupBy\(\s*\w+\s*=>\s*\w+\.DbfId\b", RegexOptions.Compiled);
     private static readonly Regex Distinct = new(@"Select\([^;]*?(?:\.Card|Card\??\.(?:Id|AssetId))\)\s*\.Distinct\(\)", RegexOptions.Compiled);
+    // Wider shapes: a card id or dbf on the right of a comparison, a history DbfId compared with a variable, ids of two card-named values,
+    // Distinct() and Contains(card) on Card values.
+    private static readonly Regex CompareRight = new(@"(?<![\w""])(?!\d)[\w.?\[\]]+\s*(?:==|!=)\s*[\w.?\[\]]*\bCard\??\.(?:Id|AssetId)\b", RegexOptions.Compiled);
+    private static readonly Regex DbfCompare = new(@"\.DbfId\s*(?:==|!=)\s*(?![\s""\d@-])|(?<![\d""])\b[\w.?]+\s*(?:==|!=)\s*[\w.?]*\.DbfId\b", RegexOptions.Compiled);
+    private static readonly Regex CardNamed = new(@"\b\w*[cC]ard\w*\??\.(?:Id|AssetId)\s*(?:==|!=)\s*\w+\??\.(?:Id|AssetId)\b|\b\w+\??\.(?:Id|AssetId)\s*(?:==|!=)\s*\w*[cC]ard\w*\??\.(?:Id|AssetId)\b", RegexOptions.Compiled);
+    private static readonly Regex DistinctCards = new(@"\b(?:Cards|DeckCards|cards|candidates|pool|offers)\b[^;]*?\.Distinct\(\)|Card\[\][^;]*?\.Distinct\(\)", RegexOptions.Compiled);
+    private static readonly Regex ContainsCard = new(@"\.Contains\((?:card|pick|candidate|chosen|offer)\)", RegexOptions.Compiled);
     private static readonly Regex Contains = new(@"\.Contains\([^;()]*?\bCard\??\.(?:Id|AssetId)\)", RegexOptions.Compiled);
 
     internal static List<Finding> Scan(string source, string file)
@@ -124,7 +161,8 @@ internal static class ReprintIdentitySourceCheck
             string line = lines[i];
             int comment = line.IndexOf("//", StringComparison.Ordinal);
             string code = comment >= 0 && !line.Substring(0, comment).Contains('"') ? line.Substring(0, comment) : line;
-            if (Compare.IsMatch(code) || Group.IsMatch(code) || Distinct.IsMatch(code) || Contains.IsMatch(code))
+            if (Compare.IsMatch(code) || Group.IsMatch(code) || Distinct.IsMatch(code) || Contains.IsMatch(code)
+                || CompareRight.IsMatch(code) || DbfCompare.IsMatch(code) || CardNamed.IsMatch(code) || DistinctCards.IsMatch(code) || ContainsCard.IsMatch(code))
                 findings.Add(new Finding(file, i + 1, line.Trim()));
         }
         return findings;
@@ -153,5 +191,13 @@ internal static class ReprintIdentitySourceCheck
         Expect("if (ids.Contains(p.Card.AssetId)) { }", 1, "Contains of a dbf");
         Expect("if (ids.Contains(p.Card.Identity)) { }", 0, "Contains of an identity");
         Expect("if (x) { } // a.Card.Id == b.Card.Id", 0, "comment");
+        Expect("f.Count(f => f.DbfId == p.Card.AssetId)", 1, "history dbf against a card dbf (right side)");
+        Expect("if (dbf == p.Card.AssetId) { }", 1, "variable against a card dbf");
+        Expect("if (f.DbfId == other) { }", 1, "history dbf against a variable");
+        Expect("if (f.DbfId == 125983) { }", 0, "history dbf against a literal");
+        Expect("if (card.Id == other.Id) { }", 1, "ids of a card-named value");
+        Expect("var d = cards.Distinct().ToArray();", 1, "Distinct on cards");
+        Expect("if (list.Contains(card)) { }", 1, "Contains of a card");
+        Expect("if (e.Id == \"X\") { }", 0, "literal id on a plain value");
     }
 }

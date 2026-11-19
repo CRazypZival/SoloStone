@@ -26,7 +26,9 @@ internal static class ReprintIdentityProof
             ("DiscoverNeverOffersTwoPrintings", Unpinned_DiscoverNeverOffersTwoPrintings),
             ("SourceExclusion", Unpinned_SourceExclusion),
             ("PlayedHistoryAcrossPrintings", Unpinned_PlayedHistoryAcrossPrintings),
-            ("LiteralNamesListEveryPrinting", Unpinned_LiteralNamesListEveryPrinting) })
+            ("LiteralNamesListEveryPrinting", Unpinned_LiteralNamesListEveryPrinting),
+            ("PlayedMinionHistoryAcrossPrintings", Unpinned_PlayedMinionHistoryAcrossPrintings),
+            ("MinionPoolSamplingRedraw", Unpinned_MinionPoolSamplingRedraw) })
             try { part(); Console.WriteLine("PASS Unpinned_ReprintIdentity " + name); }
             catch (Exception e) { failures.Add(name + ": " + e.Message); }
         if (failures.Count != 0) throw new Exception(string.Join("\n", failures));
@@ -210,6 +212,43 @@ internal static class ReprintIdentityProof
         }
     }
 
+    // Unpinned_: Twisted Webweaver draws when a minion you already played is played again, in the other printing too.
+    private static void Unpinned_PlayedMinionHistoryAcrossPrintings()
+    {
+        var g = Fixture(); var p = g.Player1;
+        for (int i = 0; i < 5; i++) ToDeck(p, "EX1_289");
+        Core2026Proof.Summon(p, Cards.FromAssetId(115612).Id);
+        Core2026Proof.Play(g, p, "EX1_028");
+        var second = Core2026Proof.Add(p, "CORE_EX1_028");
+        int before = p.HandZone.Count;
+        Core2026Proof.PlayEntity(g, p, second);
+        Verify(p.HandZone.Count == before, "Twisted Webweaver draws for the Core Stranglethorn Tiger after the classic one was played: hand " + before + " -> " + p.HandZone.Count);
+    }
+
+    // Unpinned_: the Wild minion pool holds real pairs (Stranglethorn Tiger, Doomguard, Sleepy Dragon, Raptor Herald). Sampling three offers never
+    // repeats a card, and the redraw branch runs: a plain replay of the same RNG would have picked a pair at least once.
+    private static void Unpinned_MinionPoolSamplingRedraw()
+    {
+        var g = Fixture(); var p = g.Player1;
+        var filter = OfflinePoolFilter.Discover(type: CardType.MINION, scope: PoolScope.Wild);
+        var candidates = OfflineCardPools.Candidates(g, p.HeroClass, filter, 0);
+        int paired = candidates.Count(c => candidates.Any(o => o != c && o.IsSameCardAs(c)));
+        Verify(paired >= 4, "the Wild minion pool holds printings of one card: " + paired);
+        int redraws = 0;
+        for (int i = 0; i < 40000 && redraws < 5; i++)
+        {
+            var plain = g.Random.Clone();
+            var indices = Enumerable.Range(0, candidates.Count).ToArray();
+            var raw = new Card[3];
+            for (int k = 0; k < 3; k++) { int j = k + plain.Next(indices.Length - k); (indices[k], indices[j]) = (indices[j], indices[k]); raw[k] = candidates[indices[k]]; }
+            bool pair = raw.Select(c => c.Identity).Distinct().Count() < 3;
+            var offers = OfflineCardPools.SampleDistinct(g, filter, p.HeroClass, 0);
+            Verify(offers.Length == 3 && offers.Select(c => c.Identity).Distinct().Count() == 3, "three different cards: " + string.Join(",", offers.Select(c => c.Id)));
+            if (pair) redraws++; else Verify(offers.SequenceEqual(raw), "without a repeated card the draws are the plain ones");
+        }
+        Verify(redraws >= 5, "the redraw branch ran " + redraws + " times");
+    }
+
     // The identity data: how many cards link, no link joins different names, and known pairs resolve to one identity.
     private static void Unpinned_DataCheck()
     {
@@ -227,6 +266,10 @@ internal static class ReprintIdentityProof
         foreach (var (a, b) in new[] { ("CORE_EX1_289", "EX1_289"), ("CORE_EX1_287", "EX1_287"), ("CORE_EX1_610", "EX1_610"), ("CORE_EX1_611", "EX1_611") })
             Verify(Cards.FromId(a).IsSameCardAs(Cards.FromId(b)) && Cards.FromId(b).IsSameCardAs(Cards.FromId(a)), a + " and " + b + " are one card");
         Verify(!Cards.FromId("EX1_289").IsSameCardAs(Cards.FromId("EX1_287")), "Ice Barrier and Counterspell are different cards");
+        // Every collectible same-name same-type pair is one card (heroes excluded: skins share names). No group is a different card in our facts. Excluded: cards other proofs inject at run time (ids with _PROOF_, copies of real cards made after card load).
+        var split = Cards.All.Where(c => c.Collectible && c.Type != CardType.HERO && !c.Id.Contains("_PROOF_")).GroupBy(c => (c.Name, c.Type)).Where(g => g.Select(c => c.Identity).Distinct().Count() > 1)
+            .Select(g => g.Key.Name + ": " + string.Join(",", g.Select(c => c.Id))).ToArray();
+        Verify(split.Length == 0, "collectible same-name same-type cards with different identities: " + string.Join("; ", split));
         int c1413 = Cards.All.Count(c => c[(GameTag)1413] != 0), c858 = Cards.All.Count(c => c[(GameTag)858] != 0);
         Console.WriteLine($"PASS Unpinned_ReprintIdentity data: {linked.Count} linked cards ({sameName} same-name, 0 cross-name) from tag 1413 on {c1413} and tag 858 on {c858} rows; {linked.Values.Distinct().Count()} roots");
     }

@@ -16,6 +16,10 @@ namespace SabberStoneCore.Identity
 	/// (a canonical key; equal for reprints) in those rules, never <c>Card.Id</c> or <c>AssetId</c>. Entity identity, enchantment ids,
 	/// creating, copying or transforming into a card and lookups by id stay exact.
 	/// The retail rule is not pinned by a source (labelled Unpinned_* in the proofs).
+	/// Legacy pool replays (schema-2 or unversioned records) keep their frozen draws, so the draws that consume a pool are gated on it (Discover, Choice,
+	/// SampleDistinct of a context, Build-A-Beast). The ungated sites (Arcane Keysmith, OfflineCardPools sampling and candidates, deck fill, Secret and
+	/// Highlander checks) are safe: no shipped mode uses legacy pools (every new match records match-random/1), and with no reprint pair in the
+	/// input they draw exactly as before, which the recorded goldens confirm.
 	/// Links, first match wins, followed to a root: tag 1413 DECK_RULE_COUNT_AS_COPY_OF_CARD_ID (dbf of the original) when the names match
 	/// (one row, a Murgatha hero power, points it at Evolve); tag 858 only
 	/// when both cards are collectible and share an English name (858 also joins boss and shrine cards to unrelated cards);
@@ -58,6 +62,13 @@ namespace SabberStoneCore.Identity
 					&& byId.TryGetValue(originalId, out Card rebalanced) && rebalanced.Name == c.Name)
 					target = rebalanced.AssetId;
 				if (target != 0 && target != c.AssetId) links[c.AssetId] = target;
+			}
+			// Last link: collectible cards of one English name and one card type are one card, even when the facts carry no 858 or 1413
+			// for the pair. Heroes are skipped (a hero skin shares its name with other skins). Checked in the proofs for every such group.
+			foreach (var group in byDbf.Values.Where(c => c.Collectible && c.Type != CardType.HERO).GroupBy(c => (c.Name, c.Type)))
+			{
+				var groupRoots = group.Select(c => Resolve(links, c.AssetId)).Distinct().OrderBy(r => r).ToArray();
+				for (int i = 1; i < groupRoots.Length; i++) links[groupRoots[i]] = groupRoots[0];
 			}
 			Links.Clear();
 			foreach (KeyValuePair<int, int> link in links) Links[link.Key] = link.Value;
