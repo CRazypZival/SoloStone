@@ -1242,6 +1242,8 @@ M	Assembly-CSharp	EntityBase	HasReferencedTag	(GAME_TAG)
 M	Assembly-CSharp	EntityBase	HasReferencedTag	*
 M	Assembly-CSharp	EntityBase	HasTag	System.Boolean(GAME_TAG)
 M	Assembly-CSharp	EntityBase	IsHero	System.Boolean()
+M	Assembly-CSharp	EntityBase	IsObjective	System.Boolean()
+M	Assembly-CSharp	EntityBase	IsSecret	System.Boolean()
 M	Assembly-CSharp	EntityDef	GetFlavorText	System.String()
 M	Assembly-CSharp	EntityDef	GetReferencedTag	(System.Int32)
 M	Assembly-CSharp	EntityDef	GetReferencedTag	*
@@ -1333,9 +1335,11 @@ M	Assembly-CSharp	GameState	IsEntityInputEnabled	System.Boolean(Entity)
 M	Assembly-CSharp	GameState	IsFriendlySidePlayerTurn	System.Boolean()
 M	Assembly-CSharp	GameState	IsGameCreating	System.Boolean()
 M	Assembly-CSharp	GameState	IsGameOver	System.Boolean()
+M	Assembly-CSharp	GameState	IsGameOverNowOrPending	System.Boolean()
 M	Assembly-CSharp	GameState	IsGameReseting	System.Boolean()
 M	Assembly-CSharp	GameState	IsInChoiceMode	System.Boolean()
 M	Assembly-CSharp	GameState	IsInSubOptionMode	System.Boolean()
+M	Assembly-CSharp	GameState	IsLocalSidePlayerTurn	System.Boolean()
 M	Assembly-CSharp	GameState	IsMulliganBusy	System.Boolean()
 M	Assembly-CSharp	GameState	IsMulliganManagerActive	System.Boolean()
 M	Assembly-CSharp	GameState	IsMulliganPhase	System.Boolean()
@@ -1343,6 +1347,7 @@ M	Assembly-CSharp	GameState	IsResponsePacketBlocked	System.Boolean()
 M	Assembly-CSharp	GameState	MustWaitForChoices	System.Boolean()
 M	Assembly-CSharp	GameState	SetBusy	System.Void(System.Boolean)
 M	Assembly-CSharp	GameState	WasConcedeRequested	System.Boolean()
+M	Assembly-CSharp	GameState	WasRestartRequested	System.Boolean()
 M	Assembly-CSharp	GameStrings	Format	System.String(System.String,System.Object[])
 M	Assembly-CSharp	GameStrings	Get	System.String(System.String)
 M	Assembly-CSharp	GameUtils	GetAllCollectibleCardIds	*
@@ -2123,6 +2128,7 @@ M	Assembly-CSharp	PowerTaskList	GetId	System.Int32()
 M	Assembly-CSharp	PowerTaskList	GetSourceEntity	Entity(System.Boolean)
 M	Assembly-CSharp	PowerTaskList	GetTaskList	System.Collections.Generic.List`1<PowerTask>()
 M	Assembly-CSharp	PowerTaskList	IsComplete	System.Boolean()
+M	Assembly-CSharp	PowerTaskList	IsStartOfBlock	System.Boolean()
 M	Assembly-CSharp	PowerTaskList	OnTaskCompleted	*
 M	Assembly-CSharp	PrefabInstanceLoadTracker	InstantiatePrefab	*
 M	Assembly-CSharp	ProductCatalog	Job_PopulateData	*
@@ -2346,6 +2352,10 @@ M	Assembly-CSharp	TriggerSpellController	ActivateActorTriggerSpell	(System.Int32
 M	Assembly-CSharp	TriggerSpellController	ActivateTriggerSpell	(System.Int32)
 M	Assembly-CSharp	TriggerSpellController	InitEffect	(Card)
 M	Assembly-CSharp	TriggerSpellController	InitTriggerSpell	(CardEffect,Card)
+M	Assembly-CSharp	TurnStartManager	Get	TurnStartManager()
+M	Assembly-CSharp	TurnStartManager	IsListeningForTurnEvents	System.Boolean()
+M	Assembly-CSharp	TurnStartManager	IsTurnStartIndicatorShowing	System.Boolean()
+M	Assembly-CSharp	TurnStartManager	NotifyOfTriggerVisual	System.Void()
 M	Assembly-CSharp	TutorialDeathKnightDeckBuilding	HasSeenTutorial	(GameSaveKeySubkeyId)
 M	Assembly-CSharp	TutorialDeathKnightDeckBuilding	HasSeenTutorial	*
 M	Assembly-CSharp	TutorialDeathKnightDeckBuilding	SetTutorialSeen	(GameSaveKeySubkeyId)
@@ -3393,6 +3403,7 @@ T	Assembly-CSharp	TranslatedMedalInfo
 T	Assembly-CSharp	TraySection		
 T	Assembly-CSharp	TrialCardManager		
 T	Assembly-CSharp	TriggerSpellController		
+T	Assembly-CSharp	TurnStartManager		
 T	Assembly-CSharp	TutorialDeathKnightDeckBuilding		
 T	Assembly-CSharp	TutorialEntity		
 T	Assembly-CSharp	UIBButton		
