@@ -57,8 +57,28 @@ internal static class DeckShareChecks
             && retail.Cards.Where(card => card.qty == 1).Select(card => card.dbId).SequenceEqual(new[] { 455, 585, 699, 921, 985, 1144 })
             && retail.Cards.Where(card => card.qty == 2).Select(card => card.dbId).SequenceEqual(new[] { 141, 216, 296, 437, 519, 658, 877, 1003, 1243, 1261, 1281, 1662 }),
             "a retail code decodes: hero, format, six singles and twelve pairs");
-        Check(Write(2, 31, retail.Cards).StartsWith("AAECAR8GxwPJBLsFmQfZB/gIDI0B2AGoArUDhwSSBe0G6wfbCe0JgQr+DAA", StringComparison.Ordinal),
-            "the writer reproduces the retail code byte for byte (plus the client's sideboard byte)");
+        Check(Convert.FromBase64String(Write(2, 31, retail.Cards)).SequenceEqual(
+                Convert.FromBase64String("AAECAR8GxwPJBLsFmQfZB/gIDI0B2AGoArUDhwSSBe0G6wfbCe0JgQr+DAA=").Concat(new byte[] { 0 })),
+            "the writer reproduces the retail code byte for byte, plus the client's no-sideboard byte");
+
+        // Retail codes with sideboards, from the public HearthSim python-hearthstone deckstring tests (MIT): E.T.C. Band Manager
+        // (90749, Wild Priest), a Standard deck whose 102983 owns three picks, and the library's canonical code with 3-copy cards.
+        foreach (var (vector, format, hero, count, cardRows, sideRows) in new[] {
+            ("AAEBAZCaBgjlsASotgSX7wTvkQXipAX9xAXPxgXGxwUQvp8EobYElrcE+dsEuNwEutwE9vAEhoMFopkF4KQFlMQFu8QFu8cFuJ4Gz54G0Z4GAAED8J8E/cQFuNkE/cQF/+EE/cQFAAA=",
+                1, 101648, 40, new[] { (90749, 1), (102223, 2), (69566, 2) }, new[] { (69616, 1, 90749), (76984, 1, 90749), (78079, 1, 90749) }),
+            ("AAECAfHhBAiy9wTt/wWLkgaYlQb/lwbHpAbT5QbW5QYLh/YE88gF8OgFl5UGkZcGkqAGurEGvLEG9rEGi7cG1+UGAAED87MGx6QG9rMGx6QG6N4Gx6QGAAA=",
+                2, 78065, 30, new[] { (102983, 1), (111319, 2) }, new[] { (104947, 1, 102983), (104950, 1, 102983), (110440, 1, 102983) }),
+            ("AAEBAR8DAQQGAwIFBwIDAwkDAQMKAgEDCAMAAA==", 1, 31, 15, new[] { (3, 3), (9, 3), (2, 2) }, new[] { (1, 1, 3), (8, 1, 3), (10, 1, 2) }) })
+        {
+            var sample = DeckCodeText.TryDecode(vector);
+            Check(sample != null && sample.Format == format && sample.Hero == hero && sample.CardCount == count && cardRows.All(sample.Cards.Contains)
+                && sample.Sideboards.OrderBy(card => card.owner).ThenBy(card => card.dbId).SequenceEqual(sideRows.OrderBy(card => card.Item3).ThenBy(card => card.Item1)),
+                "a public retail code with sideboards decodes: hero " + hero + ", " + count + " cards, " + sideRows.Length + " sideboard cards");
+            // The library's own canonical code sorts sideboard rows by owner; the client sorts them by card, as Write does.
+            if (hero != 31)
+                Check(Convert.FromBase64String(Write(sample.Format, sample.Hero, sample.Cards, sample.Sideboards)).SequenceEqual(Convert.FromBase64String(vector)),
+                    "the writer reproduces that retail code byte for byte (hero " + hero + ")");
+        }
 
         // Round trip of every field the client writes, including counts above two and sideboards of every count.
         var cards = new List<(int, int)> { (900, 1), (40, 2), (77, 2), (5000, 3), (123456, 1) };
@@ -73,7 +93,8 @@ internal static class DeckShareChecks
 
         // Not codes: nothing, damaged, truncated, other version, two heroes, a zero card.
         foreach (var (text, label) in new[] { ((string)null, "null"), ("", "empty"), ("hello world", "plain text"), ("AAEC", "truncated header"),
-            ("AQECAR8AAAA=", "reserved byte not zero"), ("AAICAR8AAAA=", "version 2"), ("AAECAh8fAAAA", "two heroes"), ("AAECAR8BAAAA", "a zero card id"),
+            ("AQECAR8AAAA=", "reserved byte not zero"), ("AAEAAR8AAAA=", "format 0"), ("AAEJAR8AAAA=", "unknown format 9"),
+            ("AAECAR8" + new string('A', 2000) + "=", "too long to be a code"), ("AAICAR8AAAA=", "version 2"), ("AAECAh8fAAAA", "two heroes"), ("AAECAR8BAAAA", "a zero card id"),
             (Write(2, 31, retail.Cards).Substring(0, 20), "cut short") })
             Check(DeckCodeText.TryDecode(text) == null, "not a deck code: " + label);
 

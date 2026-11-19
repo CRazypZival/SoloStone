@@ -287,6 +287,7 @@ F	Assembly-CSharp	ChoiceCardMgr+ChoiceState	m_waitingToStart	System.Boolean
 F	Assembly-CSharp	CollectionDeck	BrawlLibraryItemId	System.Int32
 F	Assembly-CSharp	CollectionDeck	CardBackID	System.Nullable`1<System.Int32>
 F	Assembly-CSharp	CollectionDeck	CosmeticCoinID	System.Nullable`1<System.Int32>
+F	Assembly-CSharp	CollectionDeck	DefaultMaxDeckNameCharacters	System.Int32
 F	Assembly-CSharp	CollectionDeck	HeroOverridden	System.Boolean
 F	Assembly-CSharp	CollectionDeck	ID	System.Int64
 F	Assembly-CSharp	CollectionDeck	Locked	System.Boolean
@@ -1636,6 +1637,7 @@ M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendBlizzardCheckoutPurch
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendBlizzardCheckoutPurchaseCompletedSuccess	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendBlizzardCheckoutPurchaseStart	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendCosmeticsRenderingFallback	*
+M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendDeckCopied	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendFlowPerformance	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendFlowPerformanceShop	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendLoadProducts	*

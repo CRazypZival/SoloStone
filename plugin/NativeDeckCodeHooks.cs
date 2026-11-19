@@ -226,7 +226,7 @@ internal static partial class NativeUIProbe
             string code = DeckCodeText.FindCode(__0, out string name, out bool rescued);
             if (!rescued) return true;
             __result = code;
-            __1 = name;
+            __1 = name.Length > CollectionDeck.DefaultMaxDeckNameCharacters ? name.Substring(0, CollectionDeck.DefaultMaxDeckNameCharacters) : name; // as the client cuts it
             log.LogInfo("NATIVE_DECK paste read the code from a later line (text without its '#' header)");
             return false;
         }
@@ -250,11 +250,17 @@ internal static partial class NativeUIProbe
                 log.LogError("NATIVE_DECK copy failed deck=" + LastCopyDeckId + ": " + __exception);
                 return;
             }
+            // Only a deck code is ever kept or logged: if the client's write to the clipboard failed, it still holds whatever the
+            // player had copied before, which must not reach the log.
             string text = UnityEngine.GUIUtility.systemCopyBuffer ?? "";
-            string code = DeckCodeText.FindCode(text, out string name) ?? "";
-            var data = DeckCodeText.TryDecode(code);
-            LastCopyText = text.Length <= 4096 ? text : text.Substring(0, 4096);
-            LastCopyCode = code.Length <= 512 ? code : code.Substring(0, 512);
+            string found = DeckCodeText.FindCode(text, out string name);
+            var data = DeckCodeText.TryDecode(found);
+            string code = data == null ? "" : found;
+            if (data == null) name = "";
+#if !SOLOSTONE_RELEASE
+            LastCopyText = data == null ? "" : text.Length <= 4096 ? text : text.Substring(0, 4096); // test control only
+#endif
+            LastCopyCode = code;
             LastCopyCards = data?.CardCount ?? 0; LastCopySideboardCards = data?.Sideboards.Sum(card => card.qty) ?? 0;
             LastCopyHero = data?.Hero ?? 0; LastCopyFormat = data?.Format ?? 0;
             LastCopyError = data == null ? "the clipboard holds no deck code" : "";

@@ -18,11 +18,22 @@ internal sealed class DeckCodeData
 internal static class DeckCodeText
 {
     private const int MaximumEntries = 400; // a real code lists at most 40 main and a few sideboard cards
+    private const int MaximumFormat = 4, MaximumCodeLength = 1024;
+
+    // Every version-1 code starts with the bytes 0, 1 ("AAE" in base64); anything else, or a line too long to be one, is not
+    // decoded at all, so a large clipboard costs no exception per line.
+    private static bool LooksLikeCode(string code)
+    {
+        if (code == null) return false;
+        string text = code.Trim();
+        return text.Length >= 8 && text.Length <= MaximumCodeLength && text.Length % 4 == 0 && text.StartsWith("AAE", StringComparison.Ordinal)
+            && text.All(ch => ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '+' || ch == '/' || ch == '=');
+    }
 
     // Parses one code line exactly as the client's version-1 reader does (order and field layout); null when it is not one.
     internal static DeckCodeData TryDecode(string code)
     {
-        if (string.IsNullOrWhiteSpace(code)) return null;
+        if (!LooksLikeCode(code)) return null;
         byte[] bytes;
         try { bytes = Convert.FromBase64String(code.Trim()); }
         catch (FormatException) { return null; }
@@ -33,6 +44,7 @@ internal static class DeckCodeText
                 if (stream.ReadByte() != 0) return null;
                 if (ReadVarint(stream) != 1) return null;
                 var deck = new DeckCodeData { Format = Small(ReadVarint(stream)) };
+                if (deck.Format < 1 || deck.Format > MaximumFormat) return null; // FT_WILD..FT_TWIST; the client refuses 0 and unknown formats
                 ulong heroes = ReadVarint(stream);
                 if (heroes != 1) return null;
                 deck.Hero = Small(ReadVarint(stream));

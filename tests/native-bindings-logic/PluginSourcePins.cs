@@ -119,10 +119,12 @@ internal static class PluginSourcePins
         // reader only takes over when the client's own rule would pick a line that is not a code.
         foreach (string row in new[] {
             "Hook(harmony, typeof(ShareableDeck), \"ParseDataFromDeckString\", nameof(FindPastedDeckCode))",
-            "harmony.Patch(Required(typeof(DeckOptionsMenu), \"OnCopyButtonReleased\"),\n            finalizer: new HarmonyMethod(typeof(NativeUIProbe), nameof(ObserveDeckCopy)))" })
+            "Required(typeof(DeckOptionsMenu), \"OnCopyButtonReleased\")", "finalizer: new HarmonyMethod(typeof(NativeUIProbe), nameof(ObserveDeckCopy))" })
             if (!probe.Contains(row, StringComparison.Ordinal)) failures.Add("deck share hook row missing: " + row);
         if (!hooks.Contains("if (!rescued) return true;", StringComparison.Ordinal))
             failures.Add("FindPastedDeckCode must leave text the client reads to the client");
+        if (!hooks.Contains("string code = data == null ? \"\" : found;", StringComparison.Ordinal))
+            failures.Add("the copy observer must keep and log only a deck code, never other clipboard text");
         foreach (string forbidden in new[] { "systemCopyBuffer =", "CopyToClipboard" })
             if (hooks.Contains(forbidden, StringComparison.Ordinal)) failures.Add("the share observer must never write the clipboard: " + forbidden);
     }
