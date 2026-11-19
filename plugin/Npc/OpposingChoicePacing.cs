@@ -1,4 +1,5 @@
 using System;
+using SabberStoneCore.Enums;
 
 // How long the NPC waits before it answers a choice the client shows as card backs (#162, #238).
 // A decision battlecry such as Elise the Navigator answers in several steps, and the client runs the card's one shared play
@@ -22,6 +23,12 @@ internal sealed class OpposingChoicePacing
     // The beat is skipped when it would end less than this before the turn's deadline: the NPC's own pick must reach the
     // engine, not the timer's default answer.
     internal const double BeatDeadlineMarginMilliseconds = 500;
+
+    // Only a minion or hero source can restart a running play spell with its next answer: its battlecry choice closes
+    // the PLAY and POWER blocks and each answer opens a new POWER block (decision battlecries). A Discover spell, a location
+    // or a hero power keeps its block open across the choice, so its spell is still running by design and waiting for it
+    // would only run into the cap. TLC_100, CAP_405, CATA_470 are minions and CATA_190h is a hero card.
+    internal static bool SpellWaitApplies(CardType source) => source == CardType.MINION || source == CardType.HERO;
 
     private double started = -1, idleSince = -1, spellSince = -1, spellWaited;
 

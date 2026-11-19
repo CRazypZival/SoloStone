@@ -1220,7 +1220,10 @@ public sealed class NativeMatch
         bool powerIdle;
         try { powerIdle = NativeNpcPowerIdle?.Invoke() ?? true; } catch (Exception) { powerIdle = true; }
         int sourceId = opposingChoiceSource?.SourceId ?? 0;
-        Func<bool> spell = NativeOpposingSourceSpellActive == null || sourceId <= 0 ? (Func<bool>)null
+        bool gate = false;
+        try { gate = sourceId > 0 && Game.IdEntityDic.TryGetValue(sourceId, out var sourceEntity) && OpposingChoicePacing.SpellWaitApplies(sourceEntity.Card.Type); }
+        catch (Exception) { }
+        Func<bool> spell = NativeOpposingSourceSpellActive == null || !gate ? (Func<bool>)null
             : () => NativeOpposingSourceSpellActive(sourceId);
         double hold = opposingPacing.Hold(NpcClock(), opposingRevealedAt, OpposingChoiceBeatMilliseconds(npcProfile?.Personality),
             powerIdle, spell, NpcTurnDeadlineLeft());

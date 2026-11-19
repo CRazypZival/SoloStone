@@ -1089,6 +1089,15 @@ internal static class NpcTurnRunnerTests
         Check(roomy.Hold(0, 0, beat, true, null, 4000) == beat, "a beat that fits before the deadline stays");
         var edge = new OpposingChoicePacing();
         Check(edge.Hold(0, 0, beat, true, null, beat + OpposingChoicePacing.BeatDeadlineMarginMilliseconds - 1) == 0, "a beat ending inside the margin is skipped");
+        // The spell wait is for minion and hero sources only (decision battlecries close their blocks); a spell, location or
+        // hero power source keeps its block open, so the plugin passes no probe and the pick is not held for it.
+        Check(OpposingChoicePacing.SpellWaitApplies(CardType.MINION) && OpposingChoicePacing.SpellWaitApplies(CardType.HERO)
+            && !OpposingChoicePacing.SpellWaitApplies(CardType.SPELL) && !OpposingChoicePacing.SpellWaitApplies(CardType.LOCATION)
+            && !OpposingChoicePacing.SpellWaitApplies(CardType.HERO_POWER), "spell wait applies to minion and hero sources only");
+        Func<bool> ProbeFor(CardType type) => OpposingChoicePacing.SpellWaitApplies(type) ? () => true : (Func<bool>)null;
+        var fromMinion = new OpposingChoicePacing(); var fromSpell = new OpposingChoicePacing();
+        Check(fromMinion.Hold(0, 0, beat, true, ProbeFor(CardType.MINION), inf) == 100, "a minion source waits for its running spell");
+        Check(fromSpell.Hold(0, 0, beat, true, ProbeFor(CardType.SPELL), inf) == beat && fromSpell.SpellWaitedMilliseconds == 0, "a spell source skips the spell wait");
         // Release reasons and waits, for the NPC_CHOICE_HOLD log line.
         var byDeal = new OpposingChoicePacing();
         byDeal.Hold(0, 0, beat, true, null, inf); byDeal.Hold(beat, 0, beat, true, null, inf);

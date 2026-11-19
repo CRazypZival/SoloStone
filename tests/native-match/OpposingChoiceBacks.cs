@@ -583,7 +583,7 @@ internal static partial class Program
 
     private enum HoldMode { Deals, NeverDeals, BusyThenDeals, SpellRuns, SpellNeverEnds }
 
-    // Real NpcTurnRunner path, with the 4 s artificial-delay budget already spent (#238): the pick still waits for the deal
+    // Real NpcTurnRunner path (source: Ancient Raptor, a minion, so the spell wait applies), with the 4 s artificial-delay budget already spent (#238): the pick still waits for the deal
     // and for a beat after it; the clock of the deal wait runs only while the client's power queue is idle; the choice
     // source's running play spell holds the pick (bounded); and none of it spends the budget.
     private static void OpposingHoldThroughRunner(HoldMode mode)
@@ -605,7 +605,7 @@ internal static partial class Program
         var game = match.Game; var bot = game.Player2;
         Check(game.CurrentPlayer == bot && match.NpcRunner != null, "NPC runner owns the turn");
         bot.BaseMana = 10; bot.UsedMana = 0;
-        var source = Generic.DrawCard(bot, Cards.FromId("UNG_941"));
+        var source = Generic.DrawCard(bot, Cards.FromId("TLC_245"));
         InvokeProcess(match, bot.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id));
         FlushFieldHistory(match);
         Check(match.OpposingChoiceId > 0, "runner faces a shown opposing choice");
