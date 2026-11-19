@@ -3134,7 +3134,15 @@ public sealed class NativeMatch
         // A quest's completion block (TRIGGER with the QUEST or QUESTLINE keyword) is where the client builds its
         // quest-complete animation; it needs the reward the quest names, so the opponent's reward is named inside
         // that block and hidden again at its end.
-        int blockDepth = 0, questBlockDepth = 0, questSource = 0;
+        // A suspended block may span sends: reveal only when its hide can travel in this same packet.
+        var closedBlocks = new HashSet<int>();
+        var openBlocks = new Stack<int>();
+        for (int i = 0; i < entries.Count; i++)
+        {
+            if (entries[i] is PowerHistoryBlockStart) openBlocks.Push(i);
+            else if (entries[i] is PowerHistoryBlockEnd && openBlocks.Count > 0) closedBlocks.Add(openBlocks.Pop());
+        }
+        int blockDepth = 0, questBlockDepth = 0, questSource = 0, questRewardDbfId = 0;
         var questRewards = new List<int>();
         for (int index = 0; index < entries.Count; index++)
         {
@@ -3151,11 +3159,13 @@ public sealed class NativeMatch
             else if (entries[index] is PowerHistoryBlockStart opened)
             {
                 blockDepth++;
-                if (questBlockDepth == 0 && opened.BlockType == BlockType.TRIGGER
+                if (questBlockDepth == 0 && closedBlocks.Contains(index) && opened.BlockType == BlockType.TRIGGER
                     && (opened.TriggerKeyword == (int)GameTag.QUEST || opened.TriggerKeyword == 1725))
                 {
                     questBlockDepth = blockDepth;
                     questSource = opened.Source;
+                    questRewardDbfId = Game.IdEntityDic.TryGetValue(questSource, out var quest)
+                        ? quest.Card[GameTag.QUEST_REWARD_DATABASE_ID] : 0;
                 }
             }
 #if ENGINE_SOURCE
@@ -3345,6 +3355,7 @@ public sealed class NativeMatch
                 var snapshot = (entry as PowerHistoryFullEntity)?.Entity ?? ((PowerHistoryShowEntity)entry).Entity;
                 var shown = native.HasFullEntity ? native.FullEntity : native.ShowEntity;
                 if (shown.Name.Length == 0 && !string.IsNullOrEmpty(snapshot.Name)
+                    && questRewardDbfId != 0 && LookupCard(snapshot.Name)?.AssetId == questRewardDbfId
                     && TagValue(snapshot.Tags, GameTag.DISPLAYED_CREATOR) == questSource
                     && TagValue(snapshot.Tags, GameTag.ZONE) == (int)EngineZone.HAND
                     && TagValue(snapshot.Tags, GameTag.CONTROLLER) != HumanPlayerId)
@@ -5309,6 +5320,10 @@ public sealed class NativeMatch
 
     private void AppendQuestRewardHide(NativePowerHistory packet, int id)
     {
+        // Hand-entry effects can retire/combine the reward before the quest block ends.
+        if (!revealedEntities.Contains(id) || !visibleTransportTags.TryGetValue(id, out var tags)
+            || !tags.TryGetValue((int)GameTag.ZONE, out int zone) || zone != (int)EngineZone.HAND
+            || !tags.TryGetValue((int)GameTag.CONTROLLER, out int controller) || controller == HumanPlayerId) return;
         var hide = ToNativeHistory(new PowerHistoryHideEntity { EntityID = id, Zone = EngineZone.HAND });
         var clear = new PowerHistoryData { TagChange = new PegasusGame.PowerHistoryTagChange {
             Entity = id, Tag = (int)GameTag.REVEALED, Value = 0
@@ -5696,7 +5711,9 @@ public sealed class NativeMatch
             if (start.TriggerKeyword.HasValue) native.PowerStart.TriggerKeyword = start.TriggerKeyword.Value;
             // A card cast as it is drawn (TOPDECK, 377): PowerProcessor makes its history tile, and its big card when the
             // card is shown in hand, only for a block marked ShowInHistory, as retail marks it.
-            if (start.BlockType == BlockType.TRIGGER && start.TriggerKeyword == 377) native.PowerStart.ShowInHistory = true;
+            // QuestCompleteSpell supplies animation only; PowerProcessor needs this flag for the completion tile.
+            if (start.BlockType == BlockType.TRIGGER && (start.TriggerKeyword == 377
+                || start.TriggerKeyword == (int)GameTag.QUEST || start.TriggerKeyword == 1725)) native.PowerStart.ShowInHistory = true;
             // Automatic plays: PowerProcessor creates and holds the big card only when asked (no hand-play reveal).
             if (start is PowerHistoryEffectPlayStart effectPlay && effectPlay.ForceShowBigCard) native.PowerStart.ForceShowBigCard = true;
 #endif
