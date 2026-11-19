@@ -932,6 +932,7 @@ M	Assembly-CSharp	CollectionDeck	GetDisplayHeroCardID	*
 M	Assembly-CSharp	CollectionDeck	GetOrCreateSideboard	SideboardDeck(System.String,TAG_PREMIUM)
 M	Assembly-CSharp	CollectionDeck	GetRuleset	DeckRuleset(System.Nullable`1<PegasusShared.FormatType>)
 M	Assembly-CSharp	CollectionDeck	GetRuneOrder	PegasusShared.RuneType[]()
+M	Assembly-CSharp	CollectionDeck	GetShareableDeck	ShareableDeck()
 M	Assembly-CSharp	CollectionDeck	GetSlots	System.Collections.Generic.List`1<CollectionDeckSlot>()
 M	Assembly-CSharp	CollectionDeck	GetSlotsIncludingSideboards	System.Collections.Generic.IEnumerable`1<CollectionDeckSlot>()
 M	Assembly-CSharp	CollectionDeck	HasClass	System.Boolean(TAG_CLASS)
@@ -2208,6 +2209,7 @@ M	Assembly-CSharp	SceneMgr	get_LoadingScreen	LoadingScreen()
 M	Assembly-CSharp	ScreenEffectsHandle	StopEffect	System.Void(System.Action)
 M	Assembly-CSharp	SellableDeckProductPage	GetFirstVariantToDisplay	*
 M	Assembly-CSharp	ShareableDeck	ParseDataFromDeckString	*
+M	Assembly-CSharp	ShareableDeck	Serialize	System.String(System.Boolean)
 M	Assembly-CSharp	ShareableDeck	get_DeckContents	PegasusUtil.DeckContents()
 M	Assembly-CSharp	ShareableDeck	get_DeckName	System.String()
 M	Assembly-CSharp	ShareableDeck	get_HeroCardDbId	System.Int32()

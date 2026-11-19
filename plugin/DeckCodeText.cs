@@ -57,7 +57,8 @@ internal static class DeckCodeText
                 for (int index = 0; index < many; index++) deck.Cards.Add((Small(ReadVarint(stream)), Small(ReadVarint(stream))));
                 if (stream.ReadByte() == 1) // like the client, any other byte (or none) means no sideboards
                 {
-                    // Sideboards: one and two copies as (card, owner); more as (count, card, owner), the client's order.
+                    // Sideboards: one and two copies as (card, owner); more as (count, card, owner): the client's order, in both
+                    // ShareableDeck.Serialize_WriteSideBoardCards and DeserializeFromVersion_1 (client 37.0.0), unlike the main deck's (card, count).
                     for (int copies = 1; copies <= 2; copies++)
                     {
                         int count = Count(stream);

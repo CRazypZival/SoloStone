@@ -81,6 +81,17 @@ var copyObserverParameters = Parameters(pluginMetadata, copyObserver);
 if (copyObserverSignature.ReturnType != "Void" || copyObserverParameters.Length != 1
     || pluginMetadata.GetString(copyObserverParameters[0].Name) != "__exception" || copyObserverSignature.ParameterTypes[0] != "Exception")
     throw new Exception("ObserveDeckCopy: invalid Harmony finalizer signature (void, Exception __exception: observes and rethrows)");
+// DeckCodeText accepts formats 1..4 (FT_WILD..FT_TWIST), as the client's reader checks them against PegasusShared.FormatType.
+using (var pegasusFile = new PEReader(File.OpenRead(Path.Combine(root, "references/game/blizzard.bgsclient.dll"))))
+{
+    var pegasus = pegasusFile.GetMetadataReader();
+    var formats = pegasus.TypeDefinitions.Select(pegasus.GetTypeDefinition)
+        .Single(t => pegasus.GetString(t.Name) == "FormatType" && pegasus.GetString(t.Namespace) == "PegasusShared")
+        .GetFields().Select(pegasus.GetFieldDefinition).Where(f => !f.GetDefaultValue().IsNil)
+        .Select(f => pegasus.GetBlobReader(pegasus.GetConstant(f.GetDefaultValue()).Value).ReadInt32()).ToArray();
+    if (formats.Min() != 0 || formats.Max() != 4 || formats.Length != 5)
+        throw new Exception("PegasusShared.FormatType changed (" + string.Join(",", formats) + "): update DeckCodeText.MaximumFormat");
+}
 Console.WriteLine("PASS deck-code import and share client members");
 MethodSignature(gameMetadata, "Actor", "GetPremium", Array.Empty<string>(), "TAG_PREMIUM", signatures);
 Console.WriteLine("PASS Actor.GetPremium(): TAG_PREMIUM pack reveal contract");

@@ -243,7 +243,8 @@ internal static partial class NativeUIProbe
         if (!active) return;
         try
         {
-            LastCopyDeckId = CollectionManager.Get()?.GetEditedDeck()?.ID ?? 0;
+            var edited = CollectionManager.Get()?.GetEditedDeck();
+            LastCopyDeckId = edited?.ID ?? 0;
             if (__exception != null)
             {
                 LastCopyError = __exception.GetBaseException().Message;
@@ -263,7 +264,11 @@ internal static partial class NativeUIProbe
             LastCopyCode = code;
             LastCopyCards = data?.CardCount ?? 0; LastCopySideboardCards = data?.Sideboards.Sum(card => card.qty) ?? 0;
             LastCopyHero = data?.Hero ?? 0; LastCopyFormat = data?.Format ?? 0;
-            LastCopyError = data == null ? "the clipboard holds no deck code" : "";
+            // A clipboard write that failed can leave an older code there: only this deck's own code counts as copied.
+            string expected = edited?.GetShareableDeck()?.Serialize(false) ?? "";
+            LastCopyError = data == null ? "the clipboard holds no deck code"
+                : code != expected ? "the clipboard holds another deck's code" : "";
+            if (LastCopyError.Length > 0) { log.LogWarning("NATIVE_DECK copy not confirmed deck=" + LastCopyDeckId + ": " + LastCopyError); return; }
             log.LogInfo("NATIVE_DECK copied deck=" + LastCopyDeckId + " cards=" + LastCopyCards + " sideboardCards=" + LastCopySideboardCards
                 + " hero=" + LastCopyHero + " format=" + LastCopyFormat + " nameLength=" + name.Length + " code=" + LastCopyCode);
         }
