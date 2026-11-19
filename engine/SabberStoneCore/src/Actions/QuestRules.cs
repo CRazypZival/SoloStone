@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SabberStoneCore.Enums;
 using SabberStoneCore.EffectSystem;
+using SabberStoneCore.Kettle;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
 using SabberStoneCore.Tasks;
@@ -229,6 +230,27 @@ namespace SabberStoneCore.Actions
             return true;
         }
 
+        // Retail sends a quest's progress as a TRIGGER block at effectIndex 1 and its completion as a sibling TRIGGER
+        // block at effectIndex 0 with the QUEST (462) or QUESTLINE (1725) trigger keyword; the client builds the
+        // quest-complete animation and the history tile from that second block (opposing_maestra, friendly_maestra and
+        // transformed_on_board, builds 88998 and 39954). Only the quest's own open trigger block is touched.
+        internal static void MarkProgressBlock(Spell spell)
+        {
+            if (!spell.Game.History) return;
+            var block = spell.Game.PowerHistory.CurrentBlock;
+            if (block?.BlockType == BlockType.TRIGGER && block.Source == spell.Id && !block.TriggerKeyword.HasValue) block.EffectIndex = 1;
+        }
+
+        internal static void BeginCompletionBlock(Spell spell)
+        {
+            if (!spell.Game.History) return;
+            var block = spell.Game.PowerHistory.CurrentBlock;
+            if (block?.BlockType != BlockType.TRIGGER || block.Source != spell.Id || block.TriggerKeyword.HasValue) return;
+            spell.Game.PowerHistory.Add(PowerHistoryBuilder.BlockEnd());
+            spell.Game.PowerHistory.Add(PowerHistoryBuilder.BlockStart(BlockType.TRIGGER, spell.Id, "", -1, 0, effectIndex: 0,
+                triggerKeyword: spell.Card[(GameTag)1725] != 0 ? 1725 : (int)GameTag.QUEST));
+        }
+
         public static bool Advance(Spell spell, int amount = 1)
         {
             var state = spell?.QuestState;
@@ -241,8 +263,10 @@ namespace SabberStoneCore.Actions
             int total = spell.QuestTotalProgress;
             if (before >= total) return false;
             spell.QuestProgress = (int)Math.Min(total, (long)before + amount);
-            if (spell.QuestProgress < total) return true;
+            if (spell.QuestProgress < total) { MarkProgressBlock(spell); return true; }
 
+            MarkProgressBlock(spell);
+            BeginCompletionBlock(spell);
             state.Completing = true;
             state.RewardedGeneration = state.CompletionGeneration;
             if (!definition.Repeatable) spell.ActivatedTrigger?.Remove();

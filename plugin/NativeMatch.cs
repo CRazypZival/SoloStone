@@ -3131,8 +3131,33 @@ public sealed class NativeMatch
         int tradeSource = 0;
         bool tradeHidden = false;
 #endif
+        // A quest's completion block (TRIGGER with the QUEST or QUESTLINE keyword) is where the client builds its
+        // quest-complete animation; it needs the reward the quest names, so the opponent's reward is named inside
+        // that block and hidden again at its end.
+        int blockDepth = 0, questBlockDepth = 0, questSource = 0;
+        var questRewards = new List<int>();
         for (int index = 0; index < entries.Count; index++)
         {
+            if (entries[index] is PowerHistoryBlockEnd)
+            {
+                if (questBlockDepth > 0 && blockDepth == questBlockDepth)
+                {
+                    foreach (int reward in questRewards) AppendQuestRewardHide(packet, reward);
+                    questRewards.Clear();
+                    questBlockDepth = 0;
+                }
+                if (blockDepth > 0) blockDepth--;
+            }
+            else if (entries[index] is PowerHistoryBlockStart opened)
+            {
+                blockDepth++;
+                if (questBlockDepth == 0 && opened.BlockType == BlockType.TRIGGER
+                    && (opened.TriggerKeyword == (int)GameTag.QUEST || opened.TriggerKeyword == 1725))
+                {
+                    questBlockDepth = blockDepth;
+                    questSource = opened.Source;
+                }
+            }
 #if ENGINE_SOURCE
             identityPosition = index;
 #endif
@@ -3314,6 +3339,25 @@ public sealed class NativeMatch
 #else
             PowerHistoryData native = ToNativeHistory(entry);
 #endif
+            if (questBlockDepth > 0 && native != null && (native.HasFullEntity || native.HasShowEntity)
+                && (entry is PowerHistoryFullEntity || entry is PowerHistoryShowEntity))
+            {
+                var snapshot = (entry as PowerHistoryFullEntity)?.Entity ?? ((PowerHistoryShowEntity)entry).Entity;
+                var shown = native.HasFullEntity ? native.FullEntity : native.ShowEntity;
+                if (shown.Name.Length == 0 && !string.IsNullOrEmpty(snapshot.Name)
+                    && TagValue(snapshot.Tags, GameTag.DISPLAYED_CREATOR) == questSource
+                    && TagValue(snapshot.Tags, GameTag.ZONE) == (int)EngineZone.HAND
+                    && TagValue(snapshot.Tags, GameTag.CONTROLLER) != HumanPlayerId)
+                {
+                    // The quest names its reward on the card, so showing it gives nothing away.
+                    var named = ToNativeHistoryEntity(snapshot, true, currentHealthSnapshot: entry is PowerHistoryFullEntity);
+                    named.Tags.RemoveAll(tag => tag.Name == (int)GameTag.REVEALED);
+                    named.Tags.Add(new NativeTag { Name = (int)GameTag.REVEALED, Value = 1 });
+                    native = entry is PowerHistoryFullEntity ? new PowerHistoryData { FullEntity = named }
+                        : new PowerHistoryData { ShowEntity = named };
+                    if (!questRewards.Contains(snapshot.Id)) questRewards.Add(snapshot.Id);
+                }
+            }
             // Keep the pre-PLAY reveal; an identical frozen exit must not reload native identity twice.
             if (IsPublicExitReveal(entries, index))
             {
@@ -5262,6 +5306,19 @@ public sealed class NativeMatch
         TrackVisibility(update);
     }
 #endif
+
+    private void AppendQuestRewardHide(NativePowerHistory packet, int id)
+    {
+        var hide = ToNativeHistory(new PowerHistoryHideEntity { EntityID = id, Zone = EngineZone.HAND });
+        var clear = new PowerHistoryData { TagChange = new PegasusGame.PowerHistoryTagChange {
+            Entity = id, Tag = (int)GameTag.REVEALED, Value = 0
+        } };
+        foreach (var data in new[] { hide, clear })
+        {
+            packet.List.Add(data);
+            TrackVisibility(data);
+        }
+    }
 
     private void TrackVisibility(PowerHistoryData data)
     {
