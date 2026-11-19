@@ -174,4 +174,29 @@ internal static class LotusTroublemakerTests
         Console.WriteLine($"  known history-display sweep: {cards.Count} cards, {stuck} passes");
         Check(stuck == 0, "the NPC passed with a known history-display card in the human's hand: " + string.Join(", ", names));
     }
+
+    // A decision whose every simulated action is discarded as private history was never searched; it must leave a fault line
+    // (the pre-fix shape of #81 was a silent search END_TURN). Forced with the Phoenix ignition refusal, which throws the same
+    // "Private historical ..." error on END_TURN.
+    public static void TestAllDiscardedPrivateHistoryLeavesFaultLine()
+    {
+        var g = Fixture();
+        var state = View(g);
+        var faults = new System.Collections.Generic.List<string>();
+        state.FaultReporter = faults.Add;
+        var game = (Game)typeof(FairBotState).GetField("game", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(state);
+        var fire = Enchantment.GetInstance(game.Player1, game.Player1.Hero, game.Player1, Cards.FromId("CATA_EVENT_001e"));
+        fire[GameTag.TAG_SCRIPT_DATA_NUM_2] = 1;
+        bool refused = false;
+        try { state.Apply(state.Actions.Single(a => a.Type == PlayerTaskType.END_TURN)); } catch (Exception e) when (FairHistory.IsPrivate(e)) { refused = true; }
+        Check(refused, "fixture must throw private history");
+        state.ReportAllDiscarded();
+        Check(faults.Count == 1 && faults[0].StartsWith("private-history-all-discarded discarded=1 error=Private historical", StringComparison.Ordinal),
+            "all-discarded decision reports its cause: " + string.Join("|", faults));
+
+        // Control: one action applied means the search ran; nothing to report.
+        var quiet = View(Fixture()); var quietFaults = new System.Collections.Generic.List<string>(); quiet.FaultReporter = quietFaults.Add;
+        quiet.Apply(quiet.Actions.First(a => a.Type == PlayerTaskType.END_TURN)); quiet.ReportAllDiscarded();
+        Check(quietFaults.Count == 0, "a decision that applied actions reports no discard fault");
+    }
 }
