@@ -487,7 +487,7 @@ internal static partial class Program
         var source = Generic.DrawCard(bot, Cards.FromId("UNG_941"));
         FlushFieldHistory(match);
         var play = bot.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id);
-        Check(match.OpposingChoiceHold(BotAction.From(play)) == 0 && match.OpposingChoiceDwell(BotAction.From(play)) == 0, "no hold without a shown choice");
+        Check(match.OpposingChoiceHold(BotAction.From(play)) == 0, "no hold without a shown choice");
         InvokeProcess(match, play);
         FlushFieldHistory(match);
         var pick = BotAction.From(ChooseTask.Pick(bot, bot.Choice.Choices[0]));
@@ -496,14 +496,13 @@ internal static partial class Program
         // The deal-wait cap starts at the first ready pick, not at publish: a long think never eats it.
         now += 5000;
         Check(match.OpposingChoiceHold(pick) == 100 && asked == match.OpposingChoiceId, "holds for the native deal of this choice id");
-        Check(match.OpposingChoiceDwell(pick) == 0, "no budgeted beat before the deal");
         now += 500; revealed = true; match.TickNpc();
         double revealedAt = now;
-        Check(match.OpposingChoiceHold(pick) == 0 && match.OpposingChoiceDwell(pick) == beat, "dealt: hold ends, full beat from the reveal");
+        Check(match.OpposingChoiceHold(pick) == beat, "dealt: the hold is the full beat from the reveal");
         now += 700;
-        Check(Math.Abs(match.OpposingChoiceDwell(pick) - (beat - 700)) < 1e-6, "time looking at the backs counts");
+        Check(Math.Abs(match.OpposingChoiceHold(pick) - (beat - 700)) < 1e-6, "time looking at the backs counts");
         now = revealedAt + beat + 1;
-        Check(match.OpposingChoiceDwell(pick) == 0, "beat ends");
+        Check(match.OpposingChoiceHold(pick) == 0, "beat ends");
         // A display that never deals stops holding 3 s after the first ready pick.
         var (_, match2) = OpposingChoiceMatch();
         double later = 0; match2.NpcClock = () => later; match2.NativeOpposingChoiceRevealed = id => false;
@@ -516,7 +515,7 @@ internal static partial class Program
         later = 10000;
         Check(match2.OpposingChoiceHold(pick2) == 100, "first ready pick starts the deal wait");
         later = 12999; Check(match2.OpposingChoiceHold(pick2) == 100, "still within the 3 s deal wait");
-        later = 13000; Check(match2.OpposingChoiceHold(pick2) == 0 && match2.OpposingChoiceDwell(pick2) == 0, "undealt backs stop holding after 3 s");
+        later = 13000; Check(match2.OpposingChoiceHold(pick2) == 0, "undealt backs stop holding after 3 s");
         // A throwing native probe counts as dealt (Update must never throw).
         var (_, match3) = OpposingChoiceMatch();
         match3.NpcClock = () => 0; match3.NativeOpposingChoiceRevealed = id => throw new InvalidOperationException("probe");
@@ -527,15 +526,15 @@ internal static partial class Program
         FlushFieldHistory(match3);
         var pick3 = BotAction.From(ChooseTask.Pick(bot3, bot3.Choice.Choices[0]));
         match3.TickNpc();
-        Check(match3.OpposingChoiceHold(pick3) == 0 && match3.OpposingChoiceDwell(pick3) == beat, "probe failure falls back to the beat");
+        Check(match3.OpposingChoiceHold(pick3) == beat, "probe failure falls back to the beat");
         InvokeProcess(match3, ChooseTask.Pick(bot3, bot3.Choice.Choices[0]));
         FlushFieldHistory(match3);
-        Check(match3.OpposingChoiceHold(pick3) == 0 && match3.OpposingChoiceDwell(pick3) == 0 && match3.OpposingChoiceId == -1, "answered choice has no hold");
+        Check(match3.OpposingChoiceHold(pick3) == 0 && match3.OpposingChoiceId == -1, "answered choice has no hold");
         Console.WriteLine($"CHECK opposing choice backs: pacing beat={beat}, deal wait from first ready pick, bounded 3 s");
         OpposingChosenWaitsForReceipt();
         OpposingNamedOfferGetsStandIn();
-        OpposingHoldThroughRunner(false);
-        OpposingHoldThroughRunner(true);
+        foreach (var mode in new[] { HoldMode.Deals, HoldMode.NeverDeals, HoldMode.BusyThenDeals, HoldMode.SpellRuns, HoldMode.SpellNeverEnds })
+            OpposingHoldThroughRunner(mode);
     }
 
     // GameState processes an EntitiesChosen at once when no choice of that player is mapped. Sent before the client
@@ -582,17 +581,22 @@ internal static partial class Program
         Console.WriteLine("CHECK opposing choice backs: EntitiesChosen waits for client receipt, in order");
     }
 
-    // Real NpcTurnRunner path: with the 4 s pacing budget already spent, the pick still waits for the deal (or its own
-    // 3 s cap), and that wait spends no budget.
-    private static void OpposingHoldThroughRunner(bool deals)
+    private enum HoldMode { Deals, NeverDeals, BusyThenDeals, SpellRuns, SpellNeverEnds }
+
+    // Real NpcTurnRunner path, with the 4 s artificial-delay budget already spent (#238): the pick still waits for the deal
+    // and for a beat after it; the clock of the deal wait runs only while the client's power queue is idle; the choice
+    // source's running play spell holds the pick (bounded); and none of it spends the budget.
+    private static void OpposingHoldThroughRunner(HoldMode mode)
     {
         var profile = NpcCatalog.All[2]; var deck = LocalDecks.Get(profile.DeckId);
         var packets = new List<object>();
-        double now = 0; bool revealed = false;
+        double now = 0; bool revealed = false, busy = false, spell = false;
         var match = new NativeMatch((id, packet) => packets.Add(packet), deck.Id, deck.Id, 8427) {
             MatchId = "opposing-hold", NativeNpcStartingTaunt = () => false };
         match.NpcClock = () => now; match.NativeNpcIdle = () => true;
         match.NativeOpposingChoiceRevealed = id => revealed;
+        match.NativeNpcPowerIdle = () => !busy;
+        match.NativeOpposingSourceSpellActive = id => spell;
         match.Start();
         match.SendChoices(packets.OfType<EntityChoices>().Last(p => p.PlayerId == 1).Id, new List<int>());
         var options = packets.OfType<AllOptions>().Last();
@@ -605,24 +609,47 @@ internal static partial class Program
         FlushFieldHistory(match);
         Check(match.OpposingChoiceId > 0, "runner faces a shown opposing choice");
         typeof(NpcTurnRunner).GetProperty(nameof(NpcTurnRunner.ArtificialDelayMilliseconds)).SetValue(match.NpcRunner, 4000.0);
-        double holdStart = -1, answered = -1, dealAt = 2000;
+        double beat = NativeMatch.OpposingChoiceBeatMilliseconds(profile.Personality);
+        // Times from the first frame: the deal (revealed), the client going idle, the spell's end.
+        double dealAt = mode == HoldMode.NeverDeals ? double.MaxValue : mode == HoldMode.BusyThenDeals ? 7000 : mode == HoldMode.Deals ? 2000 : 1000;
+        double idleAt = mode == HoldMode.BusyThenDeals ? 5000 : 0, spellEnds = mode == HoldMode.SpellRuns ? 4000 : double.MaxValue;
+        busy = idleAt > 0; spell = mode == HoldMode.SpellRuns || mode == HoldMode.SpellNeverEnds;
+        double holdStart = -1, answered = -1;
         for (int frame = 0; frame < 2000 && answered < 0; frame++)
         {
             now += 70; // ~14 fps
-            if (deals && now >= dealAt) revealed = true;
+            if (now >= dealAt) revealed = true;
+            if (now >= idleAt) busy = false;
+            if (now >= spellEnds) spell = false;
             match.TickNpc();
-            var started = (double)typeof(NativeMatch).GetField("opposingHoldStarted", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(match);
-            if (holdStart < 0 && started >= 0) holdStart = started;
+            var pacing = typeof(NativeMatch).GetField("opposingPacing", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(match);
+            if (holdStart < 0 && pacing != null && ((global::OpposingChoicePacing)pacing).Started) holdStart = now;
             if (bot.Choice == null || bot.Choice.ChoiceType != ChoiceType.GENERAL) answered = now;
         }
         Check(answered > 0 && holdStart >= 0, "runner answers the choice after holding");
-        if (deals) Check(answered >= dealAt && answered - holdStart < NativeMatch.OpposingDealWaitMilliseconds,
-            $"pick waits for the deal, then goes (budget spent): hold={holdStart} deal={dealAt} answered={answered}");
-        else Check(answered - holdStart >= NativeMatch.OpposingDealWaitMilliseconds && answered - holdStart < NativeMatch.OpposingDealWaitMilliseconds + 1100,
-            $"undealt pick waits its own 3 s cap: hold={holdStart} answered={answered}");
-        Check(match.NpcRunner.ArtificialDelayMilliseconds == 4000, "deal wait spends no pacing budget: " + match.NpcRunner.ArtificialDelayMilliseconds);
+        double slack = 1100; // the runner polls a hold at most once a second
+        switch (mode)
+        {
+            case HoldMode.Deals: case HoldMode.BusyThenDeals:
+                Check(answered >= dealAt + beat && answered < dealAt + beat + slack,
+                    $"{mode}: pick waits for the deal and a full beat although the budget is spent: deal={dealAt} beat={beat} answered={answered}");
+                break;
+            case HoldMode.NeverDeals:
+                Check(answered - holdStart >= global::OpposingChoicePacing.DealWaitMilliseconds && answered - holdStart < global::OpposingChoicePacing.DealWaitMilliseconds + slack,
+                    $"undealt pick waits its own 3 s cap: hold={holdStart} answered={answered}");
+                break;
+            case HoldMode.SpellRuns:
+                Check(answered >= spellEnds && answered >= dealAt + beat && answered < Math.Max(spellEnds, dealAt + beat) + slack,
+                    $"pick waits for the source's play spell to end: end={spellEnds} answered={answered}");
+                break;
+            case HoldMode.SpellNeverEnds:
+                Check(answered - holdStart >= global::OpposingChoicePacing.SpellWaitMilliseconds && answered - holdStart < global::OpposingChoicePacing.SpellWaitMilliseconds + slack,
+                    $"a spell that never ends holds the pick for its own cap only: hold={holdStart} answered={answered}");
+                break;
+        }
+        Check(match.NpcRunner.ArtificialDelayMilliseconds == 4000, "the wait spends no pacing budget: " + match.NpcRunner.ArtificialDelayMilliseconds);
         match.StopNpc();
-        Console.WriteLine($"CHECK opposing choice backs: runner hold deals={deals} waited={answered - holdStart:F0}ms, budget untouched");
+        Console.WriteLine($"CHECK opposing choice backs: runner hold {mode} waited={answered - holdStart:F0}ms, budget untouched");
     }
 
     // Defensive: a SETASIDE offer the client already knows by name is listed through a nameless stand-in instead.

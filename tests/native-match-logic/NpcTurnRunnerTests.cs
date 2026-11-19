@@ -38,6 +38,7 @@ internal static class NpcTurnRunnerTests
         IdleBoardHasNoWaitOverhead();
         FreshTurnChecksIdle();
         ActionLimitEndsTheTurn();
+        OpposingChoicePacingRules();
         foreach (var profile in NpcCatalog.All)
         {
             var sync = new Rig(profile); sync.Run(true);
@@ -1044,6 +1045,65 @@ internal static class NpcTurnRunnerTests
         public string LethalResult => "none";
         public bool PlanReused => false;
         public void StepNode() { IsDone = true; }
+    }
+
+    // #238: the NPC's pick of an opposing choice waits for the client, not for the runner's artificial-delay budget.
+    private static void OpposingChoicePacingRules()
+    {
+        const double beat = 1500;
+        double inf = double.PositiveInfinity;
+        // Dealt, quiet client: the pick goes only after a full beat from the deal, whatever else happened.
+        var dealt = new OpposingChoicePacing();
+        Check(dealt.Hold(100, 100, beat, true, null, inf) == beat, "dealt: full beat");
+        Check(Math.Abs(dealt.Hold(700, 100, beat, true, null, inf) - (beat - 600)) < 1e-9, "dealt: time since the deal counts");
+        Check(dealt.Hold(100 + beat, 100, beat, true, null, inf) == 0, "dealt: beat over");
+        // A busy client does not use up the deal wait: it counts only idle time, from when the client went idle.
+        var busy = new OpposingChoicePacing();
+        for (double t = 0; t < 20000; t += 100)
+            if (busy.Hold(t, -1, beat, false, null, inf) != 100 && t < OpposingChoicePacing.WaitCapMilliseconds)
+                throw new Exception("OpposingChoicePacing: a busy client released the pick at " + t);
+        Check(busy.Hold(OpposingChoicePacing.WaitCapMilliseconds, -1, beat, false, null, inf) == 0, "busy forever: released at the hard cap");
+        var idleLater = new OpposingChoicePacing();
+        Check(idleLater.Hold(0, -1, beat, false, null, inf) == 100 && idleLater.Hold(4900, -1, beat, false, null, inf) == 100, "busy: holds past the old 3 s");
+        Check(idleLater.Hold(5000, -1, beat, true, null, inf) == 100 && idleLater.Hold(7999, -1, beat, true, null, inf) == 100,
+            "idle clock starts when the client goes idle");
+        Check(idleLater.Hold(8000, -1, beat, true, null, inf) == 0, "idle for 3 s without a deal: goes");
+        // A busy spell of the source holds a dealt pick, bounded; a throwing probe counts as ended.
+        var spell = new OpposingChoicePacing(); bool active = true;
+        Check(spell.Hold(0, 0, beat, true, () => active, inf) == 100 && spell.Hold(3999, 0, beat, true, () => active, inf) == 100, "source spell active: holds");
+        active = false;
+        Check(spell.Hold(4000, 0, beat, true, () => active, inf) == 0, "source spell ended: goes");
+        var never = new OpposingChoicePacing();
+        Check(never.Hold(0, 0, beat, true, () => true, inf) == 100 && never.Hold(OpposingChoicePacing.SpellWaitMilliseconds, 0, beat, true, () => true, inf) == 0,
+            "a spell that never ends holds only for its cap");
+        var throws = new OpposingChoicePacing();
+        Check(throws.Hold(0, 0, beat, true, () => throw new InvalidOperationException("probe"), inf) == beat, "a throwing probe counts as ended");
+        // Near the turn's deadline the waits give way; the beat remains.
+        var late = new OpposingChoicePacing();
+        Check(late.Hold(0, -1, beat, false, () => true, OpposingChoicePacing.DeadlineMarginMilliseconds) == 0, "turn deadline: no wait for the deal");
+        Check(late.Hold(0, 0, beat, false, () => true, 100) == beat, "turn deadline: no wait for the spell, beat stays");
+
+        // Through the runner with the 4 s artificial-delay budget spent: the beat is not cut by it.
+        foreach (bool spellEnds in new[] { false, true })
+        {
+            var profile = WithLiveBudget(NpcCatalog.All[0], 5, 0);
+            double now = 0, dealt0 = 500, spellEnd = 3000, acted = -1; bool actedNow = false;
+            var pacing = new OpposingChoicePacing();
+            var game = new SabberStoneCore.Model.Game(new GameConfig { Player1HeroClass = CardClass.MAGE, Player2HeroClass = CardClass.MAGE });
+            var action = BotAction.From(EndTurnTask.Any(game.Player2));
+            var runner = new NpcTurnRunner(profile, "choice-pacing", () => now, () => !actedNow, () => new GoldenContext(2, 1, 71, profile),
+                ctx => new LoopJob(action), reason => new GoldenDecision(action, 0, 0, 0, "Forced", reason, null, "fallback"),
+                decision => { actedNow = true; acted = now; }, () => true, null, turnNodes: 2000000,
+                actedCardDwell: act => 0,
+                actHold: act => pacing.Hold(now, now >= dealt0 ? dealt0 : -1, beat, true, () => spellEnds && now < spellEnd, inf));
+            runner.Start();
+            typeof(NpcTurnRunner).GetProperty(nameof(NpcTurnRunner.ArtificialDelayMilliseconds)).SetValue(runner, 4000.0);
+            for (int i = 0; runner.Active && i < 100000; i++) { now += 20; runner.Tick(); }
+            Check(acted >= dealt0 + beat && (!spellEnds || acted >= spellEnd), "runner at an exhausted budget still waits: spell=" + spellEnds + " acted=" + acted);
+            Check(acted < Math.Max(dealt0 + beat, spellEnds ? spellEnd : 0) + 1500, "the hold is bounded: acted=" + acted);
+            Check(runner.ArtificialDelayMilliseconds == 4000, "the choice wait spends no budget");
+        }
+        Console.WriteLine("PASS opposing choice pacing: deal wait counts idle time, source spell hold, beat outside the budget, all bounded");
     }
 
     private sealed class Job : IGoldenDecisionJob
