@@ -210,16 +210,18 @@ internal static partial class Program
             int publicMove = data.FindIndex(e => IsZone(e, drawn.Id, EngineZone.PLAY) || IsZone(e, drawn.Id, EngineZone.GRAVEYARD));
             if (publicMove >= 0 && (named < 0 || named > publicMove))
                 failures.Add(name + $": public move at {publicMove} precedes the named SHOW/FULL at {named}");
-            // Board bodies reveal during the draw trigger, at their retained HAND origin, before direct PLAY.
-            // Spells/failed summons still resolve through SETASIDE; a held Illusion remains private.
-            if (automatic && !held && bot)
+            // #195, retail SCH_307t/AT_035t draws (both seats): a card that resolves out of the hand is named by its draw
+            // SHOW, at ZONE=DECK with REVEALED=1, before the HAND move. The client shows an opponent's drawn card face up
+            // only when REVEALED is set at the HAND move, and holds a drawn card up until the TOPDECK block moves it.
+            // Board bodies then go HAND -> PLAY directly; spells/failed summons resolve through SETASIDE.
+            if (automatic && !held)
             {
                 bool boardBody = drawn.Zone == owner.BoardZone;
                 int parking = data.FindIndex(e => IsZone(e, drawn.Id, EngineZone.SETASIDE));
-                Check(boardBody
-                    ? parking < 0 && named > trigger && SnapshotTag(data[named], GameTag.ZONE) == (int)EngineZone.HAND
-                    : named >= 0 && named == parking + 1 && SnapshotTag(data[named], GameTag.ZONE) == (int)EngineZone.SETASIDE,
-                    name + " when-drawn reveal follows native board/spell transition contract");
+                if (named != show || SnapshotTag(data[show], GameTag.REVEALED) != 1 || SnapshotTag(data[show], GameTag.ZONE) != (int)EngineZone.DECK)
+                    failures.Add(name + $": when-drawn draw SHOW at {show} must name the card with REVEALED=1 at DECK (named at {named}, "
+                        + $"REVEALED={SnapshotTag(data[show], GameTag.REVEALED)})");
+                Check(boardBody ? parking < 0 : parking > trigger, name + " when-drawn board/spell transition contract");
             }
             // Hoisted identity keeps the snapshot's state tags, so the bound actor starts its Stealth state spell once.
             if (id == "TLC_513t2" && !fullBoard)
@@ -240,7 +242,7 @@ internal static partial class Program
             cases++;
         }
         Check(failures.Count == 0, string.Join("\n", failures));
-        Console.WriteLine($"PASS draw entry history: {cases} cases; ordinary/tutor and automatic draws, both overloads and players; DECK SHOW before HAND before TOPDECK");
+        Console.WriteLine($"PASS draw entry history: {cases} cases; ordinary/tutor and automatic draws, both overloads and players; named REVEALED DECK SHOW before HAND before TOPDECK");
     }
 
     private static void DumpDrawHistory(string name, Capture capture, int cursor)

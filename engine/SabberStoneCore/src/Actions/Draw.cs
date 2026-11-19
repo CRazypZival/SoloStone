@@ -109,8 +109,7 @@ namespace SabberStoneCore.Actions
                     // NativeMatch's ShowInHistory) that this is a card drawn and cast, so it gets a history tile.
                     game.PowerHistory.Add(PowerHistoryBuilder.BlockStart(BlockType.TRIGGER, playable.Id, "", 0, 0,
                         effectIndex: 0, triggerKeyword: (int)GameTag.TOPDECK));
-                // Illusion retains its actual hand residence when its summon cannot fit.
-                if (playable.Card.Id != "EDR_260t" || !controller.BoardZone.IsFull)
+                if (LeavesHandWhenDrawn(controller, playable))
                     controller.SetasideZone.Add(controller.HandZone.Remove(playable));
                 game.Log(LogLevel.INFO, BlockType.TRIGGER, "TOPDECK",
                     !game.Logging ? "" : $"{playable}'s TOPDECK effect is activated.");
@@ -128,6 +127,13 @@ namespace SabberStoneCore.Actions
             QuestRules.SettleHandCountChanges(controller);
             return playable;
         }
+
+        // A when-drawn card leaves the hand for its TOPDECK effect (cast, summoned, or a summon that fails to the
+        // graveyard); an Illusion with no room to summon keeps its hand residence. Such a draw is public: its draw SHOW
+        // carries REVEALED (AddHandPhase), as in retail, so the native client shows the drawn card face up (for the
+        // opponent too) and holds it there until the TOPDECK block moves it out of the hand.
+        internal static bool LeavesHandWhenDrawn(Controller controller, IPlayable playable) =>
+            playable.Power?.TopdeckTask != null && (playable.Card.Id != "EDR_260t" || !controller.BoardZone.IsFull);
 
         private static bool PreDrawPhase(Controller controller, bool emptySource = false)
         {
