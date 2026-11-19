@@ -10,12 +10,13 @@ internal static class TurnBannerHoldRules
     internal const double TimeoutSeconds = 4.0;
 
     /// <summary>True for a TRIGGER block start whose client controller ignores the banner: keyword Sigil, Objective or Sidequest,
-    /// or a source the client treats as a Secret or an Objective (our Objective blocks carry no keyword, only the tag on the card).</summary>
-    internal static bool IgnoresBanner(bool triggerBlockStart, int keyword, bool sourceIsSecret, bool sourceIsObjective)
+    /// or a Secret source. The client routes Objectives by keyword 2311 only; our keyword-less Objective blocks reach its generic
+    /// trigger controller, which already waits for the banner, so they are not held here.</summary>
+    internal static bool IgnoresBanner(bool triggerBlockStart, int keyword, bool sourceIsSecret)
     {
         if (!triggerBlockStart) return false;
         return keyword == SigilKeyword || keyword == ObjectiveKeyword || keyword == SideQuestKeyword
-            || sourceIsSecret || sourceIsObjective;
+            || sourceIsSecret;
     }
 
     /// <summary>Holds one task list at a time. Once a list has been released (banner gone, or timeout) it is never held again.</summary>
@@ -24,17 +25,22 @@ internal static class TurnBannerHoldRules
         private object list;
         private double since;
         private bool released;
+        internal bool Holding { get; private set; }
+        internal bool Released => released;
+        internal double Since => since;
         internal string LastRelease { get; private set; }
         internal double LastWaited { get; private set; }
 
         /// <summary>True while the queue should wait. Call after asking the client to show the banner.</summary>
         internal bool ShouldHold(object head, bool bannerShowing, double now)
         {
+            Holding = false;
             if (head == null) return false;
             if (!ReferenceEquals(head, list)) { list = head; since = now; released = false; }
             if (released) return false;
             if (!bannerShowing) return Release("banner-hidden", now);
             if (now - since >= TimeoutSeconds || now < since) return Release("timeout", now);
+            Holding = true;
             return true;
         }
 

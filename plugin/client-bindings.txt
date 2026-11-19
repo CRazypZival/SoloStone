@@ -1242,7 +1242,6 @@ M	Assembly-CSharp	EntityBase	HasReferencedTag	(GAME_TAG)
 M	Assembly-CSharp	EntityBase	HasReferencedTag	*
 M	Assembly-CSharp	EntityBase	HasTag	System.Boolean(GAME_TAG)
 M	Assembly-CSharp	EntityBase	IsHero	System.Boolean()
-M	Assembly-CSharp	EntityBase	IsObjective	System.Boolean()
 M	Assembly-CSharp	EntityBase	IsSecret	System.Boolean()
 M	Assembly-CSharp	EntityDef	GetFlavorText	System.String()
 M	Assembly-CSharp	EntityDef	GetReferencedTag	(System.Int32)

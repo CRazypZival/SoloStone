@@ -1372,7 +1372,6 @@ foreach (var contract in new[] {
     ("PowerTaskList", "IsStartOfBlock", Array.Empty<string>(), "Boolean"),
     ("PowerTaskList", "GetSourceEntity", new[] { "Boolean" }, "Entity"),
     ("EntityBase", "IsSecret", Array.Empty<string>(), "Boolean"),
-    ("EntityBase", "IsObjective", Array.Empty<string>(), "Boolean"),
     ("TurnStartManager", "Get", Array.Empty<string>(), "TurnStartManager"),
     ("TurnStartManager", "IsListeningForTurnEvents", Array.Empty<string>(), "Boolean"),
     ("TurnStartManager", "NotifyOfTriggerVisual", Array.Empty<string>(), "Void"),

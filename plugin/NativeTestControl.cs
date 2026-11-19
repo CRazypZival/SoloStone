@@ -1333,7 +1333,8 @@ internal sealed partial class NativeTestControl
                 { "bigCard", history != null && history.IsShowingBigCard() },
                 { "gameBusy", front.IsBusy() },
                 { "mustWaitForChoices", WaitForChoices == null ? null : (object)(bool)WaitForChoices.Invoke(front, null) },
-                { "canProcessPowerQueue", CanProcessQueue == null ? null : (object)(bool)CanProcessQueue.Invoke(front, null) } };
+                { "canProcessPowerQueue", CanProcessQueue == null ? null : (object)(bool)CanProcessQueue.Invoke(front, null) },
+                { "turnBannerHold", NativeTurnBannerHold.State() } };
         }
         catch (Exception error) { return new JsonNode { { "error", (error.InnerException ?? error).Message } }; }
     }

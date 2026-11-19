@@ -10,20 +10,19 @@ internal static class TurnBannerHoldTests
     internal static void Run()
     {
         // Held: the four controllers that ignore the banner.
-        Check(TurnBannerHoldRules.IgnoresBanner(true, 1749, false, false), "Sigil keyword is held");
-        Check(TurnBannerHoldRules.IgnoresBanner(true, 2311, false, false), "Objective keyword is held");
-        Check(TurnBannerHoldRules.IgnoresBanner(true, 1192, false, false), "Sidequest keyword is held");
-        Check(TurnBannerHoldRules.IgnoresBanner(true, 0, true, false), "Secret source is held");
-        Check(TurnBannerHoldRules.IgnoresBanner(true, 0, false, true), "Objective source without a keyword is held");
+        Check(TurnBannerHoldRules.IgnoresBanner(true, 1749, false), "Sigil keyword is held");
+        Check(TurnBannerHoldRules.IgnoresBanner(true, 2311, false), "Objective keyword is held");
+        Check(TurnBannerHoldRules.IgnoresBanner(true, 1192, false), "Sidequest keyword is held");
+        Check(TurnBannerHoldRules.IgnoresBanner(true, 0, true), "Secret source is held");
         // Not held: everything the client already gates, and every other block type.
-        Check(!TurnBannerHoldRules.IgnoresBanner(true, 0, false, false), "plain card trigger is not held (client gates it)");
-        Check(!TurnBannerHoldRules.IgnoresBanner(true, 4013, false, false), "other keyword is not held");
-        Check(!TurnBannerHoldRules.IgnoresBanner(false, 1749, true, true), "a block that is not a trigger is not held");
+        Check(!TurnBannerHoldRules.IgnoresBanner(true, 0, false), "plain card or keyword-less Objective trigger is not held (client gates it)");
+        Check(!TurnBannerHoldRules.IgnoresBanner(true, 4013, false), "other keyword is not held");
+        Check(!TurnBannerHoldRules.IgnoresBanner(false, 1749, true), "a block that is not a trigger is not held");
 
         var hold = new TurnBannerHoldRules.Hold();
         object sigil = new object(), next = new object();
         Check(!hold.ShouldHold(null, true, 0), "no list, no hold");
-        Check(hold.ShouldHold(sigil, true, 10.0), "holds while the banner shows");
+        Check(hold.ShouldHold(sigil, true, 10.0) && hold.Holding && !hold.Released, "holds while the banner shows");
         Check(hold.ShouldHold(sigil, true, 11.5), "keeps holding mid-banner");
         Check(!hold.ShouldHold(sigil, false, 12.0) && hold.LastRelease == "banner-hidden", "releases when the banner is gone");
         Check(!hold.ShouldHold(sigil, true, 12.1), "a released list is never held again");

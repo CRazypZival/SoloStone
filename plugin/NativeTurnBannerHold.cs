@@ -24,6 +24,10 @@ internal static class NativeTurnBannerHold
         catch (Exception error) { log?.LogWarning("TURN_BANNER_HOLD_INSTALL_FAILED " + error.Message); }
     }
 
+    /// <summary>For the stall readout: whether the last check held the queue, and since when (Time.realtimeSinceStartup).</summary>
+    internal static MiniJSON.JsonNode State() => new MiniJSON.JsonNode { { "holding", hold.Holding }, { "released", hold.Released },
+        { "since", hold.Since }, { "lastRelease", hold.LastRelease } };
+
     private static void AfterCanProcessPowerQueue(GameState __instance, ref bool __result)
     {
         // Hot path: the client asks every frame. Only the turn-start window (the manager is listening) gets past the first checks.
@@ -40,14 +44,14 @@ internal static class NativeTurnBannerHold
             if (start == null || !head.IsStartOfBlock()) return;
             var source = head.GetSourceEntity(false);
             if (!TurnBannerHoldRules.IgnoresBanner((int)start.BlockType == (int)PegasusGame.HistoryBlock.Type.TRIGGER, start.TriggerKeyword,
-                source != null && source.IsSecret(), source != null && source.IsObjective())) return;
+                source != null && source.IsSecret())) return;
             manager.NotifyOfTriggerVisual(); // Shows the banner once; later calls do nothing.
             double now = Time.realtimeSinceStartup;
             bool wait = hold.ShouldHold(head, manager.IsTurnStartIndicatorShowing(), now);
             if (wait) __result = false;
             else if (hold.LastRelease != null)
             {
-                log?.LogInfo("TURN_BANNER_HOLD released=" + hold.LastRelease + " waited=" + hold.LastWaited.ToString("0.00")
+                log?.LogInfo("TURN_BANNER_HOLD released=" + hold.LastRelease + " waited=" + hold.LastWaited.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
                     + " keyword=" + start.TriggerKeyword + " card=" + source?.GetCardId());
                 // Report each release once: the list stays released, so clear the note.
                 hold.AcknowledgeRelease();
