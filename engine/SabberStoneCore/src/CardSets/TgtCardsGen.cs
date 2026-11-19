@@ -333,10 +333,9 @@ namespace SabberStoneCore.CardSets
 						return;
 					}
 
-					int oldMaximum=c.BaseMana;c.BaseMana = 10;g.Facts.BaseManaChanged(c,oldMaximum,s);
+					SabberStoneCore.Actions.Generic.ChangeManaCrystal.Invoke(c, 10, true);
 					c.OverloadLocked = 0;
 					c.OverloadOwed = 0;
-					c.UsedMana = 0;
 					c.TemporaryMana = 0;
 				}),
 			new FlagTask(true, new AddCardTo("CS2_013t", EntityType.HAND)))
