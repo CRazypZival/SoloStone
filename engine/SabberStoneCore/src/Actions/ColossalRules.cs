@@ -9,7 +9,12 @@ namespace SabberStoneCore.Actions
 {
     public static class ColossalRules
     {
+        // Factor the printed stats of a Herald appendage or Soldier were scaled by (engine only). The client shows those scaled
+        // stats as the card's own (its definition), not as a buff. Silence, return to hand and transform reset it with the stats.
         public const GameTag RealizedFactor = (GameTag)31010;
+        // Appendages of Herald Colossals (body tag 4538): same factor and the same three upgrade texts as Soldiers.
+        private static readonly HashSet<string> HeraldAppendages = new HashSet<string>(StringComparer.Ordinal);
+        public static bool IsHeraldAppendage(Card card) => card != null && HeraldAppendages.Contains(card.Id);
         // Immutable declarations stay outside Card's serialized history-definition layout.
         private static readonly Dictionary<string, IReadOnlyList<string>> Declarations = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         private static readonly HashSet<string> RefillDeclarations = new HashSet<string>(StringComparer.Ordinal);
@@ -22,6 +27,7 @@ namespace SabberStoneCore.Actions
             if (appendageIds == null || appendageIds.Any(string.IsNullOrEmpty))
                 throw new ArgumentException("Colossal appendages must be card ids.", nameof(appendageIds));
             Declarations[card.Id] = Array.AsReadOnly((string[])appendageIds.Clone());
+            if (card[(GameTag)4538] != 0) HeraldAppendages.UnionWith(appendageIds);
         }
 
         private static readonly Dictionary<string, int[]> Layouts = new Dictionary<string, int[]>(StringComparer.Ordinal);
@@ -123,6 +129,7 @@ namespace SabberStoneCore.Actions
 
         public static void ConfigureAppendage(Minion minion, int tier)
         {
+            HeraldRules.ShowVariant(minion);
             if (minion.IsSilenced || minion[RealizedFactor] > 0) return;
             int factor = 1 << Math.Max(0, Math.Min(2, tier));
             minion[RealizedFactor] = factor;

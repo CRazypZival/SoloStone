@@ -2807,6 +2807,7 @@ M	blizzard.bgsclient	PegasusGame.PowerHistorySubSpellStart	set_TargetEntityIds	S
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	get_Entity	System.Int32()
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	get_Tag	System.Int32()
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	get_Value	System.Int32()
+M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	set_ChangeDef	System.Void(System.Boolean)
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	set_Entity	System.Void(System.Int32)
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	set_Tag	System.Void(System.Int32)
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	set_Value	System.Void(System.Int32)

@@ -459,6 +459,8 @@ namespace SabberStoneCore.Actions
                     p[GameTag.TAG_SCRIPT_DATA_NUM_1] = newCard[GameTag.TAG_SCRIPT_DATA_NUM_1];
                     p[HeraldRules.RealizedFactor] = 0;
                 }
+                // The scaled printed stats of a Soldier or appendage belong to the old card.
+                if (p[ColossalRules.RealizedFactor] != 0) p[ColossalRules.RealizedFactor] = 0;
 
                 if (p is Minion sleeping && sleeping.IsDormant)
                 {

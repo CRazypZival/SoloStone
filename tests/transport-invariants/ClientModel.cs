@@ -19,6 +19,9 @@ internal sealed class ClientEntity
     internal int DeckEntries, DeckSummons, VisibilityRepairs;
     internal readonly Dictionary<int, int> Tags = new();
     internal int Get(GameTag tag) => Tags.GetValueOrDefault((int)tag);
+    // The entity's dynamic definition: FULL/SHOW/CHANGE_ENTITY reload it (Entity.LoadEntityDef) and apply DefTags; a TAG_CHANGE
+    // with ChangeDef writes here, not to the entity (GameState.OnTagChange). Absent = the card's printed value.
+    internal readonly Dictionary<int, int> Def = new();
     internal int CardZone, CardController, CardPosition;
     internal int Id;
     // Card.MillCard marks an opposing actor moved DECK -> GRAVEYARD as being drawn by the opponent and nothing clears it;
@@ -202,6 +205,7 @@ internal sealed class ClientModel
             var entity = new ClientEntity { Id = pair.Value.Id, MillLocked = pair.Value.MillLocked, DeckEntries = pair.Value.DeckEntries, DeckSummons = pair.Value.DeckSummons, VisibilityRepairs = pair.Value.VisibilityRepairs, CardId = pair.Value.CardId, ActorCardId = pair.Value.ActorCardId, HiddenByNullZone = pair.Value.HiddenByNullZone, LastActorZone = pair.Value.LastActorZone, CardZone = pair.Value.CardZone,
                 CardController = pair.Value.CardController, CardPosition = pair.Value.CardPosition };
             foreach (var tag in pair.Value.Tags) entity.Tags.Add(tag.Key, tag.Value);
+            foreach (var tag in pair.Value.Def) entity.Def.Add(tag.Key, tag.Value);
             copy.Entities.Add(pair.Key, entity);
         }
         foreach (var pair in EntryCounts) copy.EntryCounts.Add(pair.Key, pair.Value);
@@ -365,10 +369,16 @@ internal sealed class ClientModel
                     // A malformed FULL therefore occupies ID 0; subsequent tasks addressed to its outer ID miss.
                     int registered = entry.HasFullEntity
                         ? snapshot.Tags.FirstOrDefault(t => t.Name == (int)GameTag.ENTITY_ID)?.Value ?? 0 : snapshot.Entity;
+                    int defined = -1;
                     if (entry.HasFullEntity && !Entities.ContainsKey(registered))
-                        Merge(registered, snapshot.Name, snapshot.Tags, full: true);
+                        Merge(defined = registered, snapshot.Name, snapshot.Tags, full: true);
                     else if (Entities.ContainsKey(snapshot.Entity))
-                        Merge(snapshot.Entity, snapshot.Name, snapshot.Tags, entry.HasFullEntity, entry.HasChangeEntity);
+                        Merge(defined = snapshot.Entity, snapshot.Name, snapshot.Tags, entry.HasFullEntity, entry.HasChangeEntity);
+                    if (defined >= 0 && !string.IsNullOrEmpty(snapshot.Name))
+                    {
+                        Entity(defined).Def.Clear();
+                        foreach (var tag in snapshot.DefTags) Entity(defined).Def[tag.Name] = tag.Value;
+                    }
                 }
             }
             else if (entry.HasTagChange)
@@ -376,6 +386,7 @@ internal sealed class ClientModel
                 kind = "TAG_CHANGE";
                 var tag = entry.TagChange;
                 if (!Entities.ContainsKey(tag.Entity)) continue;
+                if (tag.ChangeDef) { Entity(tag.Entity).Def[tag.Tag] = tag.Value; continue; }
                 Entity(tag.Entity).Tags[tag.Tag] = tag.Value;
                 int from = Entity(tag.Entity).CardZone;
                 if (MoveCard(Entity(tag.Entity), tag.Tag == (int)GameTag.ZONE ? tag.Value : null,
