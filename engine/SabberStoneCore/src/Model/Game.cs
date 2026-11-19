@@ -1555,11 +1555,18 @@ namespace SabberStoneCore.Model
 		/// </summary>
 		public void DeathProcessingAndAuraUpdate()
 		{
+			// The outermost cleanup starts the cycle budget; nested cleanups spend from it.
+			if (_cleanupDepth++ == 0 && !CycleBudgetExhausted) _cleanupCycles = 0;
+			try { DeathProcessingSteps(); }
+			finally { _cleanupDepth--; }
+		}
+
+		private void DeathProcessingSteps()
+		{
             using var resolution = Resolution.Enter(ResolutionKind.Cleanup);
             using var deathContext = Actions.DeathContextRules.EnterDeaths(this);
 			//Inter-Phase steps
 			
-			using var cycles = new CleanupCycleScope(this);
 			AuraUpdate();
 			SummonResolutionStep();
 
@@ -1601,29 +1608,18 @@ namespace SabberStoneCore.Model
             Actions.Generic.ResolveDeferredSummons(this);
 		}
 
-		// The outermost cleanup starts the budget; nested cleanups spend from it.
-		private readonly struct CleanupCycleScope : IDisposable
-		{
-			private readonly Game _game;
-			public CleanupCycleScope(Game game)
-			{
-				_game = game;
-				if (game._cleanupDepth++ == 0 && !game.CycleBudgetExhausted) game._cleanupCycles = 0;
-			}
-			public void Dispose() => _game._cleanupDepth--;
-		}
-
 		/// <summary>
 		/// Death Phases plus Summon Resolution passes that one outermost cleanup may run, nested cleanups included.
 		/// </summary>
 		public const int MaxCleanupCycles = 1000;
-		private int _cleanupDepth;
-		private int _cleanupCycles;
+		// Transient: a snapshot is taken only between cleanups.
+		[NonSerialized] private int _cleanupDepth;
+		[NonSerialized] private int _cleanupCycles;
 
 		/// <summary>
 		/// True once a cleanup ran out of <see cref="MaxCleanupCycles"/>: the game ended in a draw, and later cleanups resolve nothing.
 		/// </summary>
-		public bool CycleBudgetExhausted { get; private set; }
+		[field: NonSerialized] public bool CycleBudgetExhausted { get; private set; }
 
 		// The rulebook repeats Death Phases "until no new Deaths occur" and states no limit. A loop that never stops on its own
 		// cannot be resolved, so the death loop and the Summon Resolution Step share one budget per outermost cleanup. Engine
@@ -1650,7 +1646,7 @@ namespace SabberStoneCore.Model
 		}
 
 		/// <summary>Called once, with a short reason, when a cleanup runs out of its cycle budget.</summary>
-		public Action<string> CycleBudgetExhaustedDiagnostic;
+		[NonSerialized] public Action<string> CycleBudgetExhaustedDiagnostic;
 
 		// Summon Resolution Step: "whenever you summon" triggers for the summons of the Phase that just ended.
 		// Each batch leaves the list before it fires: a reaction can reach a nested cleanup (an overdrawn IMPFERNAL!), which
