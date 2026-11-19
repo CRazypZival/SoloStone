@@ -147,7 +147,7 @@ public sealed class NativeMatch
         (GameTag)1637, // FRENZY: EntityBase.HasFrenzy enables frenzy presentation.
         (GameTag)1719, // TRANSFORMED_FROM_CARD_VISUAL_TYPE: HistoryManager selects transform history visuals.
         (GameTag)1720, // TRADEABLE: EntityBase.IsTradeable enables deck-drop Trade and icon.
-        (GameTag)1725, // QUESTLINE: EntityBase.IsQuestline selects questline UI.
+        SabberStoneCore.Actions.QuestRules.QuestlineTag, // QUESTLINE: EntityBase.IsQuestline selects questline UI.
         (GameTag)1743, // DECK_ACTION_COST: Card.HasEnoughManaToDeckAction gates deck-drop mana.
         (GameTag)1749, // SIGIL: EntityBase.IsSigil and ActorNames select sigil presentation.
         (GameTag)1816, // SHOW_DISCOVER_FROM_DECK: ChoiceCardMgr selects deck Discover presentation.
@@ -3160,7 +3160,7 @@ public sealed class NativeMatch
             {
                 blockDepth++;
                 if (questBlockDepth == 0 && closedBlocks.Contains(index) && opened.BlockType == BlockType.TRIGGER
-                    && (opened.TriggerKeyword == (int)GameTag.QUEST || opened.TriggerKeyword == 1725))
+                    && (opened.TriggerKeyword == (int)GameTag.QUEST || opened.TriggerKeyword == (int)SabberStoneCore.Actions.QuestRules.QuestlineTag))
                 {
                     questBlockDepth = blockDepth;
                     questSource = opened.Source;
@@ -5713,7 +5713,7 @@ public sealed class NativeMatch
             // card is shown in hand, only for a block marked ShowInHistory, as retail marks it.
             // QuestCompleteSpell supplies animation only; PowerProcessor needs this flag for the completion tile.
             if (start.BlockType == BlockType.TRIGGER && (start.TriggerKeyword == 377
-                || start.TriggerKeyword == (int)GameTag.QUEST || start.TriggerKeyword == 1725)) native.PowerStart.ShowInHistory = true;
+                || start.TriggerKeyword == (int)GameTag.QUEST || start.TriggerKeyword == (int)SabberStoneCore.Actions.QuestRules.QuestlineTag)) native.PowerStart.ShowInHistory = true;
             // Automatic plays: PowerProcessor creates and holds the big card only when asked (no hand-play reveal).
             if (start is PowerHistoryEffectPlayStart effectPlay && effectPlay.ForceShowBigCard) native.PowerStart.ForceShowBigCard = true;
 #endif

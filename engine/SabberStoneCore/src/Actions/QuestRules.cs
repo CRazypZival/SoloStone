@@ -12,6 +12,8 @@ namespace SabberStoneCore.Actions
 {
     public static class QuestRules
     {
+        public const GameTag QuestlineTag = (GameTag)1725;
+
         private static readonly Dictionary<int, Func<IPlayable, DamageResolvedFact, ISimpleTask>> DamageListeners =
             new Dictionary<int, Func<IPlayable, DamageResolvedFact, ISimpleTask>>();
 
@@ -231,24 +233,27 @@ namespace SabberStoneCore.Actions
         }
 
         // Retail sends a quest's progress as a TRIGGER block at effectIndex 1 and its completion as a sibling TRIGGER
-        // block at effectIndex 0 with the QUEST (462) or QUESTLINE (1725) trigger keyword; the client builds the
+        // block at effectIndex 0 with the QUEST or QUESTLINE trigger keyword; the client builds the
         // quest-complete animation and the history tile from that second block (opposing_maestra, friendly_maestra and
         // transformed_on_board, builds 88998 and 39954).
+        private static bool IsProgressBlock(PowerHistoryBlockStart block, Spell spell) =>
+            block?.BlockType == BlockType.TRIGGER && block.Source == spell.Id && !block.TriggerKeyword.HasValue;
+
         internal static void MarkProgressBlock(Spell spell)
         {
             if (!spell.Game.History || spell.Zone != spell.Controller.SecretZone) return;
             var block = spell.Game.PowerHistory.CurrentBlock;
-            if (block?.BlockType == BlockType.TRIGGER && block.Source == spell.Id && !block.TriggerKeyword.HasValue) block.EffectIndex = 1;
+            if (IsProgressBlock(block, spell)) block.EffectIndex = 1;
         }
 
         internal static void BeginCompletionBlock(Spell spell)
         {
             if (!spell.Game.History) return;
             var block = spell.Game.PowerHistory.CurrentBlock;
-            if (block?.BlockType != BlockType.TRIGGER || block.Source != spell.Id || block.TriggerKeyword.HasValue) return;
+            if (!IsProgressBlock(block, spell)) return;
             spell.Game.PowerHistory.Add(PowerHistoryBuilder.BlockEnd());
             spell.Game.PowerHistory.Add(PowerHistoryBuilder.BlockStart(BlockType.TRIGGER, spell.Id, "", -1, 0, effectIndex: 0,
-                triggerKeyword: spell.Card[(GameTag)1725] != 0 ? 1725 : (int)GameTag.QUEST));
+                triggerKeyword: spell.Card[QuestlineTag] != 0 ? (int)QuestlineTag : (int)GameTag.QUEST));
         }
 
         public static bool Advance(Spell spell, int amount = 1)
@@ -263,8 +268,7 @@ namespace SabberStoneCore.Actions
             int total = spell.QuestTotalProgress;
             if (before >= total) return false;
             var block = spell.Game.PowerHistory?.CurrentBlock;
-            bool ownBlock = spell.Game.History && !(block?.BlockType == BlockType.TRIGGER
-                && block.Source == spell.Id && !block.TriggerKeyword.HasValue);
+            bool ownBlock = spell.Game.History && !IsProgressBlock(block, spell);
             if (ownBlock) spell.Game.PowerHistory.Add(PowerHistoryBuilder.BlockStart(BlockType.TRIGGER, spell.Id, "", -1, 0, effectIndex: 1));
             try
             {

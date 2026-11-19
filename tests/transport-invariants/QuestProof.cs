@@ -62,7 +62,7 @@ internal static class QuestProof
 
     private static void Metadata(IDictionary<GameTag, int> tags)
     {
-        foreach (var pair in new[] { (462, 1), (534, 0), (535, 6), (1089, 121956), (4238, 1) })
+        foreach (var pair in new[] { ((int)GameTag.QUEST, 1), (534, 0), (535, 6), (1089, 121956), (4238, 1) })
             Check(tags.TryGetValue((GameTag)pair.Item1, out int value) && value == pair.Item2,
                 "reveal metadata " + pair.Item1);
     }

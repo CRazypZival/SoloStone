@@ -36,7 +36,7 @@ internal static partial class Program
     // it plays only when that entity's card id is the card the quest names (QUEST_REWARD_DATABASE_ID); the opponent's
     // reward was anonymous. Retail (opposing_maestra and friendly_maestra build 88998, transformed_on_board build 39954)
     // sends progress as a TRIGGER block at effectIndex 1 and completion as a sibling TRIGGER block at effectIndex 0 with
-    // triggerKeyword QUEST (462), the reward named inside it. The reward is hidden again at the end of the block.
+    // triggerKeyword QUEST, the reward named inside it. The reward is hidden again at the end of the block.
     private static void QuestCompleteHistory()
     {
         var failures = new List<string>();
@@ -58,7 +58,7 @@ internal static partial class Program
             int complete = progressEnd < 0 ? -1 : h.FindIndex(progressEnd + 1, e => e.HasPowerStart && e.PowerStart.Source == quest);
             if (complete != progressEnd + 1 || h[complete].PowerStart.EffectIndex != 0
                 || (int)h[complete].PowerStart.Type != (int)BlockType.TRIGGER || h[complete].PowerStart.TriggerKeyword != (int)GameTag.QUEST)
-            { failures.Add(name + ": completion must be the sibling TRIGGER block at effectIndex 0 with keyword 462"); continue; }
+            { failures.Add(name + ": completion must be the sibling TRIGGER block at effectIndex 0 with keyword QUEST"); continue; }
             Check(h[complete].PowerStart.ShowInHistory, name + ": completion requests the history tile");
             Check(capture.HistorySnapshots().SelectMany(p => p.List).Any(e => e.HasPowerStart && e.PowerStart.Source == quest
                 && e.PowerStart.TriggerKeyword == (int)GameTag.QUEST && e.PowerStart.ShowInHistory), name + ": tile flag survives wire serialization");
@@ -132,7 +132,7 @@ internal static partial class Program
     private static void QuestRewardPrivacyHistory()
     {
         // Exercise every packet boundary, including one after the named reward's FULL_ENTITY.
-        foreach (int keyword in new[] { (int)GameTag.QUEST, 1725 })
+        foreach (int keyword in new[] { (int)GameTag.QUEST, (int)QuestRules.QuestlineTag })
         foreach (int split in new[] { 0, 1, 2, 3, 4 })
         {
             var (match, capture) = AnimationMatch(true);
