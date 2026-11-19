@@ -125,8 +125,10 @@ internal static class LotusTroublemakerTests
                 var pilot = new GoldenPilot(profile); int index = 0;
                 var decision = BotDriver.Decide(g, 1, DeckStyle.Tempo,
                     s => pilot.DecidePilot(s, new GoldenContext(g.Turn, index, 997 * g.Turn + index * 31, profile)), ref index, pilot.Options);
-                Check(decision.Trace.Kind == "search" && decision.Task.PlayerTaskType != PlayerTaskType.END_TURN,
-                    $"Lotus {route}, {twoManaPlays} two-Mana plays: NPC {profile.Id} must act (not END_TURN), got {decision.Task} trace={PlannerTests.Trace(decision.Trace)}");
+                // A broken run searches 18-24 nodes; a working one searches thousands.
+                Check(decision.Trace.Kind == "search" && decision.Task.PlayerTaskType != PlayerTaskType.END_TURN
+                    && decision.Trace.PilotDecision.Nodes >= 200,
+                    $"Lotus {route}, {twoManaPlays} two-Mana plays: NPC {profile.Id} must act (not END_TURN) after a real search, got {decision.Task} trace={PlannerTests.Trace(decision.Trace)}");
             }
         }
     }
@@ -182,7 +184,7 @@ internal static class LotusTroublemakerTests
                 var pilot = new GoldenPilot(profile); int index = 0;
                 var decision = BotDriver.Decide(g, 1, DeckStyle.Tempo,
                     s => pilot.DecidePilot(s, new GoldenContext(g.Turn, index, 997 * g.Turn + index * 31, profile)), ref index, pilot.Options);
-                if (decision.Task.PlayerTaskType == PlayerTaskType.END_TURN) { stuck++; names.Add(card.Id + "/" + profile.Id); }
+                if (decision.Task.PlayerTaskType == PlayerTaskType.END_TURN || decision.Trace.PilotDecision.Nodes < 200) { stuck++; names.Add(card.Id + "/" + profile.Id); }
             }
         }
         Console.WriteLine($"  known {label} sweep: {cards.Count} cards, {stuck} passes");
