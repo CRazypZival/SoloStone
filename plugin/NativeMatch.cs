@@ -248,8 +248,10 @@ public sealed class NativeMatch
         (GameTag)4162, // DYNAMIC_KEYWORD2: DynamicKeywordCardTextBuilder and keyword help resolve keyword two.
         (GameTag)4174, // DONT_PLAY_VFX_FROM_EXTRA_TRIGGERED_POWER: TriggerSpellController suppresses duplicate effects.
         (GameTag)4213, // SUPPRESS_IMMOLATE_VISUAL_FOR_OPPONENT: Actor.UpdateImmolating controls opponent visuals.
-        (GameTag)2505, // IMMOLATING: Actor.UpdateImmolating enables hand spell 221.
+        // IMMOLATESTAGE before IMMOLATING: on discard the stage must reach 0 while the fire is still on, so the client's
+        // Actor.UpdateImmolating plays the burn-up stage instead of going straight to Idle.
         (GameTag)2600, // IMMOLATESTAGE: Actor.UpdateImmolating selects the countdown's fire stage.
+        (GameTag)2505, // IMMOLATING: the client's tag visual data switches the hand fire spell (221) on and off.
         (GameTag)4238, // REPEATABLE: QuestProgressUI renders repeatable quest arrow.
         (GameTag)4239, // SHATTER: EntityBase.IsShatterable enables Shatter interaction.
         (GameTag)4257, // USES_CHARGES: PlayErrors selects charge-cost error text.
@@ -3575,6 +3577,8 @@ public sealed class NativeMatch
         }
     }
 
+    // Smoldering family only (FIR_911, FIR_914, FIR_916 are the only cards with these definition tags): turnsLeft is their
+    // TAG_SCRIPT_DATA_NUM_2 countdown. A future card with the same tags but another meaning for that counter needs its own rule.
     private static int? HandBurnTag(EngineCard card, GameTag tag, EngineZone zone, int turnsLeft)
     {
         if (((int)tag != 2505 && (int)tag != 2600) || card[(GameTag)2505] != 1
