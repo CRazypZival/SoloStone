@@ -51,7 +51,9 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 				game.Log(LogLevel.INFO, BlockType.PLAY, "MoveToDeck",
 					!game.Logging ? "" : $"{controller.Name} is taking control of {p} and shuffled into his deck.");
 
-				Generic.ShuffleIntoDeck(c, source, p);
+				// A full deck destroys the card; it must not be left without a zone.
+				if (!Generic.ShuffleIntoDeck(c, source, p))
+					c.GraveyardZone.Add(p);
 			}
 			return TaskState.COMPLETE;
 		}
