@@ -555,16 +555,17 @@ internal sealed class MatchEventLog
             case GameTag.ATK:
             case GameTag.HEALTH:
                 {
-                    // A stat tag is the entity's own value, without an aura's part: the tracked stats carry none of it from here.
-                    if (setup) { if (change.Tag == GameTag.ATK) ent.Atk = change.Value; else ent.Health = change.Value; ent.AuraAtk = 0; ent.AuraHealth = 0; break; }
-                    if (ent.Guessed) { ent.Guessed = false; if (change.Tag == GameTag.ATK) ent.Atk = change.Value; else ent.Health = change.Value; ent.AuraAtk = 0; ent.AuraHealth = 0; break; }
+                    // A stat tag write leaves the aura part alone: what an emitter writes may include the aura (an enchantment or an
+                    // aura writes entity[Tag], which does) or not (the AttackDamage/BaseHealth setters write the base value), so the
+                    // part is refreshed only from the live entity.
+                    if (setup) { if (change.Tag == GameTag.ATK) ent.Atk = change.Value; else ent.Health = change.Value; break; }
+                    if (ent.Guessed) { ent.Guessed = false; if (change.Tag == GameTag.ATK) ent.Atk = change.Value; else ent.Health = change.Value; break; }
                     if (pendingStat != ent)
                     {
                         FlushStat();
                         pendingStat = ent; pendingStatFromAtk = ent.Atk; pendingStatFromHp = ent.Health - ent.Damage; pendingStatBy = By(game, ent.Id);
                     }
                     if (change.Tag == GameTag.ATK) ent.Atk = change.Value; else ent.Health = change.Value;
-                    ent.AuraAtk = 0; ent.AuraHealth = 0;
                     break;
                 }
             default:
@@ -816,7 +817,7 @@ internal sealed class MatchEventLog
                         Emit(ent.Controller, "RESYNC", "target=" + Ref(game, id, card) + " tracked=" + ent.Atk + "/" + (ent.Health - ent.Damage) + " engine=" + atk + "/" + hp);
                     TakeLiveStats(ent, live);
                 }
-                else { ent.AuraAtk = character.AuraEffects?.ATK ?? 0; ent.AuraHealth = character.AuraEffects?.Health ?? 0; }   // the tracked stats are the live ones
+                else { ent.Health = maxHealth; ent.Damage = damage; ent.AuraAtk = character.AuraEffects?.ATK ?? 0; ent.AuraHealth = character.AuraEffects?.Health ?? 0; }   // current Health and Attack match: take the live max/damage split and aura part
             }
             if (card != null && ent.Card != card) ent.Card = card;
             ent.Type = (int)live.Card.Type;

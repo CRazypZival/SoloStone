@@ -74,6 +74,9 @@ internal static partial class Program
         DriftUnderLiveAuraStaysResync();
         PartlyExplainedAuraChangeStaysResync();
         StaleAuraPartDoesNotSurviveABounce();
+        EnchantedMinionKeepsItsAuraPart();
+        LostHealthAuraSplitIsTaken();
+        UnrevealedCorrectionNotApplied();
         Console.WriteLine("PASS match event log auras: aura gain and loss are STATS by=aura, other drift stays RESYNC (also under a live aura"
             + " and when partly explained), no stale aura part, private corrections are skipped, a fault forgets aura state");
     }
@@ -180,11 +183,6 @@ internal static partial class Program
         bench.Play("CS2_189", yeti);
         Check(bench.About(yeti.Id, "STATS").Any(l => l.Contains("by=aura")), "the Yeti's stats held the aura:" + bench.Dump());
         bench.Lines.Clear();
-        // A stat tag write is the base value, without the aura: it must not leave the aura part behind either.
-        bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ATK, 4));
-        Check(!bench.Lines.Any(l => l.Contains(" RESYNC ")) && bench.About(yeti.Id, "STATS").Any(l => l.Contains("->6/4") && l.Contains("by=aura")),
-            "the aura comes back after a base write as STATS by=aura:" + bench.Dump());
-        bench.Lines.Clear();
         // Out of play and back in the same breath (the engine's Yeti never moved): stats come from the printed card each time.
         bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ZONE, (int)Zone.HAND), PowerHistoryBuilder.TagChange(yeti.Id, GameTag.DAMAGE, 1));
         bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ZONE, (int)Zone.PLAY), PowerHistoryBuilder.TagChange(yeti.Id, GameTag.DAMAGE, 1));
@@ -193,5 +191,53 @@ internal static partial class Program
         bench.Lines.Clear();
         bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.ATK, 99));
         Check(bench.About(yeti.Id, "RESYNC").Length == 1, "a drift after the bounce is RESYNC:" + bench.Dump());
+    }
+
+    // Blessing of Kings writes the Yeti's Attack as the engine's entity[ATK], which includes Flametongue's +2: the log keeps the
+    // aura part, so the aura's end in the same batch is still the aura's change, not drift.
+    private static void EnchantedMinionKeepsItsAuraPart()
+    {
+        var bench = new AuraLogBench();
+        var yeti = bench.OnBoard("CS2_182");
+        var leader = bench.Play("EX1_565");
+        bench.Play("CS2_189", yeti);
+        Check(bench.About(yeti.Id, "STATS").Any(l => l.Contains("by=aura")), "the Yeti's stats held the aura:" + bench.Dump());
+        bench.Lines.Clear();
+        bench.Play("CS2_092", yeti, observe: false);   // Blessing of Kings
+        bench.Play("CS2_029", leader, observe: false);   // Fireball on the Totem: the aura ends in the same batch
+        bench.Observe();
+        Check(!bench.Lines.Any(l => l.Contains(" RESYNC ")), "an aura's end after an enchantment is no drift:" + bench.Dump());
+        Check(bench.About(yeti.Id, "STATS").Any(l => l.Contains("by=aura")), "the aura's end is STATS by=aura:" + bench.Dump());
+    }
+
+    // Attack and current Health match the engine, but the max Health / damage split does not (a Health aura lost with its clamp,
+    // here made up with tags): the log takes the live split, so the next aura change is explained from the right max Health.
+    private static void LostHealthAuraSplitIsTaken()
+    {
+        var bench = new AuraLogBench();
+        var yeti = bench.OnBoard("CS2_182");
+        bench.Play("CS2_008", yeti);   // Moonfire: 1 damage, 4/4 of 5
+        bench.Synthetic(PowerHistoryBuilder.TagChange(yeti.Id, GameTag.HEALTH, 6), PowerHistoryBuilder.TagChange(yeti.Id, GameTag.DAMAGE, 2));
+        bench.Lines.Clear();
+        bench.Play("EX1_565");
+        bench.Play("CS2_008", yeti);
+        Check(!bench.Lines.Any(l => l.Contains(" RESYNC ")) && bench.About(yeti.Id, "STATS").Any(l => l.Contains("by=aura")),
+            "a stale max Health split must not turn the next aura change into drift:" + bench.Dump());
+    }
+
+    // The log follows a correction only for an entity the transport has revealed (NativeMatch hands it that through IsRevealed).
+    private static void UnrevealedCorrectionNotApplied()
+    {
+        foreach (bool revealed in new[] { false, true })
+        {
+            var bench = new AuraLogBench();
+            var yeti = bench.OnBoard("CS2_182");
+            bench.Lines.Clear();
+            bench.Log.IsRevealed = _ => revealed;
+            bench.Log.Corrections = (entries, index) => index != entries.Count ? Array.Empty<MatchEventLog.TransportCorrection>() : new[] {
+                new MatchEventLog.TransportCorrection(yeti.Id, new Dictionary<GameTag, int> { [GameTag.ARMOR] = 3 }, true) };
+            bench.Synthetic(PowerHistoryBuilder.TagChange(bench.Game.Id, GameTag.NEXT_STEP, (int)Step.MAIN_ACTION));
+            Check(bench.About(yeti.Id, "ARMOR").Length == (revealed ? 1 : 0), "a correction follows only a revealed entity (revealed=" + revealed + "):" + bench.Dump());
+        }
     }
 }

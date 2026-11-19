@@ -3279,9 +3279,20 @@ internal static partial class Program
         Check(Followed(yeti.Id), "the log did not follow a public correction:\n" + string.Join("\n", lines));
         Check(!lines.Any(l => l.Contains("#" + hidden.Id + "(")), "the log followed a correction on an opponent's hand card:\n" + string.Join("\n", lines));
 
+        // The consumed correction sits at index 1; the same list grows by one entry, so the log reads position 1 again: it must
+        // find nothing there.
         lines.Clear();
+        batch.Add(SabberStoneCore.Kettle.PowerHistoryBuilder.TagChange(game.Id, GameTag.NEXT_STEP, (int)Step.MAIN_ACTION));
         SendHistoryEntries(match, batch);
         Check(!Followed(yeti.Id), "a consumed correction reached the log twice:\n" + string.Join("\n", lines));
+
+        // An entity the transport never revealed (a card in the human's hand, no history sent for it) gets no correction line.
+        var unrevealed = SabberStoneCore.Model.Entities.Entity.FromCard(game.Player1, Cards.FromId("CS2_182"), zone: game.Player1.HandZone);
+        lines.Clear();
+        var third = Batch();
+        match.RecordTransportCorrection(third, 1, unrevealed.Id, new Dictionary<GameTag, int> { [GameTag.ARMOR] = 3 }, true);
+        SendHistoryEntries(match, third);
+        Check(!lines.Any(l => l.Contains("#" + unrevealed.Id + "(")), "the log followed a correction on an unrevealed entity:\n" + string.Join("\n", lines));
         Console.WriteLine("PASS event log follows the transport's corrections: public followed, hidden and foreign skipped, consumed once");
     }
 
