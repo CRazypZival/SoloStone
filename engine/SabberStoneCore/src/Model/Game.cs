@@ -1510,6 +1510,7 @@ namespace SabberStoneCore.Model
             Actions.Generic.RefreshRetainedSpells(this);
             CardSets.Client.Sets.Isiset.Refresh(this);
             Actions.DormantRules.CheckConditions(this);
+            Actions.CombatRules.RefreshIgnoreTaunt(this);
             RefreshHistoryDisplays();
         }
 
