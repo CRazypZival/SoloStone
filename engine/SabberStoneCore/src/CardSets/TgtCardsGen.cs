@@ -327,7 +327,7 @@ namespace SabberStoneCore.CardSets
 			new DiscardTask(EntityType.HAND),
 			new CustomTask((g, c, s, t, stack) =>
 				{
-					if (c.BaseMana == 10 || c.RemainingMana == 10)
+					if (c.BaseMana >= c[GameTag.MAXRESOURCES])
 					{
 						stack.Flag = true;
 						return;

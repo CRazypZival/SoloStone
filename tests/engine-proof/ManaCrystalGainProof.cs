@@ -19,7 +19,7 @@ internal static class ManaCrystalGainProof
         var failures = new List<string>();
         foreach (var test in new Action[] { FilledAtCap, FilledOverflowBelowCap, FilledExactlyToCap, OverflowNeverExceedsSpent,
             OverloadStaysLocked, NoTemporaryMana, RaisedCap, EmptyGainUnchanged, BiologyProjectBothPlayers, Nourish,
-            YseraEndToEnd, AstralCommunionOnRaisedCap })
+            YseraEndToEnd, AstralCommunionOnRaisedCap, AstralCommunionExcessManaOnlyAtCap })
             try { test(); } catch (Exception e) { failures.Add(test.Method.Name + ": " + e.Message); }
         Verify(failures.Count == 0, string.Join("; ", failures));
         Console.WriteLine("PASS mana crystal gain: filled gain refills spent crystals past the cap; Overload locked; no temporary Mana; empty gain unchanged; raised cap; Biology Project, Nourish, Ysera, Astral Communion");
@@ -153,5 +153,17 @@ internal static class ManaCrystalGainProof
         var (g, p) = Start(12, 3, cap: 15);
         Play(g, p, "AT_043");
         Verify(p.BaseMana == 15 && p.RemainingMana == 15, "Astral Communion (Gain 10) from 12 under cap 15 never lowers max, got " + State(p));
+    }
+    private static void AstralCommunionExcessManaOnlyAtCap()
+    {
+        // Excess Mana comes only when max is already at the cap (the player's MAXRESOURCES), not at a hard-coded 10.
+        var (g, p) = Start(10, 0, cap: 15);
+        Play(g, p, "AT_043");
+        Verify(p.BaseMana == 15 && p.RemainingMana == 15 && !p.HandZone.Any(c => c.Card.Id == "CS2_013t"),
+            "Astral Communion at 10 under cap 15 gains 5 and gives no Excess Mana, got " + State(p));
+        var (g2, q) = Start(15, 0, cap: 15);
+        Play(g2, q, "AT_043");
+        Verify(q.BaseMana == 15 && q.HandZone.Any(c => c.Card.Id == "CS2_013t"),
+            "Astral Communion at the raised cap 15 gives Excess Mana, got " + State(q));
     }
 }
