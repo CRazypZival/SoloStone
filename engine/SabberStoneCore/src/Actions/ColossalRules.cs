@@ -9,8 +9,6 @@ namespace SabberStoneCore.Actions
 {
     public static class ColossalRules
     {
-        // Factor the printed stats of a Herald appendage or Soldier were scaled by (engine only). The client shows those scaled
-        // stats as the card's own (its definition), not as a buff. Silence, return to hand and transform reset it with the stats.
         public const GameTag RealizedFactor = (GameTag)31010;
         // Appendages of Herald Colossals (body tag 4538): same factor and the same three upgrade texts as Soldiers.
         private static readonly HashSet<string> HeraldAppendages = new HashSet<string>(StringComparer.Ordinal);
@@ -129,7 +127,6 @@ namespace SabberStoneCore.Actions
 
         public static void ConfigureAppendage(Minion minion, int tier)
         {
-            HeraldRules.ShowVariant(minion);
             if (minion.IsSilenced || minion[RealizedFactor] > 0) return;
             int factor = 1 << Math.Max(0, Math.Min(2, tier));
             minion[RealizedFactor] = factor;

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using SabberStoneCore.Enchants;
 using SabberStoneCore.Enums;
@@ -26,33 +25,12 @@ namespace SabberStoneCore.Actions
             CardClass.WARLOCK => "CATA_725t", CardClass.WARRIOR => "CATA_580t", _ => null
         };
         public static bool IsSoldier(Card card) => card != null && Soldier(card.Class) == card.Id;
-        // #192. Tag 955 (USE_ALTERNATE_CARD_TEXT) picks the "@" text the client shows: 0 "Herald twice to upgrade", 1 "Herald once
-        // to upgrade", 2 the final text. Lean, derived from the card text, not from a retail trace: it follows the controller's count
-        // (upgrades at 2 and 4 Heralds). The client never works it out itself, so it is set when a card is created or enters the board
-        // and again on every live card each time the count rises.
-        public const GameTag TextVariant = (GameTag)955;
+        // #192, read by the native transport only (never stored): tag 955 (USE_ALTERNATE_CARD_TEXT) picks the "@" text of a
+        // tiered card: 0 "Herald twice to upgrade", 1 "Herald once to upgrade", 2 the final text. Lean, derived from the card text,
+        // not from a retail trace: it follows the controller's count (upgrades at 2 and 4 Heralds).
         public static int Variant(Controller controller) => Count(controller) >= 4 ? 2 : Count(controller) % 2;
         /// <summary>Cards whose text and stats follow the Herald tier: Soldiers and Herald Colossal appendages.</summary>
         public static bool IsTiered(Card card) => IsSoldier(card) || ColossalRules.IsHeraldAppendage(card);
-        public static void ShowVariant(IPlayable entity)
-        {
-            if (entity?.Controller == null || !IsTiered(entity.Card)) return;
-            int variant = Variant(entity.Controller);
-            if (entity[TextVariant] != variant) entity[TextVariant] = variant;
-        }
-        /// <summary>Text variant for a card being created (before its first snapshot).</summary>
-        internal static void ShowVariant(Controller controller, Card card, IDictionary<GameTag, int> tags)
-        {
-            if (!IsTiered(card)) return;
-            int variant = Variant(controller);
-            if (variant != 0 || tags.ContainsKey(TextVariant)) tags[TextVariant] = variant;
-        }
-        private static void ShowVariants(Controller controller)
-        {
-            foreach (IPlayable entity in controller.BoardZone.ToArray()) ShowVariant(entity);
-            foreach (IPlayable entity in controller.HandZone.ToArray()) ShowVariant(entity);
-            foreach (IPlayable entity in controller.DeckZone.ToArray()) ShowVariant(entity);
-        }
         /// <summary>Branch (a): the controller's own Soldier class: selected profile, else current hero class.</summary>
         public static CardClass OwnClass(Controller controller)
         {
@@ -113,18 +91,13 @@ namespace SabberStoneCore.Actions
             }
             // Provisional ordering: summon at the old tier; even a full board advances the count.
             controller[Progress] = Count(controller) + 1;
-            ShowVariants(controller);
             return id;
         }
         public static void ConfigureSummon(IPlayable entity, int tier)
         {
-            if (!(entity is Minion m)) return;
-            ShowVariant(m);
-            if (!IsSoldier(m.Card) || m.IsSilenced || m[RealizedFactor] > 0) return;
+            if (!(entity is Minion m) || !IsSoldier(m.Card) || m.IsSilenced || m[RealizedFactor] > 0) return;
             int factor = 1 << Math.Max(0, Math.Min(2, tier));
             m[RealizedFactor] = factor;
-            // The factor of the client's definition stats (shared with Herald appendages).
-            m[ColossalRules.RealizedFactor] = factor;
             m[GameTag.TAG_SCRIPT_DATA_NUM_1] = m.Card[GameTag.TAG_SCRIPT_DATA_NUM_1] * factor;
             m.AttackDamage += m.Card.ATK * (factor - 1);
             m.BaseHealth += m.Card.Health * (factor - 1);

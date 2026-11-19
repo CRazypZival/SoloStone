@@ -152,8 +152,6 @@ namespace SabberStoneCore.Model.Entities
                 this[GameTag.TAG_SCRIPT_DATA_NUM_1] = 0;
                 this[Actions.HeraldRules.RealizedFactor] = 0;
             }
-            // Silence resets Attack and Health to the printed card below; the scaled definition goes with them.
-            if (this[Actions.ColossalRules.RealizedFactor] != 0) this[Actions.ColossalRules.RealizedFactor] = 0;
             // remove keywords
 			HasTaunt = false;
 			IsFrozen = false;

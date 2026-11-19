@@ -343,7 +343,6 @@ namespace SabberStoneCore.Model.Entities
 			Game game = controller.Game;
 
 			tags = tags ?? new EntityData();
-			Actions.HeraldRules.ShowVariant(controller, card, tags);
 			//tags[GameTag.CARD_ID] = card.AssetId;
 
 			//if (creator != null)

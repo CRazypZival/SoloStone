@@ -11,6 +11,19 @@ using SabberStoneCore.Tasks.SimpleTasks;
 
 internal static partial class Program
 {
+    // The last tag 955 value sent for ENTITY in ROWS (snapshot or TAG_CHANGE), or -1.
+    private static int LastVariant(List<PowerHistoryData> rows, int entity)
+    {
+        int value = -1;
+        foreach (var row in rows)
+        {
+            var identity = row.HasFullEntity ? row.FullEntity : row.HasShowEntity ? row.ShowEntity : row.HasChangeEntity ? row.ChangeEntity : null;
+            if (identity != null && identity.Entity == entity && identity.Tags.FirstOrDefault(t => t.Name == 955) is PegasusGame.Tag text) value = text.Value;
+            else if (row.HasTagChange && !row.TagChange.ChangeDef && row.TagChange.Entity == entity && row.TagChange.Tag == 955) value = row.TagChange.Value;
+        }
+        return value;
+    }
+
     // The client definition of TAG for ENTITY after ROWS, starting from START: a FULL/SHOW/CHANGE reloads it (DefTags, else the
     // printed PRINTED), a ChangeDef TAG_CHANGE writes it.
     private static int Defined(List<PowerHistoryData> rows, int entity, GameTag tag, int start, int printed)
@@ -60,7 +73,7 @@ internal static partial class Program
         var wire = capture.HistorySnapshots().SelectMany(packet => packet.List).ToList();
         foreach (var soldier in soldiers)
         {
-            int factor = Math.Max(1, soldier[ColossalRules.RealizedFactor]);
+            int factor = Math.Max(1, soldier[HeraldRules.RealizedFactor]);
             Check(factor == new[] { 1, 1, 2, 2, 4 }[soldiers.IndexOf(soldier)], "Soldier factor follows the tier at its summon");
             var definition = new Dictionary<int, int>();
             int scaledAt = -1, definedAt = -1;
@@ -91,9 +104,9 @@ internal static partial class Program
                         || x.row.HasFullEntity && x.row.FullEntity.Entity == soldier.Id || x.row.HasShowEntity && x.row.ShowEntity.Entity == soldier.Id)
                         .Select(x => x.i + ":" + (x.row.HasTagChange ? $"TC {x.row.TagChange.Tag}={x.row.TagChange.Value}{(x.row.TagChange.ChangeDef ? "D" : "")}"
                             : x.row.HasFullEntity ? "FULL atk=" + x.row.FullEntity.Tags.FirstOrDefault(t => t.Name == 47)?.Value + " def=" + x.row.FullEntity.DefTags.Count : "SHOW"))));
-            // Created at count k (variant of k), then refreshed after each Herald up to count 5.
+            // Sent after the Herald that made it (count k + 1), then refreshed after each Herald up to count 5.
             var expected = new List<int>();
-            foreach (int value in new[] { 0, 1, 0, 1, 2, 2 }.Skip(soldiers.IndexOf(soldier)))
+            foreach (int value in new[] { 0, 1, 0, 1, 2, 2 }.Skip(soldiers.IndexOf(soldier) + 1))
                 if (expected.Count == 0 || expected[^1] != value) expected.Add(value);
             Check(variants.SequenceEqual(expected), $"Soldier {soldier.Id}: text variants sent {string.Join(",", variants)}, expected {string.Join(",", expected)}");
         }
@@ -103,7 +116,7 @@ internal static partial class Program
             && show.Tags.Single(tag => tag.Name == (int)GameTag.ATK).Value == top.Card.ATK * 4 + 2
             && show.Tags.Single(tag => tag.Name == (int)GameTag.HEALTH).Value == top.Card.Health * 4 + 2,
             "a real buff on a tier 3 Soldier stays above its scaled definition (green)");
-        Check(hidden[HeraldRules.TextVariant] == 2 && wire.All(row =>
+        Check(HeraldRules.Variant(player.Opponent) == 2 && wire.All(row =>
                 !(row.HasTagChange && row.TagChange.Entity == hidden.Id && (row.TagChange.Tag == 955 || row.TagChange.ChangeDef))
                 && !(row.HasFullEntity && row.FullEntity.Entity == hidden.Id && (row.FullEntity.Name.Length > 0 || row.FullEntity.DefTags.Count > 0
                     || row.FullEntity.Tags.Any(tag => tag.Name == 955)))),
@@ -120,6 +133,8 @@ internal static partial class Program
         Check(bounced.Zone == player.HandZone && Defined(back, bounced.Id, GameTag.ATK, bounced.Card.ATK * 2, bounced.Card.ATK) == bounced.Card.ATK
             && Defined(back, bounced.Id, GameTag.HEALTH, bounced.Card.Health * 2, bounced.Card.Health) == bounced.Card.Health,
             "returned to hand: the definition is back to the printed stats");
+        Check(LastVariant(back, bounced.Id) == 2 || LastVariant(back, bounced.Id) == -1 && LastVariant(wire, bounced.Id) == 2,
+            "returned to hand: the Soldier keeps the current text variant (2), not a reset 0");
         before = capture.HistorySnapshots().Count();
         game.PowerHistory.Last.Clear(); player.UsedMana = 0;
         Check(game.Process(PlayCardTask.Any(player, bounced)), "replay accepted");
@@ -130,7 +145,7 @@ internal static partial class Program
             && row.TagChange.Tag == (int)GameTag.ATK && row.TagChange.Value == bounced.Card.ATK * 4);
         int defined = rows.FindLastIndex(row => row.HasTagChange && row.TagChange.ChangeDef && row.TagChange.Entity == bounced.Id
             && row.TagChange.Tag == (int)GameTag.ATK || (row.HasShowEntity && row.ShowEntity.Entity == bounced.Id && row.ShowEntity.DefTags.Count > 0));
-        Check(bounced[ColossalRules.RealizedFactor] == 4 && scaled >= 0 && defined > scaled
+        Check(bounced[HeraldRules.RealizedFactor] == 4 && scaled >= 0 && defined > scaled
             && Defined(rows, bounced.Id, GameTag.ATK, bounced.Card.ATK, bounced.Card.ATK) == bounced.Card.ATK * 4
             && Defined(rows, bounced.Id, GameTag.HEALTH, bounced.Card.Health, bounced.Card.Health) == bounced.Card.Health * 4,
             "replayed at count 5: the tier 3 definition arrives after the stat change that scaled it; rows: "
@@ -147,6 +162,14 @@ internal static partial class Program
         Check(silenced.AttackDamage == silenced.Card.ATK && Defined(quiet, silenced.Id, GameTag.ATK, silenced.Card.ATK * 2, silenced.Card.ATK) == silenced.Card.ATK
             && Defined(quiet, silenced.Id, GameTag.HEALTH, silenced.Card.Health * 2, silenced.Card.Health) == silenced.Card.Health,
             "a silenced upgraded Soldier gets its printed definition back (ChangeDef)");
+        // A transformed Soldier drops the Soldier's text variant with its card.
+        var changed = soldiers[1];
+        before = capture.HistorySnapshots().Count();
+        game.PowerHistory.Last.Clear();
+        Generic.ChangeEntityBlock(player, changed, Cards.FromId("CS2_182"), true);
+        FlushHistory(match);
+        var turned = capture.HistorySnapshots().Skip(before).SelectMany(packet => packet.List).ToList();
+        Check(LastVariant(turned, changed.Id) == 0, "a transformed Soldier sends text variant 0 for its new card, not a stale 2");
         var faults = NativeAdmission.ValidatePackets(replay.Select(packet => (IReadOnlyList<PowerHistoryData>)packet.List));
         Check(faults.Count == 0, "R7 admission holds for the replayed Soldier's PLAY: " + string.Join("; ", faults));
         capture.SerializeAll();

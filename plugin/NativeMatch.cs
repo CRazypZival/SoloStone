@@ -3910,8 +3910,11 @@ public sealed class NativeMatch
         yield return new KeyValuePair<GameTag, int>(GameTag.TAG_SCRIPT_DATA_NUM_2, number2);
         yield return new KeyValuePair<GameTag, int>((GameTag)1115, entity.Card[(GameTag)1115]);
         yield return new KeyValuePair<GameTag, int>((GameTag)1116, entity.Card[(GameTag)1116]);
-        yield return new KeyValuePair<GameTag, int>((GameTag)955, AlternateCardText(entity.Card.Id,
-            entity.Zone?.Type ?? (EngineZone)entity[GameTag.ZONE], number, number2, entity[(GameTag)955]));
+        // #192: a tiered card's variant follows its controller's live Herald count (never stored on the entity), so a bounce,
+        // shuffle, side change or Herald is picked up by the endpoint refresh.
+        yield return new KeyValuePair<GameTag, int>((GameTag)955, SabberStoneCore.Actions.HeraldRules.IsTiered(entity.Card)
+            ? SabberStoneCore.Actions.HeraldRules.Variant(entity.Controller)
+            : AlternateCardText(entity.Card.Id, entity.Zone?.Type ?? (EngineZone)entity[GameTag.ZONE], number, number2, entity[(GameTag)955]));
 #endif
         if (entity is Minion minion)
         {
@@ -4018,10 +4021,21 @@ public sealed class NativeMatch
     // #192: an upgraded Soldier or Herald Colossal appendage keeps its card id and scales its printed stats. The client colours
     // ATK/HEALTH green when they exceed the entity's definition (Entity.GetDefATK/GetDefHealth), so the definition must carry the
     // scaled printed stats: DefTags on FULL/SHOW/CHANGE_ENTITY (which reload the definition), else a ChangeDef tag change. A real
-    // buff on top still shows green. The factor is engine tag 31010 (Silence, return to hand and transform reset it with the stats).
-    internal static int HeraldDefinitionFactor(EngineCard card, IDictionary<GameTag, int> tags) =>
-        card != null && tags != null && SabberStoneCore.Actions.HeraldRules.IsTiered(card)
-        && tags.TryGetValue(SabberStoneCore.Actions.ColossalRules.RealizedFactor, out int factor) && factor > 1 ? factor : 1;
+    // buff on top still shows green. The factor is the Soldier's script 2 or the appendage's 31010; Silence resets the stats to printed.
+    internal static int HeraldDefinitionFactor(EngineCard card, IDictionary<GameTag, int> tags)
+    {
+        if (card == null || tags == null || !SabberStoneCore.Actions.HeraldRules.IsTiered(card)
+            || tags.TryGetValue(GameTag.SILENCED, out int silenced) && silenced != 0) return 1;
+        // Soldiers: script 2 (Silence, transform and Reset clear it). Appendages: engine 31010 (Silence resets the stats to printed).
+        var tag = SabberStoneCore.Actions.HeraldRules.IsSoldier(card) ? SabberStoneCore.Actions.HeraldRules.RealizedFactor
+            : SabberStoneCore.Actions.ColossalRules.RealizedFactor;
+        return tags.TryGetValue(tag, out int factor) && factor > 1 ? factor : 1;
+    }
+
+    // The text variant for a snapshot of a tiered card owned by CONTROLLER (player id): its controller's count when it is sent.
+    private int HeraldVariant(int controller) =>
+        Game.Player1.PlayerId == controller ? SabberStoneCore.Actions.HeraldRules.Variant(Game.Player1)
+        : Game.Player2.PlayerId == controller ? SabberStoneCore.Actions.HeraldRules.Variant(Game.Player2) : 0;
 
     private static List<NativeTag> HeraldDefinitionTags(EngineCard card, int factor) => new List<NativeTag> {
         new NativeTag { Name = (int)GameTag.ATK, Value = card.ATK * factor },
@@ -6729,8 +6743,9 @@ public sealed class NativeMatch
                     ? referenced
                     : SabberStoneCore.Actions.PayloadRules.UsesReferenceTag(raceDefinition) ? 0 : TextValue(GameTag.TAG_SCRIPT_DATA_NUM_1);
             int number2 = raceDefinition.Id == "BE_850t" ? TextValue(GameTag.ATK) : TextValue(GameTag.TAG_SCRIPT_DATA_NUM_2);
-            int alternateText = AlternateCardText(raceDefinition.Id, (EngineZone)TextValue(GameTag.ZONE),
-                number, number2, TextValue((GameTag)955));
+            int alternateText = SabberStoneCore.Actions.HeraldRules.IsTiered(raceDefinition)
+                ? HeraldVariant(TextValue(GameTag.CONTROLLER))
+                : AlternateCardText(raceDefinition.Id, (EngineZone)TextValue(GameTag.ZONE), number, number2, TextValue((GameTag)955));
             bool formattedText = raceDefinition.Text?.Contains("@") == true
                 || System.Text.RegularExpressions.Regex.IsMatch(raceDefinition.Text ?? "", @"\{[0-9]+\}");
             // Entity-reference text (Reference*Entity builders): a stored entity this viewer cannot name is sent as 0.
