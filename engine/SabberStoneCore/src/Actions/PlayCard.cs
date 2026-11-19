@@ -257,6 +257,7 @@ namespace SabberStoneCore.Actions
 
 
 				Hero oldHero = c.Hero;
+                int[] playerbound = PlayerboundHeroTags.Take(oldHero);
                 if (hero.Card.Class == CardClass.NEUTRAL || hero.Card.Class == CardClass.INVALID) hero[GameTag.CLASS] = (int)c.HeroClass;
 				hero[GameTag.ZONE] = (int)Zone.PLAY;
 				// Native hero plays predict position 0, as spell plays do; retaining the hand slot leaves prediction history unmatched.
@@ -280,7 +281,7 @@ namespace SabberStoneCore.Actions
 
 				c.Hero = hero;
                 c.HeroId = hero.Id;
-                PlayerboundHeroTags.Move(oldHero, hero);
+                PlayerboundHeroTags.Give(hero, playerbound);
                 void RebindHeroAura(IAura aura)
                 {
                     if (aura is MultiAura multiple)
