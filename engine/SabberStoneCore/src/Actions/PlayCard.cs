@@ -259,8 +259,6 @@ namespace SabberStoneCore.Actions
 				Hero oldHero = c.Hero;
                 int overdrawPortal = oldHero[(GameTag)4717];
                 if (overdrawPortal != 0) oldHero[(GameTag)4717] = 0;
-                int playerDeathrattle = oldHero[CorpseRules.PlayerDeathrattle];
-                if (playerDeathrattle != 0) oldHero[CorpseRules.PlayerDeathrattle] = 0;
                 if (hero.Card.Class == CardClass.NEUTRAL || hero.Card.Class == CardClass.INVALID) hero[GameTag.CLASS] = (int)c.HeroClass;
 				hero[GameTag.ZONE] = (int)Zone.PLAY;
 				// Native hero plays predict position 0, as spell plays do; retaining the hand slot leaves prediction history unmatched.
@@ -285,7 +283,7 @@ namespace SabberStoneCore.Actions
 				c.Hero = hero;
                 c.HeroId = hero.Id;
                 if (overdrawPortal != 0) hero[(GameTag)4717] = overdrawPortal;
-                if (playerDeathrattle != 0) hero[CorpseRules.PlayerDeathrattle] = playerDeathrattle;
+                CorpseRules.CarryPlayerDeathrattle(oldHero, hero);
                 void RebindHeroAura(IAura aura)
                 {
                     if (aura is MultiAura multiple)

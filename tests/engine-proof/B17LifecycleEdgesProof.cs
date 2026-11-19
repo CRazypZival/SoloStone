@@ -242,6 +242,9 @@ internal static class B17LifecycleEdgesProof
         var oldHero=p.Hero;
         Play(g,p,"ICC_833");
         Core2026Proof.Check(p.Hero!=oldHero && p.Hero[skull]==life.Id && oldHero[skull]==0,"a new hero card carries the skull");
+        var replaced=p.Hero;
+        new SabberStoneCore.Tasks.SimpleTasks.ReplaceHeroTask("BRM_027h","BRM_027p").Process(g,p,Add(p,"BRM_027"),null);
+        Core2026Proof.Check(p.Hero!=replaced && p.Hero[skull]==life.Id && replaced[skull]==0,"ReplaceHeroTask carries the skull to the new hero");
         CorpseRules.Gain(p,5);p.Hero.Destroy();g.DeathProcessingAndAuraUpdate();
         Core2026Proof.Check(p.Hero.Health==5 && !p.Hero.ToBeDestroyed && p.Hero[skull]==0,"the revive clears the skull");
     }

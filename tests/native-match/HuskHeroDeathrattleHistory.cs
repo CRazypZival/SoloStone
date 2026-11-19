@@ -52,9 +52,9 @@ internal static partial class Program
             Flush();
             rows = DrawRows(capture).ToList();
             Check(owner.Hero != oldHero && owner.Hero[(GameTag)skull] == life.Id && oldHero[(GameTag)skull] == 0
-                && rows.Any(r => r.HasTagChange && r.TagChange.Entity == owner.Hero.Id && r.TagChange.Tag == skull
+                && (rows.Any(r => r.HasTagChange && r.TagChange.Entity == owner.Hero.Id && r.TagChange.Tag == skull
                     && r.TagChange.Value == life.Id) || rows.SelectMany(r => new[] { r.FullEntity, r.ShowEntity, r.ChangeEntity })
-                    .Any(e => e?.Entity == owner.Hero.Id && e.Tags.Any(t => t.Name == skull && t.Value == life.Id)),
+                    .Any(e => e?.Entity == owner.Hero.Id && e.Tags.Any(t => t.Name == skull && t.Value == life.Id))),
                 "the skull moves to the new hero on the wire");
             // The revive clears it.
             capture.Packets.Clear();

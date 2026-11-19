@@ -43,6 +43,16 @@ namespace SabberStoneCore.Actions
             return TrySpend(controller, amount) ? amount : 0;
         }
 
+        /// <summary>The skull follows the player-level grant, so a replacement hero takes it over from the old one.</summary>
+        internal static void CarryPlayerDeathrattle(Hero oldHero, Hero newHero)
+        {
+            if (oldHero == null || oldHero == newHero) return;
+            int linked = oldHero[PlayerDeathrattle];
+            if (linked == 0) return;
+            oldHero[PlayerDeathrattle] = 0;
+            newHero[PlayerDeathrattle] = linked;
+        }
+
         internal static void ResurrectHeroes(Model.Game game)
         {
             if (game.State == State.COMPLETE) return;
