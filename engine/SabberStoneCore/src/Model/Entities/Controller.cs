@@ -324,8 +324,11 @@ namespace SabberStoneCore.Model.Entities
 			// remove hero and place it to the setaside zone
 			Weapon weapon = null;
 			AuraEffects auraEffects = null;
+			int playerDeathrattle = 0;
 			if  (Hero != null)
 			{
+				playerDeathrattle = Hero[Actions.CorpseRules.PlayerDeathrattle];
+				if (playerDeathrattle != 0) Hero[Actions.CorpseRules.PlayerDeathrattle] = 0;
 				SetasideZone.MoveTo(Hero, SetasideZone.Count);
 				SetasideZone.MoveTo(Hero.HeroPower, SetasideZone.Count);
 				//Hero[GameTag.EXHAUSTED] = 0;
@@ -348,6 +351,7 @@ namespace SabberStoneCore.Model.Entities
 				new EntityData { [GameTag.CREATOR] = Hero.Id }) as HeroPower;
 			Hero.Weapon = weapon;
 			Hero.AuraEffects = auraEffects;
+			if (playerDeathrattle != 0) Hero[Actions.CorpseRules.PlayerDeathrattle] = playerDeathrattle;
 		}
 
 		/// <summary>
