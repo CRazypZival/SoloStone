@@ -55,7 +55,8 @@ internal static partial class PoweredUpGlowTests
         var card = f.Draw(id); f.Flush();
         bool refused = false;
         try { Send(f, card, card.ChooseOnePlayables[1].Id, 5, id + " past both boards"); }
-        catch (InvalidOperationException) { refused = true; }
+        catch (InvalidOperationException error) when ((error.InnerException ?? error) is ArgumentException rejected
+            && rejected.Message.StartsWith("Selected board placement is no longer legal", StringComparison.Ordinal)) { refused = true; }
         Check(refused && card.Zone == p.HandZone && p.UsedMana == 0, id + ": slot past both boards refused before payment");
     }
 
