@@ -28,6 +28,7 @@ internal static partial class PoweredUpGlowTests
             EnemySlot(id, own: 5, enemyMinions: 4, enemyLocation: false, slot: 2, expected: 1);
             EnemySlot(id, own: 5, enemyMinions: 1, enemyLocation: true, slot: 2, expected: 1);
             FriendlySlot(id, own: 5, slot: 3);
+            PastBothBoards(id);
         }
         Console.WriteLine("PASS either-side enemy slot: " + ids.Length + " cards (#194)");
     }
@@ -44,6 +45,18 @@ internal static partial class PoweredUpGlowTests
         Send(f, card, card.ChooseOnePlayables[1].Id, slot, scenario);
         Check(card.Controller == enemy && card.Zone == enemy.BoardZone, scenario + ": played on the enemy board");
         Placed(enemy.BoardZone, before, card, expected, scenario);
+    }
+
+    // A slot past the human's own board as well is no drop slot the client can send: still refused, nothing paid.
+    private static void PastBothBoards(string id)
+    {
+        var f = new Fixture(); var p = f.Player;
+        for (int i = 0; i < 2; i++) f.Summon("CS2_182", p);
+        var card = f.Draw(id); f.Flush();
+        bool refused = false;
+        try { Send(f, card, card.ChooseOnePlayables[1].Id, 5, id + " past both boards"); }
+        catch (InvalidOperationException) { refused = true; }
+        Check(refused && card.Zone == p.HandZone && p.UsedMana == 0, id + ": slot past both boards refused before payment");
     }
 
     private static void FriendlySlot(string id, int own, int slot)

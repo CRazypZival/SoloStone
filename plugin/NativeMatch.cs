@@ -1964,7 +1964,9 @@ public sealed class NativeMatch
             var placementBoard = eitherSide ? SabberStoneCore.Actions.EitherSideRules.Destination(Game.Player1, wantedChooseOne).BoardZone : Game.Player1.BoardZone;
             // The client takes the drop slot from the human's own board, also when the sub-option then picks the enemy side,
             // so it can lie past the end of a smaller enemy board (#194). Keep the slot when it fits, else the enemy board's end.
-            if (eitherSide && placementBoard != Game.Player1.BoardZone && wantedPosition > placementBoard.SlotCount)
+            // A slot past the human's own board too is no drop slot at all and stays refused below.
+            if (eitherSide && placementBoard != Game.Player1.BoardZone && wantedPosition > placementBoard.SlotCount
+                && wantedPosition <= Game.Player1.BoardZone.SlotCount)
                 wantedPosition = placementBoard.SlotCount;
             if (eitherSide && !SabberStoneCore.Actions.EitherSideRules.Valid(Game.Player1, placementSource, null, wantedPosition, wantedChooseOne))
                 throw new ArgumentException("Selected board placement is no longer legal.");
