@@ -120,7 +120,7 @@ internal static partial class Program
     {
         HeroSlotAcrossRoutes();
         foreach (var (cardId, generated) in new[] { ("CORE_EX1_323", true), ("CORE_EX1_323", false),
-            ("EX1_323", false), ("TLC_513t", false), ("CATA_190h", false) })
+            ("EX1_323", false), ("TLC_513t", false), ("CATA_190h", false), ("ICC_829", false), ("ICC_834", false) })
         {
             var card = Cards.FromId(cardId);
             var (capture, match) = ChoiceRetirementMatch(cardId == "CATA_190h" ? CardClass.WARLOCK : card.Class);
@@ -170,12 +170,19 @@ internal static partial class Program
                     && SnapshotTag(e, GameTag.CARDTYPE) == (int)CardType.WEAPON) == 1,
                     "JaraxxusHeroSpell receives Blood Fury FULL_ENTITY inside its POWER task list");
                 CheckJaraxxusTaskList(history, power, cardId);
-                if (cardId == "CORE_EX1_323") CheckJaraxxusSpawnZones(body, owner.PlayerId);
+                CheckJaraxxusSpawnZones(body, owner.PlayerId);
+                if (cardId == "EX1_323") CheckReplacementHeroFull(history, hero.Id, oldHero, owner.PlayerId, cardId);
                 int weaponCreate = body.FindIndex(e => e.HasFullEntity && e.FullEntity.Entity == hero.Weapon.Id);
                 int weaponPlay = body.FindIndex(e => IsZone(e, hero.Weapon.Id, SabberStoneCore.Enums.Zone.PLAY));
                 Check(weaponCreate >= 0 && weaponPlay > weaponCreate && hero.Weapon.AttackDamage == 3 && hero.Weapon.Durability == 8,
                     cardId + " creates and equips 3/8 Blood Fury in order");
                 Check(hero.HeroPower.Card.Id == "EX1_tk33", cardId + " installs INFERNO!");
+            }
+            if (cardId == "ICC_829" || cardId == "ICC_834")
+            {
+                var full = history.Single(row => row.HasFullEntity && row.FullEntity.Entity == hero.Weapon.Id);
+                Check(SnapshotTag(full, GameTag.ZONE) == (int)SabberStoneCore.Enums.Zone.PLAY
+                    && SnapshotTag(full, GameTag.CONTROLLER) == owner.PlayerId, cardId + " generic hero Battlecry weapon spawns in PLAY");
             }
             if (cardId != "EX1_323")
             {
@@ -203,6 +210,10 @@ internal static partial class Program
         JaraxxusOnPlayTriggerHistory(bot: false, holmes: false, dump);
         JaraxxusOnPlayTriggerHistory(bot: true, holmes: false, dump);
         JaraxxusPowerCreationScopes();
+        LegacyJaraxxusNpcHistory(dump);
+        MajordomoReplacementHistory(dump);
+        OrdinaryWeaponSpawnZones();
+        HeroReplacementSpawnZoneScopes();
     }
 
     private static void JaraxxusOnPlayTriggerHistory(bool bot, bool holmes, bool dump)
@@ -267,6 +278,172 @@ internal static partial class Program
         if (dump) DumpHeroReplacement(label, source.Id, 0, 0, history);
         capture.SerializeAll();
         Console.WriteLine("PASS hero replacement " + label + ": sibling trigger, paired creations, dependency order and balanced history");
+    }
+
+    private static void CheckReplacementHeroFull(List<PowerHistoryData> history, int hero, int oldHero, int controller, string label)
+    {
+        int created = history.FindIndex(row => row.HasFullEntity && row.FullEntity.Entity == hero);
+        Check(created >= 0, label + " creates replacement hero");
+        var full = history[created];
+        Check(SnapshotTag(full, GameTag.ZONE) == (int)SabberStoneCore.Enums.Zone.PLAY
+            && SnapshotTag(full, GameTag.CONTROLLER) == controller && SnapshotTag(full, GameTag.ENTITY_ID) == hero,
+            label + " FULL owns PLAY zone, controller and entity id before queued changes");
+        int start = history.FindLastIndex(created, row => row.HasPowerStart || row.HasPowerEnd || row.HasSubSpellStart || row.HasSubSpellEnd);
+        int end = history.FindIndex(created + 1, row => row.HasPowerStart || row.HasPowerEnd || row.HasSubSpellStart || row.HasSubSpellEnd);
+        var body = history.Skip(start + 1).Take((end < 0 ? history.Count : end) - start - 1).ToList();
+        Check(body.First(row => row.HasFullEntity).FullEntity.Entity == hero,
+            label + " hero is first FULL in its task list");
+        Check(body.Any(row => IsZone(row, oldHero, SabberStoneCore.Enums.Zone.SETASIDE)),
+            label + " retires old hero in replacement task list");
+    }
+
+    private static void CheckReplacementBlocks(List<PowerHistoryData> history, string label)
+    {
+        int depth = 0;
+        foreach (var row in history)
+        {
+            if (row.HasPowerStart) depth++;
+            if (row.HasPowerEnd) Check(--depth >= 0, label + " no unmatched block end");
+        }
+        Check(depth == 0, label + " balanced blocks");
+    }
+
+    private static void LegacyJaraxxusNpcHistory(bool dump)
+    {
+        var (match, capture) = AnimationMatch(botTurn: true, deck: NpcCatalog.All[0].DeckId);
+        var owner = match.Game.Player2;
+        var source = Generic.DrawCard(owner, Cards.FromId("EX1_323"));
+        int oldHero = owner.Hero.Id, oldPower = owner.Hero.HeroPower.Id;
+        FlushFieldHistory(match);
+        int cursor = capture.Packets.Count;
+        var play = owner.Options().First(task => task.PlayerTaskType == PlayerTaskType.PLAY_CARD && task.Source?.Id == source.Id);
+        match.ActNpc(new GoldenDecision(BotAction.From(play), 0, 1, 1, "Exhausted", null, null));
+        var history = History(capture, cursor);
+        Check(owner.Hero.Card.Id == "EX1_323h", "NPC legacy Jaraxxus replaces hero");
+        CheckReplacementHeroFull(history, owner.Hero.Id, oldHero, owner.PlayerId, "NPC legacy Jaraxxus");
+        CheckJaraxxusSpawnZones(history, owner.PlayerId);
+        CheckReplacementBlocks(history, "NPC legacy Jaraxxus");
+        if (dump) DumpHeroReplacement("NPC EX1_323", source.Id, oldHero, oldPower, history);
+        capture.SerializeAll();
+        Console.WriteLine("PASS hero replacement NPC legacy Jaraxxus: FULL snapshots and balanced blocks");
+    }
+
+    private static void MajordomoReplacementHistory(bool dump)
+    {
+        foreach (bool npcOwner in new[] { false, true })
+        foreach (string scenario in new[] { "owner Hellfire", "opponent Hellfire", "combat", "silenced" })
+        {
+            bool ownerActs = scenario == "owner Hellfire";
+            var (match, capture) = AnimationMatch(botTurn: ownerActs ? npcOwner : !npcOwner);
+            var game = match.Game;
+            var owner = npcOwner ? game.Player2 : game.Player1;
+            var actor = game.CurrentPlayer;
+            foreach (var player in new[] { game.Player1, game.Player2 })
+                foreach (var held in player.HandZone.ToArray()) player.SetasideZone.Add(player.HandZone.Remove(held));
+            var source = (SabberStoneCore.Model.Entities.Minion)SabberStoneCore.Model.Entities.Entity.FromCard(owner, Cards.FromId("BRM_027"), zone: owner.BoardZone);
+            int oldHero = owner.Hero.Id, oldPower = owner.Hero.HeroPower.Id;
+            if (scenario == "silenced") source.Silence();
+            source.Damage = source.Health - 3;
+            SabberStoneCore.Model.Entities.IPlayable action;
+            if (scenario == "combat")
+            {
+                action = SabberStoneCore.Model.Entities.Entity.FromCard(actor, Cards.FromId("CS2_200"), zone: actor.BoardZone);
+                ((SabberStoneCore.Model.Entities.Minion)action).IsExhausted = false;
+            }
+            else action = Generic.DrawCard(actor, Cards.FromId("CS2_062"));
+            FlushFieldHistory(match);
+            int cursor = capture.Packets.Count;
+            var task = actor.Options().First(option => option.Source?.Id == action.Id
+                && (scenario == "combat" ? option.PlayerTaskType == PlayerTaskType.MINION_ATTACK && option.Target?.Id == source.Id
+                    : option.PlayerTaskType == PlayerTaskType.PLAY_CARD));
+            InvokeProcess(match, task);
+            FlushFieldHistory(match);
+            var history = History(capture, cursor);
+            string label = "Majordomo " + (npcOwner ? "NPC " : "human ") + scenario;
+            Check(owner.GraveyardZone.Contains(source), label + " source remains dead in graveyard");
+            if (scenario == "silenced")
+            {
+                Check(owner.Hero.Id == oldHero && !history.Any(row => row.HasFullEntity && row.FullEntity.Name == "BRM_027h"), label + " does not replace hero");
+            }
+            else
+            {
+                Check(owner.Hero.Card.Id == "BRM_027h", label + " Deathrattle replaces hero");
+                CheckReplacementHeroFull(history, owner.Hero.Id, oldHero, owner.PlayerId, label);
+            }
+            CheckReplacementBlocks(history, label);
+            if (dump) DumpHeroReplacement(label, source.Id, oldHero, oldPower, history);
+            capture.SerializeAll();
+            Console.WriteLine("PASS hero replacement " + label + ": lifecycle, first FULL and balanced blocks");
+        }
+    }
+
+    private static void OrdinaryWeaponSpawnZones()
+    {
+        foreach (bool npc in new[] { false, true })
+        foreach (string card in new[] { "CS2_106", "EX1_398" })
+        {
+            var (match, capture) = AnimationMatch(botTurn: npc);
+            var owner = match.Game.CurrentPlayer;
+            var source = SabberStoneCore.Model.Entities.Entity.FromCard(owner, Cards.FromId(card), zone: owner.HandZone);
+            FlushFieldHistory(match);
+            var task = owner.Options().First(option => option.PlayerTaskType == PlayerTaskType.PLAY_CARD && option.Source?.Id == source.Id);
+            InvokeProcess(match, task);
+            FlushFieldHistory(match);
+            var history = History(capture, 0);
+            var weapon = owner.Hero.Weapon;
+            var raw = match.Game.PowerHistory.Full.OfType<SabberStoneCore.Kettle.PowerHistoryFullEntity>().Last(row => row.Entity.Id == weapon.Id);
+            var full = history.Single(row => row.HasFullEntity && row.FullEntity.Entity == weapon.Id);
+            Check(SnapshotTag(full, GameTag.ZONE) == raw.Entity.Tags[GameTag.ZONE], card + " ordinary weapon FULL zone unchanged, seat " + owner.PlayerId);
+            if (card == "EX1_398") Check(SnapshotTag(full, GameTag.ZONE) == 0, "ordinary Battlecry weapon retains INVALID spawn zone");
+            capture.SerializeAll();
+            Console.WriteLine("PASS ordinary weapon FULL unchanged: " + card + " seat " + owner.PlayerId);
+        }
+    }
+
+    private static void HeroReplacementSpawnZoneScopes()
+    {
+        var (match, _) = AnimationMatch();
+        var method = typeof(NativeMatch).GetMethod("FoldHeroReplacementSpawnZone", BindingFlags.Instance | BindingFlags.NonPublic);
+        var convert = typeof(NativeMatch).GetMethod("ToNativeHistory", BindingFlags.Instance | BindingFlags.NonPublic);
+        SabberStoneCore.Kettle.IPowerHistoryEntry Start() => new SabberStoneCore.Kettle.PowerHistoryBlockStart { BlockType = BlockType.POWER };
+        SabberStoneCore.Kettle.IPowerHistoryEntry End() => new SabberStoneCore.Kettle.PowerHistoryBlockEnd();
+        SabberStoneCore.Kettle.IPowerHistoryEntry Hero(int player) => new SabberStoneCore.Kettle.PowerHistoryTagChange {
+            EntityId = player, Tag = GameTag.HERO_ENTITY, Value = 70 };
+        void Case(string label, int type, SabberStoneCore.Kettle.IPowerHistoryEntry[] prefix, bool expected,
+            int zone = 0, int destination = 1, int moving = 72, bool continuation = false)
+        {
+            int depth = 0;
+            foreach (var entry in prefix)
+            {
+                convert.Invoke(match, new object[] { entry });
+                if (entry is SabberStoneCore.Kettle.PowerHistoryBlockStart) depth++;
+                if (entry is SabberStoneCore.Kettle.PowerHistoryBlockEnd) depth--;
+            }
+            var row = new PowerHistoryData { FullEntity = new PegasusGame.PowerHistoryEntity { Entity = 72, Name = "arbitrary",
+                Tags = new List<PegasusGame.Tag> { new() { Name = (int)GameTag.CARDTYPE, Value = type },
+                    new() { Name = (int)GameTag.ZONE, Value = zone }, new() { Name = (int)GameTag.CONTROLLER, Value = match.Game.Player1.PlayerId } } } };
+            var entries = prefix.Concat(new SabberStoneCore.Kettle.IPowerHistoryEntry[] {
+                new SabberStoneCore.Kettle.PowerHistoryFullEntity(), new SabberStoneCore.Kettle.PowerHistoryTagChange {
+                    EntityId = moving, Tag = GameTag.ZONE, Value = destination } }).ToList();
+            if (continuation) entries.RemoveRange(0, prefix.Length);
+            bool folded = (bool)method.Invoke(match, new object[] { row, entries, continuation ? 0 : prefix.Length });
+            for (int at = 0; at < depth; at++) convert.Invoke(match, new object[] { End() });
+            Check(folded == expected && SnapshotTag(row, GameTag.ZONE) == (expected ? 1 : zone), "spawn-zone scope " + label);
+        }
+        int owner = match.Game.Player1.Id, opponent = match.Game.Player2.Id;
+        Case("hero independent of card id", 3, new[] { Start() }, true);
+        Case("weapon in nested POWER", 7, new[] { Start(), Hero(owner), Start() }, true);
+        Case("weapon after completed sibling", 7, new[] { Start(), Start(), Hero(owner), End(), Start() }, true);
+        Case("replacement in earlier packet", 7, new[] { Start(), Hero(owner), Start() }, true, continuation: true);
+        Case("ordinary weapon", 7, new[] { Start() }, false);
+        Case("other controller replacement", 7, new[] { Start(), Hero(opponent) }, false);
+        Case("previous completed outer block", 7, new[] { Start(), Hero(owner), End(), Start() }, false);
+        Case("no open block", 7, new[] { Start(), Hero(owner), End() }, false);
+        Case("already in PLAY", 3, new[] { Start() }, false, zone: 1);
+        Case("not moving to PLAY", 3, new[] { Start() }, false, destination: 6);
+        Case("different entity moves", 3, new[] { Start() }, false, moving: 73);
+        Case("minion", 4, new[] { Start(), Hero(owner) }, false);
+        Console.WriteLine("PASS hero replacement spawn-zone scopes: generic hero, outermost block, controller and adjacent move guards");
     }
 
     private static void CheckJaraxxusSpawnZones(List<PowerHistoryData> body, int controller)

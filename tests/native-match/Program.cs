@@ -350,6 +350,7 @@ internal static partial class Program
         TestLoanerReachesDecisionPaths();
         StandardBatchLoanerTransport();
         AutomaticAdmissionFixtures();
+        LegacyHeroAdmission();
         FinishAdmissionSweep();
         ExpandedCatalogTransportSmoke();
         ExpandedMechanismTransport();
