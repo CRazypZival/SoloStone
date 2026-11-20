@@ -234,7 +234,7 @@ These need no R7 case, because the client loses nothing there:
 | Native screens, the match flow or the client calls the plugin patches (`plugin/Native*.cs`, `plugin/client-bindings.txt`) | `native-bindings-logic`; with a client also `native-bindings`, `native-match`, `transport-invariants` |
 | What a play sends to the client (the history of a PLAY block, `plugin/NativeMatch.cs`) | As above (`native-match` runs admission rule R7), plus a live check with a real drag: see [Client drop prediction](#client-drop-prediction) |
 | Ranked ladder (`plugin/LadderRules.cs`) or rank rewards | `ladder-rules`, `tier-presentation`, `ladder`, `ladder-extended` |
-| Card data (`facts/`, including `facts/drift/`) | `facts-drift`, `cards`, `launcher` (locale files) |
+| Card data (`facts/`, including `facts/drift/`) | `facts-drift`, `cards`, `goldens`, `engine-proof`, `ai-golden`, `launcher` (locale files) |
 | The launcher, installer or their scripts (`installer/`) | `launcher`, `installer-python` |
 | The shared test code (`tests/shared/`, `tests/run.py`) | Everything (for `tests/run.py`, at least `run-tool`) |
 
