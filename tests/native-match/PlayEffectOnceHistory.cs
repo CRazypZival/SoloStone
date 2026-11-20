@@ -78,20 +78,21 @@ internal static partial class Program
             capture.SerializeAll();
             cases++;
         }
+        failures.AddRange(ContinuationHistory());
         failures.AddRange(RepeatSweep());
         Check(failures.Count == 0, string.Join("\n", failures));
-        Console.WriteLine($"PASS play effect once: {cases} cases plus the {RepeatSweepCards.Length}-card repeat sweep; Halazzi (Core and legacy, hand 0/3/9), Unleash the Hounds, Muster for Battle, Brann + Halazzi; one POWER block per play, both seats");
+        Console.WriteLine($"PASS play effect once: {cases} original cases, 14 continuation cases, {RepeatSweepCards.Length}-card repeat sweep, Brann + Halazzi");
     }
 
     // Every card whose power queued its repeats into same-source sibling POWER blocks (a sweep of all 2339 cards playable from
-    // hand, 2026-11-19: 62 cards before the summon join, 39 after it). Each play must now carry one POWER block per effect index.
+    // hand, 2026-11-19: 62 cards before the summon join, 39 after it). Count every same-source POWER/TRIGGER at any depth.
     private static readonly string[] RepeatSweepCards = {
         "BE_183", "BOT_084", "BOT_254", "BOT_536", "BOT_544", "BOT_600", "BOT_601", "BRM_001", "BRM_030", "CFM_621t23", "CFM_621t30", "CFM_621t31",
         "CFM_811", "CORE_GVG_061", "CORE_TRL_900", "DAL_010", "DAL_173", "DAL_177", "DAL_177ts", "EX1_050", "EX1_116", "EX1_161",
         "EX1_248", "EX1_384", "EX1_538", "EX1_562", "EX1_573b", "FP1_019", "GIL_147", "GIL_548", "GIL_553", "GIL_825", "GVG_042", "GVG_045", "GVG_061", "GVG_090",
         "ICC_314t2", "ICC_314t3", "ICC_832a", "ICC_832b", "KAR_026", "LOOT_064t1", "LOOT_064t2", "LOOT_103t1", "LOOT_103t2",
         "LOOT_347", "LOOT_526", "OG_090", "OG_114", "OG_116", "OG_195a", "OG_239", "OG_273", "OG_280", "TIME_027", "TRL_253", "TRL_362", "TRL_900", "UNG_002", "UNG_926" };
-    // Not asserted yet: LOOT_054 and UNG_047, whose repeats wait for a player's choice.
+    // LOOT_054 waits for a player's choice; UNG_047 has a separate decision-boundary fixture below.
 
     private static List<string> RepeatSweep()
     {
@@ -113,21 +114,206 @@ internal static partial class Program
             if (option == null) { failures.Add(id + ": sweep fixture cannot play it"); continue; }
             int from = game.PowerHistory.Full.Count;
             game.Process(option);
-            int depth = 0; bool inPlay = false; var keys = new List<string>();
-            foreach (var e in game.PowerHistory.Full.Skip(from))
-            {
-                if (e is PowerHistoryBlockStart s)
-                {
-                    if (depth == 0 && s.BlockType == BlockType.PLAY && s.Source == source.Id) inPlay = true;
-                    else if (inPlay && depth == 1 && s.BlockType == BlockType.POWER && s.Source == source.Id) keys.Add(s.Index + "/" + s.EffectIndex);
-                    depth++;
-                }
-                else if (e is PowerHistoryBlockEnd && --depth == 0) inPlay = false;
-            }
-            if (keys.Count != keys.Distinct().Count())
-                failures.Add($"{id}: {keys.Count} POWER blocks of the card in its PLAY share an effect index ({string.Join(",", keys)})");
+            // Include nested activations and continuations outside PLAY, not just its immediate POWER children. Only POWER: the
+            // card's own triggers (Lifesteal, a zone transform, C'Thun's copy) are separate TRIGGER blocks sharing the index.
+            var blocks = game.PowerHistory.Full.Skip(from).OfType<PowerHistoryBlockStart>()
+                .Where(s => s.Source == source.Id && s.BlockType == BlockType.POWER)
+                .ToArray();
+            var keys = blocks.Select(s => s.Index + "/" + s.EffectIndex).ToArray();
+            if (keys.Length != keys.Distinct().Count())
+                failures.Add($"{id}: {keys.Length} same-source POWER blocks at any depth share an effect index ("
+                    + string.Join(",", blocks.Select(s => $"{s.BlockType}:{s.Index}/{s.EffectIndex}"
+                        + (s.TriggerKeyword.HasValue ? $":{(GameTag)s.TriggerKeyword.Value}" : ""))) + ")");
         }
         failures.AddRange(BrannHalazzi());
+        return failures;
+    }
+
+    private static List<(int Start, int End, int Depth, BlockType Type)> ContinuationBlocks(
+        List<PowerHistoryData> rows, int source, string name)
+    {
+        var stack = new Stack<int>();
+        var blocks = new List<(int Start, int End, int Depth, BlockType Type)>();
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].HasPowerStart) stack.Push(i);
+            else if (rows[i].HasPowerEnd)
+            {
+                Check(stack.Count > 0, name + ": no unmatched BLOCK_END");
+                int start = stack.Pop();
+                var block = rows[start].PowerStart;
+                var type = (BlockType)(int)block.Type;
+                if (block.Source == source && (type == BlockType.POWER || type == BlockType.TRIGGER))
+                    blocks.Add((start, i, stack.Count, type));
+            }
+        }
+        Check(stack.Count == 0, name + ": every wire block closes");
+        return blocks.OrderBy(b => b.Start).ToList();
+    }
+
+    private static List<string> ContinuationHistory()
+    {
+        var failures = new List<string>();
+        foreach (bool bot in new[] { false, true })
+        foreach (string id in new[] { "ICC_041", "ICC_054", "CFM_806", "ICC_201", "UNG_047", "FP1_002", "TRL_347" })
+        {
+            string name = $"{id}-continuation-{(bot ? "opponent" : "owner")}";
+            var (match, capture) = AnimationMatch(bot);
+            var game = match.Game;
+            var owner = game.CurrentPlayer;
+            foreach (var old in owner.HandZone.Concat(owner.DeckZone).Concat(owner.BoardZone)
+                .Concat(owner.Opponent.BoardZone).ToArray()) old.Controller.SetasideZone.Add(old.Zone.Remove(old));
+            var source = EngineEntity.FromCard(owner, Cards.FromId(id), zone: id == "FP1_002" ? owner.BoardZone : owner.HandZone);
+            var victims = new List<IPlayable>();
+            if (id is "ICC_041" or "ICC_054" or "TRL_347")
+                for (int i = 0; i < (id == "TRL_347" ? 1 : 3); i++)
+                {
+                    var victim = (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId("CS2_182"), zone: owner.Opponent.BoardZone);
+                    if (id == "ICC_041") victim.Damage = victim.Health - (i + 1);
+                    if (id == "TRL_347") victim.Damage = victim.Health - 1;
+                    victims.Add(victim);
+                }
+            if (id == "UNG_047")
+                victims.Add(EngineEntity.FromCard(owner, Cards.FromId("CS2_182"), zone: owner.BoardZone));
+            var drawn = new List<IPlayable>();
+            if (id is "CFM_806" or "ICC_201")
+                // DeckZone draws from the end; retain draw order in the assertions below.
+                foreach (string card in Enumerable.Repeat(id == "CFM_806" ? "EX1_043" : "FP1_002", 3)
+                    .Concat(new[] { "CS2_182", "CS2_029" }).Reverse())
+                    drawn.Insert(0, EngineEntity.FromCard(owner, Cards.FromId(card), zone: owner.DeckZone));
+            FlushFieldHistory(match);
+            int cursor = capture.Packets.Count;
+            if (id == "FP1_002")
+            {
+                ((Minion)source).ToBeDestroyed = true;
+                game.DeathProcessingAndAuraUpdate();
+            }
+            else InvokeProcess(match, owner.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD
+                && t.Source?.Id == source.Id && (id is not ("UNG_047" or "TRL_347") || t.Target?.Id == victims[0].Id)));
+            FlushFieldHistory(match);
+            var phases = new List<int> { capture.HistorySnapshots(cursor).Sum(h => h.List.Count) };
+            var picks = new List<int>();
+            if (id == "UNG_047")
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    Check(owner.Choice?.Choices.Count == 3, name + $": Adapt decision {i + 1} offers three choices");
+                    int pick = owner.Choice.Choices.First();
+                    picks.Add(pick);
+                    InvokeProcess(match, ChooseTask.Pick(owner, pick));
+                    FlushFieldHistory(match);
+                    phases.Add(capture.HistorySnapshots(cursor).Sum(h => h.List.Count));
+                }
+                Check(owner.Choice == null && victims[0].Zone == owner.GraveyardZone, name + ": consumed target and finished both Adapts");
+            }
+            var rows = capture.HistorySnapshots(cursor).SelectMany(h => h.List).ToList();
+            DumpDrawHistory(name, capture, cursor);
+            var blocks = ContinuationBlocks(rows, source.Id, name);
+            string shape = string.Join(",", blocks.Select(b => $"{b.Type}@{b.Depth}[{b.Start}:{b.End}]"));
+            Console.WriteLine($"SHAPE {name}: {shape}; phases={string.Join(",", phases)}");
+            if (id == "ICC_041")
+            {
+                if (blocks.Count != 4 || blocks.Any(b => b.Type != BlockType.POWER))
+                    failures.Add(name + ": expected four separate POWER waves (including the final empty wave), got " + shape);
+                Check(victims.All(v => v.Zone == owner.Opponent.GraveyardZone), name + ": all three health steps die");
+                if (blocks.Count == 4)
+                    for (int i = 0; i < 4; i++)
+                        Check(rows.Skip(blocks[i].Start + 1).Take(blocks[i].End - blocks[i].Start - 1)
+                            .Where(e => e.HasMetaData && (int)e.MetaData.Type == (int)MetaDataType.DAMAGE)
+                            .SelectMany(e => e.MetaData.Info).SequenceEqual(victims.Skip(i).Select(v => v.Id)),
+                            name + $": wave {i + 1} hits only remaining minions");
+                // Each recast starts by draining the preceding wave's deaths, before its own damage.
+                for (int i = 0; blocks.Count == 4 && i < 3; i++)
+                {
+                    int death = rows.FindIndex(e => IsZone(e, victims[i].Id, EngineZone.GRAVEYARD));
+                    int nextHit = rows.FindIndex(blocks[i + 1].Start, blocks[i + 1].End - blocks[i + 1].Start,
+                        e => e.HasMetaData && (int)e.MetaData.Type == (int)MetaDataType.DAMAGE);
+                    Check(blocks[i].End < blocks[i + 1].Start && death > blocks[i + 1].Start
+                        && death < (nextHit < 0 ? blocks[i + 1].End : nextHit), name + $": death phase {i + 1} precedes next damage wave");
+                    Check(rows[blocks[i + 1].Start + 1].HasPowerStart
+                        && (int)rows[blocks[i + 1].Start + 1].PowerStart.Type == (int)BlockType.DEATHS,
+                        name + ": recast opens with DEATHS");
+                }
+            }
+            if (id == "ICC_054")
+            {
+                if (blocks.Count != 3 || blocks.Any(b => b.Type != BlockType.POWER))
+                    failures.Add(name + ": expected three separate POWER casts, got " + shape);
+                Check(owner.BoardZone.Count == 3 && owner.BoardZone.All(m => m.Card.Id == "ICC_832t4"), name + ": three Scarabs catch up");
+                if (blocks.Count == 3)
+                    for (int i = 0; i < blocks.Count; i++)
+                    {
+                        var block = blocks[i];
+                        Check(rows.Skip(block.Start + 1).Take(block.End - block.Start - 1)
+                            .Count(e => e.HasFullEntity && SnapshotName(e) == "ICC_832t4") == 1, name + ": one Scarab per cast");
+                        Check(i == 0 || blocks[i - 1].End < block.Start, name + ": recast is a sibling, not nested");
+                    }
+            }
+            if (id is "ICC_201")
+            {
+                // Roll the Bones casts itself again (ComplexTask.RecursiveTask, HistoryCastKind.Repeat), like Defile and Spreading
+                // Plague: each cast is its own sibling POWER block.
+                Check(drawn.Take(4).All(c => c.Zone == owner.HandZone) && drawn[4].Zone == owner.DeckZone,
+                    name + ": draws three qualifying minions then stops at non-qualifier");
+                if (blocks.Count != 4 || blocks.Any(b => b.Type != BlockType.POWER) || blocks.Zip(blocks.Skip(1), (a, b) => a.End < b.Start).Any(x => !x))
+                    failures.Add(name + ": expected four sibling POWER casts, got " + shape);
+            }
+            if (id is "CFM_806")
+            {
+                // Wrathion repeats a draw-until instruction inside one Battlecry: one effect.
+                Check(drawn.Take(4).All(c => c.Zone == owner.HandZone) && drawn[4].Zone == owner.DeckZone,
+                    name + ": draws three qualifying minions then stops at non-qualifier");
+                if (blocks.Count != 1 || blocks[0].Type != BlockType.POWER)
+                    failures.Add(name + ": expected all four draws in one POWER, got " + shape);
+                else
+                    Check(rows.Skip(blocks[0].Start + 1).Take(blocks[0].End - blocks[0].Start - 1)
+                        .Where(e => e.HasShowEntity && drawn.Any(c => c.Id == e.ShowEntity.Entity))
+                        .Select(e => e.ShowEntity.Entity).SequenceEqual(drawn.Take(4).Select(c => c.Id)), name + ": all four draw reveals inside one effect");
+            }
+            if (id == "UNG_047")
+            {
+                // Adapt flushes history for each decision. The Pterrordax POWER creates both sets of offers; each answer
+                // then has two top-level POWERs of its chosen Adapt token (apply effect, move token to graveyard).
+                Check(blocks.Count == 1 && blocks[0].Type == BlockType.POWER && blocks[0].End < phases[0],
+                    name + ": source Battlecry closes before the first answer");
+                Check(rows.Skip(blocks[0].Start + 1).Take(blocks[0].End - blocks[0].Start - 1)
+                    .Count(e => e.HasFullEntity) == 6, name + ": both sets of three Adapt offers inside the Battlecry");
+                for (int i = 0; i < picks.Count; i++)
+                {
+                    var answer = rows.Skip(phases[i]).Take(phases[i + 1] - phases[i]).ToList();
+                    var powers = ContinuationBlocks(answer, picks[i], name);
+                    Check(powers.Count == 2 && powers.All(b => b.Type == BlockType.POWER && b.Depth == 0)
+                        && powers[0].End < powers[1].Start && answer[powers[0].Start].PowerStart.Target == source.Id,
+                        name + $": Adapt answer {i + 1} has separate effect and cleanup POWERs");
+                    Check(answer.Skip(powers[0].Start + 1).Take(powers[0].End - powers[0].Start - 1)
+                        .Any(e => e.HasShowEntity && SnapshotTag(e, GameTag.ATTACHED) == source.Id)
+                        && answer.Skip(powers[1].Start + 1).Take(powers[1].End - powers[1].Start - 1)
+                            .Any(e => IsZone(e, picks[i], EngineZone.GRAVEYARD)), name + ": answer applies its Adapt and retires the token");
+                }
+            }
+            if (id == "FP1_002")
+            {
+                Check(blocks.Count == 1 && blocks[0].Type == BlockType.TRIGGER, name + ": repeats stay in one TRIGGER");
+                int death = rows.FindIndex(e => IsZone(e, source.Id, EngineZone.GRAVEYARD));
+                Check(rows[blocks[0].Start].PowerStart.TriggerKeyword == (int)GameTag.DEATHRATTLE && death >= 0 && death < blocks[0].Start,
+                    name + ": Deathrattle TRIGGER follows the source's death");
+                Check(owner.BoardZone.Count == 2 && owner.BoardZone.All(m => m.Card.Id == "FP1_002t"), name + ": both Spectral Spiders summoned");
+                Check(rows.Skip(blocks[0].Start + 1).Take(blocks[0].End - blocks[0].Start - 1)
+                    .Count(e => e.HasFullEntity && SnapshotName(e) == "FP1_002t") == 2, name + ": both summons inside the TRIGGER");
+            }
+            if (id == "TRL_347")
+            {
+                // TakeDamage drains Overkill while the damage POWER is still open; joining cannot erase that live parent.
+                Check(blocks.Count == 2 && blocks.All(b => b.Type == BlockType.POWER)
+                    && blocks[1].Depth == blocks[0].Depth + 1 && blocks[0].Start < blocks[1].Start && blocks[1].End < blocks[0].End,
+                    name + ": Overkill continuation stays nested inside the open damage POWER");
+                Check(owner.BoardZone.Count == 1 && owner.BoardZone[0].Card.Id == "TRL_347t"
+                    && victims[0].Zone == owner.Opponent.GraveyardZone, name + ": overkill summons one Devilsaur");
+                Check(rows.Skip(blocks[1].Start + 1).Take(blocks[1].End - blocks[1].Start - 1)
+                    .Count(e => e.HasFullEntity && SnapshotName(e) == "TRL_347t") == 1, name + ": Devilsaur inside nested continuation");
+            }
+            capture.SerializeAll();
+        }
         return failures;
     }
 
