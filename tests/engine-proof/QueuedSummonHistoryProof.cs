@@ -342,7 +342,7 @@ internal static class QueuedSummonHistoryProof
             "the Discover pick is not rewritten as created in PLAY");
     }
 
-    // A queued activation that hits something of its own stays its own block, even when it also summons.
+    // A queued activation with hits of its own joins the parent, as in retail (hslog-tests/toki.power.log:4239).
     private static void ChildWithOwnHit()
     {
         var g = NewGame(); var p = g.Player1;
@@ -355,7 +355,11 @@ internal static class QueuedSummonHistoryProof
         g.ProcessTasks();
         g.TaskQueue.EndEvent();
         Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "CS2_101t") == 2 && p.Opponent.Hero.Damage == 2, "two hits, two Recruits");
-        Together(Shape(g, cursor), "CS2_101t", 1, 2);
+        var shape = Shape(g, cursor);
+        Together(shape, "CS2_101t", 2, 1);
+        Core2026Proof.Check(shape.Blocks.Count == 1
+            && shape.OwnRows[shape.Blocks[0]].OfType<PowerHistoryMetaData>().Count(m => m.Type == MetaDataType.DAMAGE) == 2,
+            "both hits share the parent block with both Recruits" + shape.Dump);
     }
 
     // An Overkill summon runs in its own block inside the ATTACK block, never in the ATTACK block's own rows.
