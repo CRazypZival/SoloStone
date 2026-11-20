@@ -141,7 +141,11 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 					summonPosition = controller.BoardZone.SlotCount;
 
 				if (summonEntity.Untouchable)
+				{
+                    var historyFrom = game.History ? (game.PowerHistory.Full.Count, game.PowerHistory.Last.Count) : default;
 					controller.BoardZone.Add(summonEntity, summonPosition);
+                    if (game.History) game.PowerHistory.PublishCreatedInPlay(summonEntity, historyFrom);
+				}
 				else
 					Generic.SummonBlock.Invoke(game, summonEntity, summonPosition, source);
 			}

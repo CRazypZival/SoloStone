@@ -29,6 +29,7 @@ internal static class QueuedSummonHistoryProof
             ("FP1_002x2", TwoCreepers), ("FP1_031", Rivendare), ("FP1_002+EX1_096", CreeperAndHoarder),
             ("chained-continuations", ChainedContinuations), ("ICC_054", SpreadingPlague), ("ICC_041", Defile),
             ("dormant-copy", DormantCopy),
+            ("created-in-play-boundaries", CreatedInPlayBoundaries), ("untouchable-slot", UntouchableSlot),
             // Negative cases: these keep their own shape.
             ("LOOT_093", RecruitFromDeck), ("summon-from-hand", SummonFromHand), ("UNG_854", DiscoverThenSummon),
             ("own-hit", ChildWithOwnHit), ("TRL_232", OverkillSummon) })
@@ -49,6 +50,73 @@ internal static class QueuedSummonHistoryProof
         foreach (var player in new[] { game.Player1, game.Player2 })
             foreach (var card in player.HandZone.ToArray()) player.SetasideZone.Add(player.HandZone.Remove(card));
         return game;
+    }
+
+    private static void CreatedInPlayBoundaries()
+    {
+        foreach (bool inPlay in new[] { false, true })
+        foreach (string boundary in new[] { "block-before", "subspell-before", "flush-before", "block-after", "subspell-after", "flush-after" })
+        {
+            var g = NewGame(); var p = g.Player1; var h = g.PowerHistory;
+            var source = Summon(p, "CS2_182"); var right = Summon(p, "CS2_182");
+            var from = (h.Full.Count, h.Last.Count);
+            void Edge()
+            {
+                if (boundary.StartsWith("block")) h.Add(new PowerHistoryBlockStart { BlockType = BlockType.POWER, Source = source.Id });
+                else if (boundary.StartsWith("subspell")) h.Add(new PowerHistorySubSpellStart { Source = source.Id });
+                else h.Last.Clear();
+            }
+            if (boundary.EndsWith("before")) Edge();
+            var minion = (Minion)Entity.FromCard(p, Cards.FromId("CS2_182"),
+                inPlay ? new EntityData { [GameTag.ZONE] = (int)Zone.PLAY } : null);
+            if (boundary.EndsWith("after")) Edge();
+            minion.Damage = 1;
+            p.BoardZone.Add(minion, 1);
+            var full = h.Full.OfType<PowerHistoryFullEntity>().Single(e => e.Entity.Id == minion.Id);
+            var before = h.Full.ToArray();
+            bool published = h.PublishCreatedInPlay(minion, from);
+            string name = $"{boundary} inPlay={inPlay}";
+            if (boundary.EndsWith("before"))
+            {
+                // Retail 186852_hearthstone_access_eoe.power.log:3333-3338: state belongs in FULL; an edge/flush
+                // before creation forbids pulling neighbour shifts across it, even when the FULL itself can still fold.
+                Core2026Proof.Check(published && full.Entity.Tags[GameTag.ZONE_POSITION] == 2
+                    && full.Entity.Tags[GameTag.DAMAGE] == 1 && full.HealthIsMaximum
+                    && full.Entity.Tags[GameTag.HEALTH] == minion.Health + minion.Damage, name + ": fold state and maximum Health");
+                Core2026Proof.Check(h.Full.IndexOf(full) < h.Full.FindIndex(e => e is PowerHistoryTagChange t
+                    && t.EntityId == right.Id && t.Tag == GameTag.ZONE_POSITION), name + ": leave shift order across boundary");
+                Core2026Proof.Check(!h.Full.OfType<PowerHistoryTagChange>().Any(t => t.EntityId == minion.Id),
+                    name + ": own state folded");
+            }
+            else
+            {
+                Core2026Proof.Check(published == (inPlay && !boundary.StartsWith("flush"))
+                    && h.Full.SequenceEqual(before) && !full.HealthIsMaximum
+                    && (!full.Entity.Tags.TryGetValue(GameTag.ZONE_POSITION, out int position) || position == 0),
+                    name + ": touched/flushed creation stays unchanged");
+            }
+        }
+    }
+
+    private static void UntouchableSlot()
+    {
+        foreach (bool second in new[] { false, true })
+        {
+            var g = NewGame(); var p = second ? g.Player2 : g.Player1;
+            var source = Summon(p, "CS2_182"); var right = Summon(p, "CS2_182");
+            int cursor = g.PowerHistory.Full.Count;
+            new SummonTask("UNG_829t2", SummonSide.RIGHT).Process(g, p, source, null);
+            var portal = p.BoardZone.Single(m => m.Card.Id == "UNG_829t2");
+            var rows = g.PowerHistory.Full.Skip(cursor).ToList();
+            var full = rows.OfType<PowerHistoryFullEntity>().Single(f => f.Entity.Id == portal.Id);
+            int shift = rows.FindIndex(e => e is PowerHistoryTagChange t && t.EntityId == right.Id && t.Tag == GameTag.ZONE_POSITION);
+            // Same retail insertion shape as 186852_hearthstone_access_eoe.power.log:3402-3407, including permanents.
+            Core2026Proof.Check(portal.Untouchable && full.Entity.Tags[GameTag.ZONE_POSITION] == 2
+                && !rows.OfType<PowerHistoryTagChange>().Any(t => t.EntityId == portal.Id && t.Tag == GameTag.ZONE_POSITION)
+                && shift >= 0 && shift < rows.IndexOf(full)
+                && !rows.OfType<PowerHistoryShowEntity>().Any(e => e.Entity.Id == portal.Id),
+                "Untouchable summon uses created-in-play slot publication on both seats");
+        }
     }
 
     private static void Hounds()

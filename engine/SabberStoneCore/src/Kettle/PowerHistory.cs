@@ -1156,13 +1156,13 @@ namespace SabberStoneCore.Kettle
         // A minion created straight into PLAY (a Hound, a Silver Hand Recruit, a Leeroy Whelp) is public from its FULL_ENTITY,
         // and retail sends no SHOW_ENTITY for it. The client takes a SHOW_ENTITY as a reveal that a custom spawn spell waits
         // for, so each spawn played to its end before the next one began (Muster for Battle: Recruits ~1.07 s apart, all three
-        // together without it). Publishes as TAG_CHANGEs only the snapshot tags that differ from what the unflushed run
-        // already told the client. A minion created in no zone and summoned before anything else names it (Entity.FromCard
+        // together without it). Unobserved PLAY creations also fold their entry state (including the final slot) into FULL;
+        // across an edge, only snapshot differences are appended as TAG_CHANGEs. A minion created in no zone (Entity.FromCard
         // without a zone, then SummonBlock: SummonOpTask, SummonCopyTask, a Reborn copy) was never anywhere else, so its
         // FULL_ENTITY is published as created in PLAY with its state at summon (34104_subspell.power.log:35320-35341, a
         // reborn Colossus of the Moon: ZONE=PLAY, DAMAGE=9 in the FULL_ENTITY), and its own TAG_CHANGEs fold into it.
         // False (the caller sends SHOW_ENTITY) for a summon from a hidden zone, a hand or a deck, or across a flushed packet.
-        internal bool PublishCreatedInPlay(IPlayable playable)
+        internal bool PublishCreatedInPlay(IPlayable playable, (int Full, int Last) from)
         {
             if (!_enabled) return false;
             Dictionary<GameTag, int> known = null;
@@ -1179,8 +1179,10 @@ namespace SabberStoneCore.Kettle
                 if (entry is PowerHistoryFullEntity full && full.Entity.Id == playable.Id)
                 {
                     if (!full.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone)) zone = (int)Zone.INVALID;
-                    if (zone == (int)Zone.INVALID && !touched)
+                    if ((zone == (int)Zone.INVALID || zone == (int)Zone.PLAY) && !touched)
                     {
+                        MoveSummonNeighbourShifts(full, from);
+                        at = Last.IndexOf(full);
                         // Nothing else has named it since, so its own TAG_CHANGEs and its current snapshot fold into the
                         // FULL_ENTITY, which then carries the state retail creates it with (a reborn copy's DAMAGE).
                         var own = new List<(int Last, int Full)>();
@@ -1233,6 +1235,28 @@ namespace SabberStoneCore.Kettle
                 if (known.TryGetValue(tag.Key, out int value) ? value != tag.Value : tag.Value != 0)
                     Add(PowerHistoryBuilder.TagChange(playable.Id, tag.Key, tag.Value));
             return true;
+        }
+
+        // Retail 186852_hearthstone_access_eoe.power.log:3333-3338,3402-3407: right-most neighbour first, then FULL
+        // with its final slot. Move only insertion's shifts backward; never move FULL past another row or across an edge/flush.
+        private void MoveSummonNeighbourShifts(PowerHistoryFullEntity full, (int Full, int Last) from)
+        {
+            int at = Last.IndexOf(full), inFull = Full.IndexOf(full);
+            if (from.Last > Last.Count || from.Full > Full.Count || inFull < 0
+                || !Last.Skip(from.Last).SequenceEqual(Full.Skip(from.Full))) return;
+            if (Last.Skip(Math.Min(at, from.Last)).Any(e => e is PowerHistoryBlockStart || e is PowerHistoryBlockEnd
+                || e is PowerHistorySubSpellStart || e is PowerHistorySubSpellEnd || e is PowerHistoryResetGame)) return;
+            var shifts = Last.Skip(from.Last).OfType<PowerHistoryTagChange>()
+                .Where(t => t.EntityId != full.Entity.Id && t.Tag == GameTag.ZONE_POSITION)
+                .OrderByDescending(t => t.Value).ToList();
+            // A newly created neighbour must still be introduced before any row names it.
+            if (shifts.Any(t => Full.FindLastIndex(e => e is PowerHistoryFullEntity neighbour
+                && neighbour.Entity.Id == t.EntityId) >= inFull)) return;
+            foreach (var list in new[] { Full, Last })
+            {
+                foreach (var shift in shifts) list.Remove(shift);
+                list.InsertRange(list.IndexOf(full), shifts);
+            }
         }
 
         // One rule for every queued activation of a source's own running effect (EnqueueTask, EnqueueNumberTask, whatever task

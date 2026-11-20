@@ -130,6 +130,7 @@ namespace SabberStoneCore.Actions
 			{
 				using var resolution = g.Resolution.Enter(ResolutionKind.SummonOn, minion.Id);
 				g.Log(LogLevel.INFO, BlockType.PLAY, "SummonPhase", !g.Logging? "":$"Summon Minion {minion} to Board of {minion.Controller.Name}.");
+                var historyFrom = g.History ? (g.PowerHistory.Full.Count, g.PowerHistory.Last.Count) : default;
                 minion.Controller.BoardZone.Add(minion, zonePosition, applyEntrySetters: true);
 
 				g.AuraUpdate();
@@ -138,7 +139,7 @@ namespace SabberStoneCore.Actions
 				g.SummonedMinions.Add(minion);
 
 				// add summon block show entity (a minion created straight into play is already public: see PublishCreatedInPlay)
-				if (g.History && !g.PowerHistory.PublishCreatedInPlay(minion))
+				if (g.History && !g.PowerHistory.PublishCreatedInPlay(minion, historyFrom))
 					g.PowerHistory.Add(PowerHistoryBuilder.ShowEntity(minion));
 			};
 
