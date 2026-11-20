@@ -1,5 +1,6 @@
 #if SOURCE_ENGINE
 using SabberStoneCore.Kettle;
+using SabberStoneCore.Enums;
 using SabberStoneCore.Model;
 
 namespace HsSim;
@@ -113,8 +114,23 @@ public static class HistoryShapeSelfTest
 
         yield return ("FULL_ENTITY repeated", "FULL_ENTITY_DUPLICATE", firstFull + 1, Insert(firstFull + 1, history[firstFull]));
 
+        var missingCreator = new PowerHistoryFullEntity { Entity = new PowerHistoryEntity {
+            Id = 1_000_000, Name = "CS2_231", Tags = new Dictionary<GameTag, int> {
+                [GameTag.CARDTYPE] = (int)CardType.MINION, [GameTag.ZONE] = (int)Zone.PLAY
+            }
+        } };
+        yield return ("minion created in PLAY without CREATOR", "SUMMON_CREATOR", history.Count, Insert(history.Count, missingCreator));
+        var withCreator = new PowerHistoryFullEntity { Entity = new PowerHistoryEntity {
+            Id = 1_000_000, Name = "CS2_231", Tags = new Dictionary<GameTag, int>(missingCreator.Entity.Tags) { [GameTag.CREATOR] = gameId }
+        } };
+        yield return ("minion created in PLAY with CREATOR", null, -1, Insert(history.Count, withCreator));
+
         // A rewind forgets every entity: one it does not create again no longer exists, and one it creates again is no duplicate.
         var reset = new PowerHistoryResetGame { CreateGame = (PowerHistoryCreateGame)history[0] };
+        yield return ("rewind snapshot minion in PLAY without CREATOR", null, -1, Insert(history.Count, reset, missingCreator));
+        yield return ("summon after rewind snapshot still needs CREATOR", "SUMMON_CREATOR", history.Count + 3,
+            Insert(history.Count, reset, new PowerHistoryBlockStart { BlockType = BlockType.POWER, Source = gameId },
+                new PowerHistoryBlockEnd(), missingCreator));
         yield return ("TAG_CHANGE after a rewind of an entity it did not create again", "ENTITY_REF", history.Count + 1,
             Insert(history.Count, reset, PowerHistoryBuilder.TagChange(history.OfType<PowerHistoryFullEntity>().First().Entity.Id,
                 SabberStoneCore.Enums.GameTag.DAMAGE, 1)));

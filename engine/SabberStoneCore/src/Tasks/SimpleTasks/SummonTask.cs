@@ -14,6 +14,7 @@
 using System;
 using SabberStoneCore.Actions;
 using SabberStoneCore.Enums;
+using SabberStoneCore.Kettle;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
 
@@ -144,7 +145,8 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 				{
                     var historyFrom = game.History ? (game.PowerHistory.Full.Count, game.PowerHistory.Last.Count) : default;
 					controller.BoardZone.Add(summonEntity, summonPosition);
-                    if (game.History) game.PowerHistory.PublishCreatedInPlay(summonEntity, historyFrom);
+                    if (game.History && !game.PowerHistory.PublishCreatedInPlay(summonEntity, historyFrom, source?.Id ?? 0))
+                        game.PowerHistory.Add(PowerHistoryBuilder.ShowEntity(summonEntity, source?.Id ?? 0));
 				}
 				else
 					Generic.SummonBlock.Invoke(game, summonEntity, summonPosition, source);

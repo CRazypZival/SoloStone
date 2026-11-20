@@ -5550,6 +5550,7 @@ public sealed class NativeMatch
                 && sent.TryGetValue((int)GameTag.CARDTYPE, out int type) && type == (int)CardType.SPELL)
                 nativeTag = GameTag.CURRENT_SPELLPOWER;
             int value = tag.Value;
+            if (tag.Tag == GameTag.CREATOR && value != 0 && IsHiddenFromHuman(value, null)) value = 0;
             if (tag.Tag == TemporaryCardTag || tag.Tag == GameTag.GHOSTLY)
             {
 #if ENGINE_SOURCE
@@ -6603,6 +6604,9 @@ public sealed class NativeMatch
                 ? new KeyValuePair<GameTag, int>(pair.Key, entity.Id) : pair);
         var tags = ToNativeTags(hidden && outboundTags != null
             ? outboundTags.Where(pair => IsPublicHiddenTag(pair.Key)) : outboundTags);
+        // A public summon must not identify the opponent's hidden hand/deck source.
+        foreach (var tag in tags.Where(tag => tag.Name == (int)GameTag.CREATOR && tag.Value != 0))
+            if (IsHiddenFromHuman(tag.Value, null, resetEntities)) tag.Value = 0;
         if (!hidden && (!completeSnapshot || temporaryDiscardVisuals.Contains(entity.Id)))
         {
             historicalTemporaryVisuals.TryGetValue(entity.Id, out var visual);

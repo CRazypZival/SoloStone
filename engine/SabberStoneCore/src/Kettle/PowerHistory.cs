@@ -280,7 +280,7 @@ namespace SabberStoneCore.Kettle
 			GameTag.EXTRA_ATTACKS_THIS_TURN
 		};
 
-		public static PowerHistoryShowEntity ShowEntity(IPlayable playable)
+		public static PowerHistoryShowEntity ShowEntity(IPlayable playable, int creatorId = 0)
 		{
 			var tags = SnapshotTags(((Entity)playable)._data);
 			gameTagsEntities.ForEach(p => tags[p] = playable[p]);
@@ -293,6 +293,9 @@ namespace SabberStoneCore.Kettle
             int alternate = (int)Actions.CostRules.PaymentKind(playable);
             if (alternate != 0) tags[GameTag.CARD_ALTERNATE_COST] = alternate;
             else tags.Remove(GameTag.CARD_ALTERNATE_COST);
+            // Summon provenance is wire-only, including when its FULL_ENTITY cannot be folded.
+            if (creatorId != 0 && (!tags.TryGetValue(GameTag.CREATOR, out int creator) || creator == 0))
+                tags[GameTag.CREATOR] = creatorId;
 			//tags[GameTag.TAG_LAST_KNOWN_COST_IN_HAND] = playable[GameTag.COST];
 
 			return new PowerHistoryShowEntity
@@ -1162,7 +1165,7 @@ namespace SabberStoneCore.Kettle
         // FULL_ENTITY is published as created in PLAY with its state at summon (34104_subspell.power.log:35320-35341, a
         // reborn Colossus of the Moon: ZONE=PLAY, DAMAGE=9 in the FULL_ENTITY), and its own TAG_CHANGEs fold into it.
         // False (the caller sends SHOW_ENTITY) for a summon from a hidden zone, a hand or a deck, or across a flushed packet.
-        internal bool PublishCreatedInPlay(IPlayable playable, (int Full, int Last) from)
+        internal bool PublishCreatedInPlay(IPlayable playable, (int Full, int Last) from, int creatorId = 0)
         {
             if (!_enabled) return false;
             Dictionary<GameTag, int> known = null;
@@ -1200,9 +1203,15 @@ namespace SabberStoneCore.Kettle
                         { Full.RemoveAt(Full.LastIndexOf(own[k])); Last.RemoveAt(Last.LastIndexOf(own[k])); }
                         // Keep event tags at their original position and the FULL's value from before those events.
                         foreach (var tag in PowerHistoryBuilder.ShowEntity(playable).Entity.Tags)
+                        {
+                            if (tag.Key == GameTag.CREATOR && full.Entity.Tags.TryGetValue(GameTag.CREATOR, out int existingCreator)
+                                && existingCreator != 0) continue;
                             if (!CreatedInPlayChangeTags.Contains(tag.Key) || !Last.Skip(at + 1).Any(e =>
                                 e is PowerHistoryTagChange changeTag && changeTag.EntityId == playable.Id && changeTag.Tag == tag.Key))
                                 full.Entity.Tags[tag.Key] = tag.Value;
+                        }
+                        if (creatorId != 0 && (!full.Entity.Tags.TryGetValue(GameTag.CREATOR, out int creator) || creator == 0))
+                            full.Entity.Tags[GameTag.CREATOR] = creatorId;
                         full.Entity.Tags[GameTag.ZONE] = (int)Zone.PLAY;
                         full.HealthIsMaximum = true;
                         // The client builds referencing text once when shown; it must already know the target entity.
@@ -1215,6 +1224,8 @@ namespace SabberStoneCore.Kettle
                         return true;
                     }
                     if (zone != (int)Zone.PLAY) return false;
+                    if (creatorId != 0 && (!full.Entity.Tags.TryGetValue(GameTag.CREATOR, out int publishedCreator) || publishedCreator == 0))
+                        full.Entity.Tags[GameTag.CREATOR] = creatorId;
                     known = new Dictionary<GameTag, int>(full.Entity.Tags);
                     break;
                 }
@@ -1227,9 +1238,10 @@ namespace SabberStoneCore.Kettle
             if (known == null) return false;
             for (int i = at + 1; i < Last.Count; i++)
                 if (Last[i] is PowerHistoryTagChange tag && tag.EntityId == playable.Id) known[tag.Tag] = tag.Value;
+            if (known.TryGetValue(GameTag.CREATOR, out int knownCreator) && knownCreator != 0) creatorId = knownCreator;
             // SHOW_ENTITY only sets the tags it carries, so tags missing from the snapshot need no change either; a tag the
             // client never got reads as 0.
-            foreach (var tag in PowerHistoryBuilder.ShowEntity(playable).Entity.Tags)
+            foreach (var tag in PowerHistoryBuilder.ShowEntity(playable, creatorId).Entity.Tags)
                 if (known.TryGetValue(tag.Key, out int value) ? value != tag.Value : tag.Value != 0)
                     Add(PowerHistoryBuilder.TagChange(playable.Id, tag.Key, tag.Value));
             return true;
