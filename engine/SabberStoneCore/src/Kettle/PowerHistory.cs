@@ -26,6 +26,9 @@ namespace SabberStoneCore.Kettle
 {
 	public class PowerHistoryBuilder
 	{
+        // Retail: 176014_opponent_sideboard.power.log:3678-3722 (FULL: CREATOR=1254=37);
+        // 34104_subspell.power.log:38863-38885 (deck SHOW: CREATOR=0, 1254=summoner 726). History only.
+        public const GameTag SummonSourceTag = (GameTag)1254;
         // Older decision tags belong to frozen engine histories; native transport filters their full range.
         internal static Dictionary<GameTag, int> SnapshotTags(IDictionary<GameTag, int> tags) =>
             tags.Where(pair => !Actions.TurnQueueRules.IsInternalTag(pair.Key) && !Actions.RepeatRules.IsInternalTag(pair.Key) && pair.Key != Actions.OutcastRules.PlayedFromEdgeTag && !Actions.LeylineRules.IsInternalTag(pair.Key) && !Actions.ShatterRules.IsInternalTag(pair.Key) && !Actions.HandProgressRules.IsInternalTag(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value);
@@ -280,7 +283,7 @@ namespace SabberStoneCore.Kettle
 			GameTag.EXTRA_ATTACKS_THIS_TURN
 		};
 
-		public static PowerHistoryShowEntity ShowEntity(IPlayable playable, int creatorId = 0)
+		public static PowerHistoryShowEntity ShowEntity(IPlayable playable, int creatorId = 0, int summonerId = 0)
 		{
 			var tags = SnapshotTags(((Entity)playable)._data);
 			gameTagsEntities.ForEach(p => tags[p] = playable[p]);
@@ -293,9 +296,10 @@ namespace SabberStoneCore.Kettle
             int alternate = (int)Actions.CostRules.PaymentKind(playable);
             if (alternate != 0) tags[GameTag.CARD_ALTERNATE_COST] = alternate;
             else tags.Remove(GameTag.CARD_ALTERNATE_COST);
-            // Only PublishCreatedInPlay's known PLAY snapshot supplies creatorId; fallback reveals invent no provenance.
+            // Only a known PLAY creation supplies creatorId; a hand/deck reveal carries its summoner separately.
             if (creatorId != 0 && (!tags.TryGetValue(GameTag.CREATOR, out int creator) || creator == 0))
                 tags[GameTag.CREATOR] = creatorId;
+            if (summonerId != 0) tags[SummonSourceTag] = summonerId;
 			//tags[GameTag.TAG_LAST_KNOWN_COST_IN_HAND] = playable[GameTag.COST];
 
 			return new PowerHistoryShowEntity
@@ -1213,6 +1217,8 @@ namespace SabberStoneCore.Kettle
                         }
                         if (creatorId != 0 && (!full.Entity.Tags.TryGetValue(GameTag.CREATOR, out int creator) || creator == 0))
                             full.Entity.Tags[GameTag.CREATOR] = creatorId;
+                        if (full.Entity.Tags.TryGetValue(GameTag.CREATOR, out int fullCreator) && fullCreator != 0)
+                            full.Entity.Tags[PowerHistoryBuilder.SummonSourceTag] = fullCreator;
                         full.Entity.Tags[GameTag.ZONE] = (int)Zone.PLAY;
                         full.HealthIsMaximum = true;
                         // The client builds referencing text once when shown; it must already know the target entity.
@@ -1227,6 +1233,8 @@ namespace SabberStoneCore.Kettle
                     if (zone != (int)Zone.PLAY) return false;
                     if (creatorId != 0 && (!full.Entity.Tags.TryGetValue(GameTag.CREATOR, out int publishedCreator) || publishedCreator == 0))
                         full.Entity.Tags[GameTag.CREATOR] = creatorId;
+                    if (full.Entity.Tags.TryGetValue(GameTag.CREATOR, out int knownSource) && knownSource != 0)
+                        full.Entity.Tags[PowerHistoryBuilder.SummonSourceTag] = knownSource;
                     known = new Dictionary<GameTag, int>(full.Entity.Tags);
                     break;
                 }
@@ -1242,7 +1250,7 @@ namespace SabberStoneCore.Kettle
             if (known.TryGetValue(GameTag.CREATOR, out int knownCreator) && knownCreator != 0) creatorId = knownCreator;
             // SHOW_ENTITY only sets the tags it carries, so tags missing from the snapshot need no change either; a tag the
             // client never got reads as 0.
-            foreach (var tag in PowerHistoryBuilder.ShowEntity(playable, creatorId).Entity.Tags)
+            foreach (var tag in PowerHistoryBuilder.ShowEntity(playable, creatorId, creatorId).Entity.Tags)
                 if (known.TryGetValue(tag.Key, out int value) ? value != tag.Value : tag.Value != 0)
                     Add(PowerHistoryBuilder.TagChange(playable.Id, tag.Key, tag.Value));
             return true;

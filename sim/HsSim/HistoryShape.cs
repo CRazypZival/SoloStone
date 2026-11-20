@@ -17,7 +17,7 @@ public static class HistoryShape
     // META_REF: every entity in a META_DATA's Info was already created (SHOW_BIG_CARD and CONTROLLER_AND_ZONE_CHANGE: the first
     //   slot only; the rest are parameters, as in the native client).
     // FULL_ENTITY_DUPLICATE: no FULL_ENTITY creates an id that already exists.
-    // SUMMON_CREATOR: a minion FULL_ENTITY created in PLAY names its creator, excluding RESET_GAME snapshot contents.
+    // SUMMON_CREATOR: a minion FULL_ENTITY created in PLAY names its creator with matching 1254, excluding RESET_GAME snapshots.
     // A RESET_GAME (rewind) creates the game again: the entities known before it are forgotten, and the FULL_ENTITYs that follow
     // it create them again.
     // Built against a prebuilt engine (no SOURCE_ENGINE) the check does nothing: rewinds and sub-spells are SoloStone entries.
@@ -87,6 +87,8 @@ public static class HistoryShape
                         if (totals != null) totals.CreatedMinionsInPlay++;
                         if (!full.Entity.Tags.TryGetValue(GameTag.CREATOR, out int creator) || creator == 0)
                             Flag("SUMMON_CREATOR", i, $"minion {full.Entity.Id} ({full.Entity.Name}) created in PLAY without CREATOR");
+                        else if (!full.Entity.Tags.TryGetValue(PowerHistoryBuilder.SummonSourceTag, out int source) || source != creator)
+                            Flag("SUMMON_CREATOR", i, $"minion {full.Entity.Id} ({full.Entity.Name}) created in PLAY without 1254 equal to CREATOR {creator}");
                     }
                     if (!known.Add(full.Entity.Id)) Flag("FULL_ENTITY_DUPLICATE", i, $"FULL_ENTITY creates entity {full.Entity.Id} again");
                     break;

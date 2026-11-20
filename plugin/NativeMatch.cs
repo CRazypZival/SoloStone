@@ -33,6 +33,8 @@ public sealed class NativeMatch
     private const int BotPlayerId = 2;
     private const int MaxBotActions = 128;
     private const int CurrentSpellPowerBaseTag = 291;
+    // Retail summon source (see PowerHistoryBuilder); an entity reference with CREATOR's privacy rules.
+    private const GameTag SummonSourceTag = (GameTag)1254;
     // Engine-side Temporary tag. The client's TagVisualConfiguration reads GHOSTLY (785) for the Temporary hand look, not 3630,
     // so transport projects Temporary onto GHOSTLY; an Echo card's own GHOSTLY stays independent of it.
     private const GameTag TemporaryCardTag = (GameTag)3630;
@@ -5550,7 +5552,7 @@ public sealed class NativeMatch
                 && sent.TryGetValue((int)GameTag.CARDTYPE, out int type) && type == (int)CardType.SPELL)
                 nativeTag = GameTag.CURRENT_SPELLPOWER;
             int value = tag.Value;
-            if (tag.Tag == GameTag.CREATOR && value != 0 && IsHiddenFromHuman(value, null)) value = 0;
+            if ((tag.Tag == GameTag.CREATOR || tag.Tag == SummonSourceTag) && value != 0 && IsHiddenFromHuman(value, null)) value = 0;
             if (tag.Tag == TemporaryCardTag || tag.Tag == GameTag.GHOSTLY)
             {
 #if ENGINE_SOURCE
@@ -6126,6 +6128,7 @@ public sealed class NativeMatch
 
     private static bool ReturnEntityTag(int tag) => tag == (int)GameTag.ENTITY_ID
         || tag == (int)GameTag.ATTACHED || tag == (int)GameTag.CREATOR || tag == (int)GameTag.DISPLAYED_CREATOR
+        || tag == (int)SummonSourceTag
         || tag == (int)GameTag.LINKED_ENTITY || tag == (int)GameTag.PARENT_CARD || tag == (int)GameTag.LAST_AFFECTED_BY
         || tag == (int)GameTag.CARD_TARGET || tag == (int)GameTag.WEAPON || tag == (int)GameTag.LAST_CARD_PLAYED
         || tag == (int)GameTag.LAST_CARD_DRAWN || tag == (int)GameTag.HISTORY_PROXY
@@ -6605,7 +6608,7 @@ public sealed class NativeMatch
         var tags = ToNativeTags(hidden && outboundTags != null
             ? outboundTags.Where(pair => IsPublicHiddenTag(pair.Key)) : outboundTags);
         // A public summon must not identify the opponent's hidden hand/deck source.
-        foreach (var tag in tags.Where(tag => tag.Name == (int)GameTag.CREATOR && tag.Value != 0))
+        foreach (var tag in tags.Where(tag => (tag.Name == (int)GameTag.CREATOR || tag.Name == (int)SummonSourceTag) && tag.Value != 0))
             if (IsHiddenFromHuman(tag.Value, null, resetEntities)) tag.Value = 0;
         if (!hidden && (!completeSnapshot || temporaryDiscardVisuals.Contains(entity.Id)))
         {

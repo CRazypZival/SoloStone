@@ -14,12 +14,17 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 
 internal static partial class Program
 {
+    private const GameTag SummonSourceTag = (GameTag)1254;
     // Retail hsreplay-test-data: 186852_hearthstone_access_eoe.power.log:3333-3338 (Battlecry), :3402-3407
     // (trigger); 34104_subspell.power.log:10709-10711 (Deathrattle), :11268-11359 (spell at row end).
     // Neighbours shift right-most first BEFORE FULL_ENTITY, which already carries the summon's slot; no SHOW_ENTITY.
     private static void EffectSummonSlotHistory()
     {
         var failures = new List<string>();
+        var forwarded = (List<PegasusGame.Tag>)typeof(NativeMatch).GetMethod("ToNativeTags", BindingFlags.Static | BindingFlags.NonPublic)
+            .Invoke(null, new object[] { new Dictionary<GameTag, int> { [SummonSourceTag] = 42, [(GameTag)15000] = 43 } });
+        Check(forwarded.Any(t => t.Name == (int)SummonSourceTag && t.Value == 42)
+            && forwarded.Any(t => t.Name == 15000 && t.Value == 43), "ToNativeTags forwards 1254 and unknown numeric tags");
         int cases = 0;
         foreach (bool bot in new[] { false, true })
         foreach (string id in new[] { "JAIL_877", "JAIL_511", "FIREBALL_GOLEM", "CS2_027", "EX1_025", "CATA_725", "REBORN", "CAP_804" })
@@ -82,7 +87,9 @@ internal static partial class Program
                     summon.Card.Id + " FULL_ENTITY carries final nonzero slot");
                 int creator = victim?.Id ?? source.Id;
                 Expect(SnapshotTag(rows[at], GameTag.CREATOR) == creator, summon.Card.Id + " FULL_ENTITY carries source CREATOR=" + creator);
+                Expect(SnapshotTag(rows[at], SummonSourceTag) == creator, summon.Card.Id + " FULL_ENTITY 1254 equals CREATOR/source");
                 Expect(summon[GameTag.CREATOR] == 0, "wire CREATOR leaves engine state unchanged");
+                Expect(summon[SummonSourceTag] == 0, "wire 1254 leaves engine state unchanged");
                 if (victim != null)
                 {
                     int deaths = rows.FindIndex(e => e.HasPowerStart && (int)e.PowerStart.Type == (int)BlockType.DEATHS);
@@ -164,6 +171,9 @@ internal static partial class Program
             var raw = game.PowerHistory.Full.OfType<PowerHistoryFullEntity>().Single(e => e.Entity.Id == summon.Id);
             if (!raw.Entity.Tags.TryGetValue(GameTag.CREATOR, out int creator) || creator != source.Id)
                 failures.Add($"creator privacy {bot}/{zone}: history FULL lacks source CREATOR");
+            if (!raw.Entity.Tags.TryGetValue(SummonSourceTag, out int summoner) || summoner != source.Id
+                || SnapshotTag(full, SummonSourceTag) != (hidden ? 0 : source.Id) || summon[SummonSourceTag] != 0)
+                failures.Add($"summon source privacy {bot}/{zone}: raw FULL 1254 names source; wire masks hidden source; engine unchanged");
             if (hidden && rows.Any(e => e.HasTagChange && e.TagChange.Entity == summon.Id
                 && e.TagChange.Tag == (int)GameTag.CREATOR && e.TagChange.Value != 0))
                 failures.Add($"creator privacy {bot}/{zone}: CREATOR tag change leaked hidden source");
@@ -178,13 +188,30 @@ internal static partial class Program
             FlushFieldHistory(match);
             var preserved = History(capture, cursor).Single(e => e.HasFullEntity && e.FullEntity.Entity == copy.Id);
             if (SnapshotTag(preserved, GameTag.CREATOR) != owner.Hero.Id) failures.Add("wire overwrote existing CREATOR");
+            if (SnapshotTag(preserved, SummonSourceTag) != owner.Hero.Id) failures.Add("FULL 1254 differs from preserved CREATOR");
             // Already registered public actors exercise TAG_CHANGE rather than a folded FULL_ENTITY.
             FlushFieldHistory(match); cursor = capture.Packets.Count;
             copy[GameTag.CREATOR] = source.Id;
+            game.PowerHistory.Add(PowerHistoryBuilder.TagChange(copy.Id, SummonSourceTag, source.Id));
             FlushFieldHistory(match);
             var change = History(capture, cursor).Single(e => e.HasTagChange && e.TagChange.Entity == copy.Id
                 && e.TagChange.Tag == (int)GameTag.CREATOR);
             if (change.TagChange.Value != (hidden ? 0 : source.Id)) failures.Add("CREATOR delta leaked hidden source");
+            var summonChange = History(capture, cursor).Single(e => e.HasTagChange && e.TagChange.Entity == copy.Id
+                && e.TagChange.Tag == (int)SummonSourceTag);
+            if (summonChange.TagChange.Value != (hidden ? 0 : source.Id) || copy[SummonSourceTag] != 0)
+                failures.Add("1254 delta must mask hidden source without changing engine state");
+            var returning = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_231"), zone: owner.HandZone);
+            FlushFieldHistory(match); cursor = capture.Packets.Count;
+            owner.HandZone.Remove(returning);
+            Generic.SummonBlock(game, returning, -1, source);
+            FlushFieldHistory(match);
+            var revealed = History(capture, cursor).Last(e => e.HasShowEntity && e.ShowEntity.Entity == returning.Id);
+            var rawReveal = game.PowerHistory.Full.OfType<PowerHistoryShowEntity>().Last(e => e.Entity.Id == returning.Id);
+            if (SnapshotTag(revealed, GameTag.CREATOR) != 0 || SnapshotTag(revealed, SummonSourceTag) != (hidden ? 0 : source.Id)
+                || !rawReveal.Entity.Tags.TryGetValue(SummonSourceTag, out int revealSource) || revealSource != source.Id
+                || returning[SummonSourceTag] != 0)
+                failures.Add($"summon source privacy {bot}/{zone}: SHOW 1254 masks hidden source; CREATOR and engine unchanged");
             state = FairBotState.Create(game, owner.Opponent.PlayerId, 77, DeckStyle.Value);
             view = (SabberStoneCore.Model.Game)typeof(FairBotState).GetField("game", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(state);
             if (view.IdEntityDic[copy.Id][GameTag.CREATOR] != 0) failures.Add("AI fair view retained existing hidden CREATOR");
@@ -207,6 +234,8 @@ internal static partial class Program
             var full = History(capture, 0).Single(e => e.HasFullEntity && e.FullEntity.Entity == minion.Id);
             if (SnapshotTag(full, GameTag.CREATOR) != creator || minion[GameTag.CREATOR] != previous)
                 failures.Add(path + ": FULL_ENTITY CREATOR=" + creator + "; engine CREATOR remains " + previous);
+            if (SnapshotTag(full, SummonSourceTag) != creator || minion[SummonSourceTag] != 0)
+                failures.Add(path + ": FULL_ENTITY 1254 equals CREATOR; engine 1254 remains zero");
         }
         ClearBoard();
         var untouchable = EngineEntity.FromCard(owner, Cards.FromId("CS2_231"),
@@ -248,7 +277,7 @@ internal static partial class Program
         Created(observed, "PLAY FULL across block edge", source.Id);
         ClearBoard();
         // Retail recruits reveal with CREATOR=0 (34104_subspell.power.log:38866-38885).
-        void Revealed(Minion minion, int cursor, string path)
+        void Revealed(Minion minion, int cursor, string path, int summoner, int? visibleSummoner = null)
         {
             FlushFieldHistory(match);
             var rows = History(capture, cursor);
@@ -260,6 +289,11 @@ internal static partial class Program
                 failures.Add($"{path}/{(bot ? "opponent" : "owner")}: summon SHOW_ENTITY must not acquire CREATOR");
             if (rows.Any(e => e.HasFullEntity && e.FullEntity.Entity == minion.Id))
                 failures.Add(path + ": existing entity must not be recreated");
+            // Zone entry can reveal first; the final SHOW is the summon fallback carrying its effect source.
+            if (shows.Length == 0 || SnapshotTag(shows.Last(), SummonSourceTag) != (visibleSummoner ?? summoner)
+                || raw == null || !raw.Entity.Tags.TryGetValue(SummonSourceTag, out int rawSource) || rawSource != summoner
+                || minion[SummonSourceTag] != 0)
+                failures.Add($"{path}/{(bot ? "opponent" : "owner")}: summon SHOW 1254 names summoner; engine unchanged");
         }
         // Hidden-zone and flushed no-zone creations cannot fold; neither fallback invents provenance.
         foreach (bool bypass in new[] { false, true })
@@ -272,7 +306,7 @@ internal static partial class Program
             if (fromHand) owner.HandZone.Remove(returning);
             stack = new TaskStack(); stack.AddPlayable(returning);
             new SummonTask().Process(game, owner, source, null, stack);
-            Revealed(returning, cursor, $"refused fold/fromHand={fromHand}/Untouchable={bypass}");
+            Revealed(returning, cursor, $"refused fold/fromHand={fromHand}/Untouchable={bypass}", source.Id);
         }
         ClearBoard();
         foreach (var old in owner.DeckZone.ToArray()) owner.SetasideZone.Add(owner.DeckZone.Remove(old));
@@ -281,7 +315,16 @@ internal static partial class Program
         FlushFieldHistory(match);
         int recruitCursor = capture.Packets.Count;
         InvokeProcess(match, PlayCardTask.Any(owner, gather));
-        Revealed(recruit, recruitCursor, "Gather Your Party deck recruit");
+        Revealed(recruit, recruitCursor, "Gather Your Party deck recruit", gather.Id);
+        var recruitRows = History(capture, recruitCursor);
+        int revealAt = recruitRows.FindIndex(e => e.HasShowEntity && e.ShowEntity.Entity == recruit.Id);
+        // 1254 names only the public recruiting spell, never the pulled card; it reveals nothing before SHOW_ENTITY does.
+        if (gather.Zone.Type != SabberStoneCore.Enums.Zone.GRAVEYARD || gather.Id == recruit.Id
+            || !recruitRows.Take(revealAt).Any(e => e.HasPowerStart && e.PowerStart.Source == gather.Id
+                && (int)e.PowerStart.Type == (int)BlockType.PLAY)
+            || !recruitRows.Take(revealAt).Any(e => e.HasTagChange && e.TagChange.Entity == gather.Id
+                && e.TagChange.Tag == (int)GameTag.ZONE && e.TagChange.Value == (int)SabberStoneCore.Enums.Zone.PLAY))
+            failures.Add("deck recruit: 1254 source must be public/in cast before pulled card SHOW_ENTITY");
         foreach (var zone in new[] { owner.HandZone, (SabberStoneCore.Model.Zones.Zone<IPlayable>)owner.DeckZone })
         {
             var deferred = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_231"), zone: zone);
@@ -289,21 +332,22 @@ internal static partial class Program
             int cursor = capture.Packets.Count;
             SwapRules.DeferSummon(deferred);
             game.DeathProcessingAndAuraUpdate(); // Resolves the queued hand/deck summon with itself as summoner.
-            Revealed(deferred, cursor, "ResolveDeferredSummons from " + zone.Type);
+            Revealed(deferred, cursor, "ResolveDeferredSummons from " + zone.Type, deferred.Id);
         }
         var outgoing = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_182"), zone: owner.BoardZone);
         var incoming = (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId("CS2_231"), zone: owner.Opponent.HandZone);
         FlushFieldHistory(match);
         int swapCursor = capture.Packets.Count;
         Check(SwapRules.ExchangeBoardAndHand(outgoing, incoming), "board/hand exchange succeeds");
-        Revealed(incoming, swapCursor, "SwapRules.ExchangeBoardAndHand");
+        Revealed(incoming, swapCursor, "SwapRules.ExchangeBoardAndHand", outgoing.Id, bot ? outgoing.Id : 0);
         var simulation = new SabberStoneCore.Model.Game(new SabberStoneCore.Config.GameConfig {
             RandomSeed = 77, StartPlayer = 1, SkipMulligan = true, History = false, Logging = false });
         simulation.StartGame();
         var simulatedOwner = simulation.CurrentPlayer;
         var simulated = (Minion)EngineEntity.FromCard(simulatedOwner, Cards.FromId("CS2_231"));
         Generic.SummonBlock(simulation, simulated, -1, simulatedOwner.Hero);
-        if (simulation.History || simulated[GameTag.CREATOR] != 0) failures.Add("History=false leaves engine CREATOR unchanged");
+        if (simulation.History || simulated[GameTag.CREATOR] != 0 || simulated[SummonSourceTag] != 0)
+            failures.Add("History=false leaves engine CREATOR/1254 unchanged");
         capture.SerializeAll();
     }
 
