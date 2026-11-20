@@ -87,7 +87,8 @@ internal static class LocationProof
                     && session.Client.Entities[depths.Id].Get(GameTag.DAMAGE) == 1, "DurabilityDamageEncoding");
                 Check(depths.IsExhausted && depths[GameTag.LOCATION_ACTION_COOLDOWN] == 1, "closed");
                 Step(player.Options().OfType<ActivateLocationTask>().Single(t => t.Source == network));
-                Check(player.BoardZone.GetSlot(network.ZonePosition + 1).Card.Id == "JAIL_877t", "Unpinned_LocationSummonPosition");
+                // Owner's retail Underbelly Network video; Construct Quarter, hsreplay-test-data 176014_opponent_sideboard.power.log:3678-3722.
+                Check(player.BoardZone.GetSlot(network.ZonePosition - 1).Card.Id == "JAIL_877t", "Pinned_LocationSummonPosition");
                 Check(session.Client.Entities[depths.Id].CardId == depths.Card.Id
                     && session.Client.Entities[network.Id].CardId == network.Card.Id, "both perspectives visible on board");
                 Step(EndTurnTask.Any(player));

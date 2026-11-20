@@ -167,7 +167,7 @@ namespace SabberStoneCore.Tasks.SimpleTasks
                     case SummonSide.DEFAULT: case SummonSide.SPELL: return -1;
                     case SummonSide.NUMBER: position = number - 1; break;
                     case SummonSide.DEATHRATTLE: position = location.LastBoardPosition; break;
-                    case SummonSide.LEFT: break; // A retired location retains the slot captured before its activation.
+                    case SummonSide.LEFT: break; // A retired location's slot advances after each summon there.
                     case SummonSide.RIGHT: if (location.Zone == location.Controller.BoardZone) position++; break;
                     case SummonSide.ALTERNATE:
                         position += alternateCount % 2 == 0 ? -alternateCount / 2 : alternateCount / 2 + 1;

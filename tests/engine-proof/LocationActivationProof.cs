@@ -16,11 +16,11 @@ internal static class LocationActivationProof
         Pinned_ActivationTargetsElusive();
         PinnedRule_ActivationTargetsStealthImmune();
         Unpinned_FullBoardSummonActivation();
-        Retail_LocationSummonPosition();
+        Pinned_LocationSummonPosition();
         ActivationSignals();
         PureValidation();
         Rejections();
-        Console.WriteLine("PASS location activation; DurabilityDamageEncoding, CooldownTraceTiming, ActivationTraceOrder, Pinned_ActivationTargetsElusive, PinnedRule_ActivationTargetsStealthImmune, Unpinned_FullBoardSummonActivation, Retail_LocationSummonPosition");
+        Console.WriteLine("PASS location activation; DurabilityDamageEncoding, CooldownTraceTiming, ActivationTraceOrder, Pinned_ActivationTargetsElusive, PinnedRule_ActivationTargetsStealthImmune, Unpinned_FullBoardSummonActivation, Pinned_LocationSummonPosition");
     }
     private static void CooldownTraceTiming()
     {
@@ -165,7 +165,8 @@ internal static class LocationActivationProof
         int summon = entries.FindIndex(e => e is PowerHistoryFullEntity f && f.Entity.Id == p.BoardZone.GetSlot(0).Id);
         L.Check(retire >= 0 && summon > retire, "graveyard before summoned entity");
     }
-    private static void Retail_LocationSummonPosition()
+    // Owner's retail Underbelly Network video; Construct Quarter, hsreplay-test-data 176014_opponent_sideboard.power.log:3678-3722.
+    private static void Pinned_LocationSummonPosition()
     {
         foreach (int pos in new[] { 0, 1, 2 })
         {

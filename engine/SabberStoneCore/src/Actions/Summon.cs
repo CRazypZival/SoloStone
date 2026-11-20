@@ -111,6 +111,11 @@ namespace SabberStoneCore.Actions
         {
             using (game.History ? game.PowerHistory.Visual(game, Presentation.VisualPhase.Summon, summoner as IPlayable, minion) : null)
                 SummonPhase(game, minion, position, summoner?.Id ?? 0);
+            var location = summoner as BoardObject ?? (summoner as Enchantment)?.Target as BoardObject;
+            // Advance a retired location's slot just as inserting before a living location shifts it right.
+            if (location != null && location.Controller == minion.Controller && location.Zone != location.Controller.BoardZone
+                && minion.Zone == minion.Controller.BoardZone && minion.ZonePosition == location.LastBoardPosition)
+                location.LastBoardPosition++;
             DeathContextRules.Summoned(minion, summoner);
         }
 

@@ -15,15 +15,16 @@ internal static class LocationSummonPositionProof
             "CATA_527", "TLC_433t2", "TLC_100t1", "TLC_100t2", "TLC_100t3" })
         foreach (bool final in new[] { false, true })
         foreach (bool triggered in id == "JAIL_887" ? new[] { false, true } : new[] { false })
+        foreach (bool sparse in id == "TLC_100t3" ? new[] { false, true } : new[] { false })
         {
-            try { SummonInSlot(id, final, triggered); }
-            catch (Exception e) { failures.Add($"{id} final={final} triggered={triggered}: {e.Message}"); }
+            try { SummonInSlot(id, final, triggered, sparse); }
+            catch (Exception e) { failures.Add($"{id} final={final} triggered={triggered} sparse={sparse}: {e.Message}"); }
         }
         L.Check(failures.Count == 0, string.Join("\n", failures));
-        Console.WriteLine("PASS location summon positions: 19 definitions, 40 cases, living/final charge or Deathrattle, minions on both sides");
+        Console.WriteLine("PASS location summon positions and creation order: 19 definitions, 42 cases, living/final charge or Deathrattle, mixed/sparse rows");
     }
 
-    private static void SummonInSlot(string id, bool final, bool triggered)
+    private static void SummonInSlot(string id, bool final, bool triggered, bool sparse)
     {
         var game = L.Game(); var p = game.Player1;
         var left = L.Minion(p, "EX1_043");
@@ -33,7 +34,7 @@ internal static class LocationSummonPositionProof
             definition = CompositeLocationRules.Compose(definition, Cards.FromId(id + "5"),
                 Cards.FromId(id + (id == "TLC_100t1" ? "6" : "7")));
         var source = (BoardObject)Entity.FromCard(p, definition, zone: p.BoardZone);
-        var right = L.Minion(p);
+        var right = sparse ? null : L.Minion(p);
         int slot = source.ZonePosition;
         var existing = p.BoardZone.Select(m => m.Id).ToHashSet();
         bool deathrattle = triggered || id is "CATA_527" or "TLC_433t2";
@@ -51,14 +52,16 @@ internal static class LocationSummonPositionProof
             while (p.Choice != null) B16AutoplayProof.Answer(game, id == "JAIL_887" ? p.HandZone.First().Id : 0);
         }
         var summons = p.BoardZone.Where(m => !existing.Contains(m.Id)).ToArray();
-        int expected = id == "TIME_890t2" ? 2 : composite ? (id == "TLC_100t1" ? 1 : id == "TLC_100t2" ? 3 : final ? 5 : 4) : !triggered && final && id == "JAIL_887" ? 2 : 1;
-        // A living Fire Plume Ridge fills the row before its copy component can summon.
+        int expected = id == "TIME_890t2" ? 2 : composite ? (id == "TLC_100t1" ? 1 : id == "TLC_100t2" ? 3 : final || sparse ? 5 : 4) : !triggered && final && id == "JAIL_887" ? 2 : 1;
+        // With both neighbours, a living Fire Plume Ridge fills the row before its copy component can summon.
         L.Check(summons.Length == expected, $"expected {expected} summons, got {summons.Length}");
+        L.Check(summons.Select(m => m.Id).SequenceEqual(summons.Select(m => m.Id).OrderBy(id => id)),
+            "summons stay left to right in creation order: " + string.Join(", ", summons.Select(m => $"{m.Card.Id}#{m.Id}")));
         L.Check(left.ZonePosition == 0 && summons[0].ZonePosition == slot, "first summon takes location's former slot");
         bool remains = !final;
         L.Check((source.Zone == p.BoardZone) == remains, "location survives only the non-final case");
         L.Check(!remains || source.ZonePosition == slot + summons.Length, "living location shifts right of its summons");
-        L.Check(right.ZonePosition == slot + summons.Length + (remains ? 1 : 0), "right neighbour shifts past summons/location");
+        L.Check(right == null || right.ZonePosition == slot + summons.Length + (remains ? 1 : 0), "right neighbour shifts past summons/location");
         L.Check(p.BoardZone.Slots.Select(e => e.ZonePosition).SequenceEqual(Enumerable.Range(0, p.BoardZone.SlotCount)), "contiguous physical slots");
     }
 }

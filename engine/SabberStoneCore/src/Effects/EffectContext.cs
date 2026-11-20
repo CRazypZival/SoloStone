@@ -91,6 +91,7 @@ namespace SabberStoneCore.EffectSystem
 
         public void GiveBuff(int targetId, string enchantmentId, int amount) =>
             Generic.AddEnchantmentBlock(_game, Cards.FromId(enchantmentId), (IPlayable)Source, Target(targetId), amount, amount);
+        // Owner's retail Underbelly Network video; Construct Quarter, hsreplay-test-data 176014_opponent_sideboard.power.log:3678-3722.
         public int SummonAtLocation(string cardId)
         {
             int alternate = 0;
