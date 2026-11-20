@@ -137,7 +137,7 @@ internal static partial class Program
             capture.SerializeAll();
             cases++;
         }
-        EffectSummonCreatorPaths(failures);
+        foreach (bool bot in new[] { false, true }) EffectSummonCreatorPaths(failures, bot);
         EffectSummonCreatorPrivacy(failures);
         Check(failures.Count == 0, string.Join("\n", failures));
         Console.WriteLine($"PASS effect summon slots: {cases} cases, both seats, location/Deathrattle/spell/Battlecry/Herald/Reborn/copy");
@@ -192,9 +192,9 @@ internal static partial class Program
         }
     }
 
-    private static void EffectSummonCreatorPaths(List<string> failures)
+    private static void EffectSummonCreatorPaths(List<string> failures, bool bot)
     {
-        var (match, capture) = AnimationMatch();
+        var (match, capture) = AnimationMatch(bot);
         var game = match.Game; var owner = game.CurrentPlayer; var source = owner.Hero;
         void ClearBoard()
         {
@@ -247,21 +247,56 @@ internal static partial class Program
         Generic.SummonBlock(game, observed, -1, source);
         Created(observed, "PLAY FULL across block edge", source.Id);
         ClearBoard();
-        // Hidden-zone and flushed creations cannot fold; SHOW_ENTITY still carries wire-only provenance.
+        // Retail recruits reveal with CREATOR=0 (34104_subspell.power.log:38866-38885).
+        void Revealed(Minion minion, int cursor, string path)
+        {
+            FlushFieldHistory(match);
+            var rows = History(capture, cursor);
+            var shows = rows.Where(e => e.HasShowEntity && e.ShowEntity.Entity == minion.Id).ToArray();
+            var raw = game.PowerHistory.Full.OfType<PowerHistoryShowEntity>().LastOrDefault(e => e.Entity.Id == minion.Id);
+            if (minion.Zone != owner.BoardZone || shows.Length == 0 || shows.Any(e => SnapshotTag(e, GameTag.CREATOR) != 0)
+                || raw == null || raw.Entity.Tags.TryGetValue(GameTag.CREATOR, out int creator) && creator != 0
+                || minion[GameTag.CREATOR] != 0)
+                failures.Add($"{path}/{(bot ? "opponent" : "owner")}: summon SHOW_ENTITY must not acquire CREATOR");
+            if (rows.Any(e => e.HasFullEntity && e.FullEntity.Entity == minion.Id))
+                failures.Add(path + ": existing entity must not be recreated");
+        }
+        // Hidden-zone and flushed no-zone creations cannot fold; neither fallback invents provenance.
         foreach (bool bypass in new[] { false, true })
+        foreach (bool fromHand in new[] { true, false })
         {
             var returning = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_231"),
-                new Dictionary<GameTag, int> { [GameTag.UNTOUCHABLE] = bypass ? 1 : 0 }, zone: owner.HandZone);
+                new Dictionary<GameTag, int> { [GameTag.UNTOUCHABLE] = bypass ? 1 : 0 }, zone: fromHand ? owner.HandZone : null);
             FlushFieldHistory(match);
             int cursor = capture.Packets.Count;
-            owner.HandZone.Remove(returning);
+            if (fromHand) owner.HandZone.Remove(returning);
             stack = new TaskStack(); stack.AddPlayable(returning);
             new SummonTask().Process(game, owner, source, null, stack);
-            FlushFieldHistory(match);
-            var show = History(capture, cursor).LastOrDefault(e => e.HasShowEntity && e.ShowEntity.Entity == returning.Id);
-            if (show == null || SnapshotTag(show, GameTag.CREATOR) != source.Id || returning[GameTag.CREATOR] != 0)
-                failures.Add("refused fold/Untouchable=" + bypass + ": SHOW_ENTITY creator is wire-only");
+            Revealed(returning, cursor, $"refused fold/fromHand={fromHand}/Untouchable={bypass}");
         }
+        ClearBoard();
+        foreach (var old in owner.DeckZone.ToArray()) owner.SetasideZone.Add(owner.DeckZone.Remove(old));
+        var recruit = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_231"), zone: owner.DeckZone);
+        var gather = EngineEntity.FromCard(owner, Cards.FromId("LOOT_370"), zone: owner.HandZone); // Gather Your Party: RecruitTask.
+        FlushFieldHistory(match);
+        int recruitCursor = capture.Packets.Count;
+        InvokeProcess(match, PlayCardTask.Any(owner, gather));
+        Revealed(recruit, recruitCursor, "Gather Your Party deck recruit");
+        foreach (var zone in new[] { owner.HandZone, (SabberStoneCore.Model.Zones.Zone<IPlayable>)owner.DeckZone })
+        {
+            var deferred = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_231"), zone: zone);
+            FlushFieldHistory(match);
+            int cursor = capture.Packets.Count;
+            SwapRules.DeferSummon(deferred);
+            game.DeathProcessingAndAuraUpdate(); // Resolves the queued hand/deck summon with itself as summoner.
+            Revealed(deferred, cursor, "ResolveDeferredSummons from " + zone.Type);
+        }
+        var outgoing = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_182"), zone: owner.BoardZone);
+        var incoming = (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId("CS2_231"), zone: owner.Opponent.HandZone);
+        FlushFieldHistory(match);
+        int swapCursor = capture.Packets.Count;
+        Check(SwapRules.ExchangeBoardAndHand(outgoing, incoming), "board/hand exchange succeeds");
+        Revealed(incoming, swapCursor, "SwapRules.ExchangeBoardAndHand");
         var simulation = new SabberStoneCore.Model.Game(new SabberStoneCore.Config.GameConfig {
             RandomSeed = 77, StartPlayer = 1, SkipMulligan = true, History = false, Logging = false });
         simulation.StartGame();

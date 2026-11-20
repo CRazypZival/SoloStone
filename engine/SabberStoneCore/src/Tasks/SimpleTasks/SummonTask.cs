@@ -145,8 +145,9 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 				{
                     var historyFrom = game.History ? (game.PowerHistory.Full.Count, game.PowerHistory.Last.Count) : default;
 					controller.BoardZone.Add(summonEntity, summonPosition);
+                    // Unlike the old Untouchable bypass, a refused fold now emits SHOW_ENTITY to reveal the minion.
                     if (game.History && !game.PowerHistory.PublishCreatedInPlay(summonEntity, historyFrom, source?.Id ?? 0))
-                        game.PowerHistory.Add(PowerHistoryBuilder.ShowEntity(summonEntity, source?.Id ?? 0));
+                        game.PowerHistory.Add(PowerHistoryBuilder.ShowEntity(summonEntity));
 				}
 				else
 					Generic.SummonBlock.Invoke(game, summonEntity, summonPosition, source);

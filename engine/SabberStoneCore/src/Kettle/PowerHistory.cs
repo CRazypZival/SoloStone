@@ -293,7 +293,7 @@ namespace SabberStoneCore.Kettle
             int alternate = (int)Actions.CostRules.PaymentKind(playable);
             if (alternate != 0) tags[GameTag.CARD_ALTERNATE_COST] = alternate;
             else tags.Remove(GameTag.CARD_ALTERNATE_COST);
-            // Summon provenance is wire-only, including when its FULL_ENTITY cannot be folded.
+            // Only PublishCreatedInPlay's known PLAY snapshot supplies creatorId; fallback reveals invent no provenance.
             if (creatorId != 0 && (!tags.TryGetValue(GameTag.CREATOR, out int creator) || creator == 0))
                 tags[GameTag.CREATOR] = creatorId;
 			//tags[GameTag.TAG_LAST_KNOWN_COST_IN_HAND] = playable[GameTag.COST];
@@ -1165,6 +1165,7 @@ namespace SabberStoneCore.Kettle
         // FULL_ENTITY is published as created in PLAY with its state at summon (34104_subspell.power.log:35320-35341, a
         // reborn Colossus of the Moon: ZONE=PLAY, DAMAGE=9 in the FULL_ENTITY), and its own TAG_CHANGEs fold into it.
         // False (the caller sends SHOW_ENTITY) for a summon from a hidden zone, a hand or a deck, or across a flushed packet.
+        // shortcut: even a no-zone creation loses injected CREATOR after a flush; restore only with proof it never visited HAND/DECK.
         internal bool PublishCreatedInPlay(IPlayable playable, (int Full, int Last) from, int creatorId = 0)
         {
             if (!_enabled) return false;
