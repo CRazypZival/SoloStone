@@ -52,6 +52,7 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 		{
 			var playable = source as IPlayable;
 			if (playable == null || controller == null) return TaskState.STOP;
+			if (controller.PlayState != PlayState.PLAYING || controller.Hero.IsDead) return TaskState.COMPLETE;
 
 			// The source is the played Jaraxxus, which leaves play. A Deathrattle source (Majordomo Executus) stays where it is: dead in the
 			// graveyard, or alive when its Deathrattle is triggered.

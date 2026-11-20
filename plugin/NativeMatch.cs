@@ -3366,8 +3366,8 @@ public sealed class NativeMatch
 #endif
                 packet.List.Add(native);
 #if ENGINE_SOURCE
-                if (FoldHeroReplacementSpawnZone(native, entries, index)
-                    && native.FullEntity.Tags.Any(tag => tag.Name == (int)GameTag.CARDTYPE && tag.Value == (int)CardType.WEAPON))
+                FoldHeroReplacementSpawnZone(native, entries, index);
+                if (IsHeroReplacementWeapon(native))
                     MoveJaraxxusPowerCreation(packet, line => BotTrace?.Invoke(line));
 #endif
                 if (native.HasHideEntity && visibleTransportTags.TryGetValue(native.HideEntity.Entity, out var hidingTags)
@@ -4441,24 +4441,39 @@ public sealed class NativeMatch
     // Hero-swap spells read the FULL snapshot's zone before queued TAG_CHANGE rows execute.
     private bool FoldHeroReplacementSpawnZone(PowerHistoryData row, List<IPowerHistoryEntry> entries, int index)
     {
-        if (visualBlockSources.Count == 0 || !row.HasFullEntity || index + 1 >= entries.Count
-            || !(entries[index + 1] is SabberStoneCore.Kettle.PowerHistoryTagChange move)
-            || move.EntityId != row.FullEntity.Entity || move.Tag != GameTag.ZONE || move.Value != (int)EngineZone.PLAY)
-            return false;
+        if (visualBlockSources.Count == 0 || !row.HasFullEntity) return false;
         var full = row.FullEntity;
         var zone = full.Tags.SingleOrDefault(tag => tag.Name == (int)GameTag.ZONE);
         if (zone == null || zone.Value != (int)EngineZone.INVALID) return false;
         int type = full.Tags.FirstOrDefault(tag => tag.Name == (int)GameTag.CARDTYPE)?.Value ?? 0;
-        if (type != (int)CardType.HERO)
+        if (type != (int)CardType.HERO && !IsHeroReplacementWeapon(row)) return false;
+        // Equipping can retire an old weapon between the new weapon's FULL and its move to PLAY.
+        for (int at = index + 1; at < entries.Count; at++)
         {
-            if (type != (int)CardType.WEAPON) return false;
-            int controller = full.Tags.FirstOrDefault(tag => tag.Name == (int)GameTag.CONTROLLER)?.Value ?? 0;
-            int player = controller == Game.Player1.PlayerId ? Game.Player1.Id
-                : controller == Game.Player2.PlayerId ? Game.Player2.Id : 0;
-            if (player == 0 || !replacedHeroBlockDepths.ContainsKey(player)) return false;
+            var entry = entries[at];
+            if (entry is PowerHistoryBlockStart || entry is PowerHistoryBlockEnd
+                || entry is SabberStoneCore.Kettle.PowerHistorySubSpellStart || entry is SabberStoneCore.Kettle.PowerHistorySubSpellEnd) return false;
+            if (entry is SabberStoneCore.Kettle.PowerHistoryTagChange move && move.EntityId == full.Entity)
+            {
+                if (move.Tag != GameTag.ZONE || move.Value != (int)EngineZone.PLAY) return false;
+                zone.Value = (int)EngineZone.PLAY;
+                return true;
+            }
+            if (type == (int)CardType.HERO || SnapshotOrHideEntity(entry) == full.Entity
+                || entry is SabberStoneCore.Kettle.PowerHistoryMetaData meta && meta.Info.Contains(full.Entity)
+                || entry is PowerHistoryRetainedOverdraw burn && burn.Entity.Id == full.Entity) return false;
         }
-        zone.Value = (int)EngineZone.PLAY;
-        return true;
+        return false;
+    }
+
+    private bool IsHeroReplacementWeapon(PowerHistoryData row)
+    {
+        if (visualBlockSources.Count == 0 || !row.HasFullEntity
+            || !row.FullEntity.Tags.Any(tag => tag.Name == (int)GameTag.CARDTYPE && tag.Value == (int)CardType.WEAPON)) return false;
+        int controller = row.FullEntity.Tags.FirstOrDefault(tag => tag.Name == (int)GameTag.CONTROLLER)?.Value ?? 0;
+        int player = controller == Game.Player1.PlayerId ? Game.Player1.Id
+            : controller == Game.Player2.PlayerId ? Game.Player2.Id : 0;
+        return player != 0 && replacedHeroBlockDepths.ContainsKey(player);
     }
 
     private static void MoveJaraxxusPowerCreation(NativePowerHistory packet, Action<string> warn)

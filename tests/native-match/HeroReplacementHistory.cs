@@ -212,6 +212,7 @@ internal static partial class Program
         JaraxxusOnPlayTriggerHistory(bot: true, holmes: false, dump);
         JaraxxusPowerCreationScopes();
         LegacyJaraxxusNpcHistory(dump);
+        HeroReplacementWithWeaponHistory(dump);
         MajordomoReplacementHistory(dump);
         OrdinaryWeaponSpawnZones();
         HeroReplacementSpawnZoneScopes();
@@ -329,6 +330,60 @@ internal static partial class Program
         Console.WriteLine("PASS hero replacement NPC legacy Jaraxxus: FULL snapshots and balanced blocks");
     }
 
+    private static void HeroReplacementWithWeaponHistory(bool dump)
+    {
+        foreach (bool npc in new[] { false, true })
+        foreach (string cardId in new[] { "CORE_EX1_323", "EX1_323", "ICC_834" })
+        {
+            var (match, capture) = AnimationMatch(botTurn: npc, deck: NpcCatalog.All[0].DeckId);
+            var owner = match.Game.CurrentPlayer;
+            var axe = Generic.DrawCard(owner, Cards.FromId("CS2_106"));
+            InvokeProcess(match, owner.Options().Single(task => task.PlayerTaskType == PlayerTaskType.PLAY_CARD && task.Source?.Id == axe.Id));
+            Check(owner.Hero.Weapon == axe, "fixture equips Fiery War Axe through the engine");
+            owner.UsedMana = 0;
+            var source = Generic.DrawCard(owner, Cards.FromId(cardId));
+            int oldHero = owner.Hero.Id, oldPower = owner.Hero.HeroPower.Id;
+            FlushFieldHistory(match);
+            int cursor = capture.Packets.Count;
+            if (npc)
+            {
+                var task = owner.Options().Single(option => option.PlayerTaskType == PlayerTaskType.PLAY_CARD && option.Source?.Id == source.Id);
+                match.ActNpc(new GoldenDecision(BotAction.From(task), 0, 1, 1, "Exhausted", null, null));
+            }
+            else
+            {
+                typeof(NativeMatch).GetMethod("SendHumanOptions", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(match, null);
+                var options = capture.Last<AllOptions>(14);
+                int play = options.Options.FindIndex(option => option.MainOption?.Id == source.Id && option.MainOption.PowerKeyword == 0);
+                Check(play >= 0, cardId + " native play option with weapon equipped");
+                match.SendOption(options.Id, play, 0, -1, source.Card.Type == CardType.MINION ? 1 : 0);
+            }
+            var history = History(capture, cursor);
+            string label = cardId + " with equipped weapon, seat " + owner.PlayerId;
+            var weapon = owner.Hero.Weapon;
+            var full = history.Single(row => row.HasFullEntity && row.FullEntity.Entity == weapon.Id);
+            Check(SnapshotTag(full, GameTag.ZONE) == (int)SabberStoneCore.Enums.Zone.PLAY
+                && SnapshotTag(full, GameTag.CONTROLLER) == owner.PlayerId, label + " weapon FULL owns PLAY and CONTROLLER");
+            Check(owner.GraveyardZone.Contains(axe) && history.Any(row => IsZone(row, axe.Id, SabberStoneCore.Enums.Zone.GRAVEYARD)),
+                label + " retires old weapon");
+            Check(owner.Choice == null && !match.Game.Resolution.HasSuspendedEffect, label + " completes resolution");
+            if (cardId != "ICC_834")
+            {
+                int power = history.FindIndex(row => row.HasPowerStart && row.PowerStart.Type == HistoryBlock.Type.POWER && row.PowerStart.Source == source.Id);
+                Check(power >= 0, label + " opens weapon POWER");
+                CheckJaraxxusSpawnZones(history, owner.PlayerId);
+                CheckJaraxxusTaskList(history, power, label);
+                Check(weapon.Card.Id == "EX1_323w" && owner.Hero.HeroPower.Card.Id == "EX1_tk33", label + " equips Blood Fury and INFERNO!");
+                if (cardId == "EX1_323") CheckReplacementHeroFull(history, owner.Hero.Id, oldHero, owner.PlayerId, label);
+            }
+            else Check(weapon.Card.Id == "ICC_834w", label + " equips Shadowmourne");
+            CheckReplacementBlocks(history, label);
+            if (dump) DumpHeroReplacement(label, source.Id, oldHero, oldPower, history);
+            capture.SerializeAll();
+            Console.WriteLine("PASS hero replacement " + label + ": spawn zones, POWER tasks, old weapon retirement and balanced blocks");
+        }
+    }
+
     private static void MajordomoReplacementHistory(bool dump)
     {
         foreach (bool npcOwner in new[] { false, true })
@@ -422,7 +477,8 @@ internal static partial class Program
         SabberStoneCore.Kettle.IPowerHistoryEntry Hero(int player) => new SabberStoneCore.Kettle.PowerHistoryTagChange {
             EntityId = player, Tag = GameTag.HERO_ENTITY, Value = 70 };
         void Case(string label, int type, SabberStoneCore.Kettle.IPowerHistoryEntry[] prefix, bool expected,
-            int zone = 0, int destination = 1, int moving = 72, bool continuation = false)
+            int zone = 0, int destination = 1, int moving = 72, bool continuation = false,
+            SabberStoneCore.Kettle.IPowerHistoryEntry[] between = null)
         {
             int depth = 0;
             foreach (var entry in prefix)
@@ -434,8 +490,9 @@ internal static partial class Program
             var row = new PowerHistoryData { FullEntity = new PegasusGame.PowerHistoryEntity { Entity = 72, Name = "arbitrary",
                 Tags = new List<PegasusGame.Tag> { new() { Name = (int)GameTag.CARDTYPE, Value = type },
                     new() { Name = (int)GameTag.ZONE, Value = zone }, new() { Name = (int)GameTag.CONTROLLER, Value = match.Game.Player1.PlayerId } } } };
-            var entries = prefix.Concat(new SabberStoneCore.Kettle.IPowerHistoryEntry[] {
-                new SabberStoneCore.Kettle.PowerHistoryFullEntity(), new SabberStoneCore.Kettle.PowerHistoryTagChange {
+            var entries = prefix.Concat(new SabberStoneCore.Kettle.IPowerHistoryEntry[] { new SabberStoneCore.Kettle.PowerHistoryFullEntity() })
+                .Concat(between ?? Array.Empty<SabberStoneCore.Kettle.IPowerHistoryEntry>())
+                .Concat(new SabberStoneCore.Kettle.IPowerHistoryEntry[] { new SabberStoneCore.Kettle.PowerHistoryTagChange {
                     EntityId = moving, Tag = GameTag.ZONE, Value = destination } }).ToList();
             if (continuation) entries.RemoveRange(0, prefix.Length);
             bool folded = (bool)method.Invoke(match, new object[] { row, entries, continuation ? 0 : prefix.Length });
@@ -447,6 +504,17 @@ internal static partial class Program
         Case("hero outside any block", 3, Array.Empty<SabberStoneCore.Kettle.IPowerHistoryEntry>(), false);
         Case("weapon in the same block as the swap", 7, new[] { Start(), Hero(owner) }, true);
         Case("weapon in nested POWER", 7, new[] { Start(), Hero(owner), Start() }, true);
+        var unrelated = new SabberStoneCore.Kettle.PowerHistoryTagChange { EntityId = 73, Tag = GameTag.ZONE, Value = 4 };
+        var sameEntity = new SabberStoneCore.Kettle.PowerHistoryTagChange { EntityId = 72, Tag = GameTag.ATK, Value = 3 };
+        Case("weapon skips unrelated retirement row", 7, new[] { Start(), Hero(owner) }, true, between: new[] { unrelated });
+        Case("weapon's first reference must be ZONE PLAY", 7, new[] { Start(), Hero(owner) }, false, between: new[] { sameEntity });
+        Case("weapon cannot cross block end", 7, new[] { Start(), Hero(owner) }, false, between: new[] { End() });
+        Case("weapon cannot cross block start", 7, new[] { Start(), Hero(owner) }, false, between: new[] { Start() });
+        Case("weapon cannot cross metadata naming it", 7, new[] { Start(), Hero(owner) }, false,
+            between: new[] { new SabberStoneCore.Kettle.PowerHistoryMetaData { Info = new List<int> { 72 } } });
+        Case("weapon cannot cross snapshot naming it", 7, new[] { Start(), Hero(owner) }, false,
+            between: new[] { new SabberStoneCore.Kettle.PowerHistoryShowEntity { Entity = new SabberStoneCore.Kettle.PowerHistoryEntity { Id = 72 } } });
+        Case("hero still requires adjacent move", 3, new[] { Start() }, false, between: new[] { unrelated });
         Case("weapon after completed sibling", 7, new[] { Start(), Start(), Hero(owner), End(), Start() }, false);
         Case("weapon in a sibling block after the swap block ended, same outer block", 7,
             new[] { Start(), Start(), Hero(owner), End(), Start(), Start() }, false);
