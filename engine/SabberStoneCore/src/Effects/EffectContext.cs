@@ -91,11 +91,10 @@ namespace SabberStoneCore.EffectSystem
 
         public void GiveBuff(int targetId, string enchantmentId, int amount) =>
             Generic.AddEnchantmentBlock(_game, Cards.FromId(enchantmentId), (IPlayable)Source, Target(targetId), amount, amount);
-        public int SummonRightOfLocation(string cardId)
+        public int SummonAtLocation(string cardId)
         {
-            var source = (BoardObject)Source;
-            int position = source.Zone == Controller.BoardZone ? source.ZonePosition + 1 : source.LastBoardPosition;
-            return Summon(cardId, Math.Min(position, Controller.BoardZone.SlotCount));
+            int alternate = 0;
+            return Summon(cardId, SummonTask.GetPosition(Source, SummonSide.LEFT, 0, ref alternate));
         }
 
         public void AdvanceLocationStage(string nextCardId) => LocationRules.AdvanceStage((BoardObject)Source, nextCardId);

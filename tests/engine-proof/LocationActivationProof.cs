@@ -16,11 +16,11 @@ internal static class LocationActivationProof
         Pinned_ActivationTargetsElusive();
         PinnedRule_ActivationTargetsStealthImmune();
         Unpinned_FullBoardSummonActivation();
-        Unpinned_LocationSummonPosition();
+        Retail_LocationSummonPosition();
         ActivationSignals();
         PureValidation();
         Rejections();
-        Console.WriteLine("PASS location activation; DurabilityDamageEncoding, CooldownTraceTiming, ActivationTraceOrder, Pinned_ActivationTargetsElusive, PinnedRule_ActivationTargetsStealthImmune, Unpinned_FullBoardSummonActivation, Unpinned_LocationSummonPosition");
+        Console.WriteLine("PASS location activation; DurabilityDamageEncoding, CooldownTraceTiming, ActivationTraceOrder, Pinned_ActivationTargetsElusive, PinnedRule_ActivationTargetsStealthImmune, Unpinned_FullBoardSummonActivation, Retail_LocationSummonPosition");
     }
     private static void CooldownTraceTiming()
     {
@@ -165,7 +165,7 @@ internal static class LocationActivationProof
         int summon = entries.FindIndex(e => e is PowerHistoryFullEntity f && f.Entity.Id == p.BoardZone.GetSlot(0).Id);
         L.Check(retire >= 0 && summon > retire, "graveyard before summoned entity");
     }
-    private static void Unpinned_LocationSummonPosition()
+    private static void Retail_LocationSummonPosition()
     {
         foreach (int pos in new[] { 0, 1, 2 })
         {
@@ -174,14 +174,14 @@ internal static class LocationActivationProof
             var network = L.Location(p, "JAIL_877", pos);
             L.Use(network);
             var firstRat = p.BoardZone.Single(m => m.Card.Id == "JAIL_877t");
-            L.Check(firstRat.ZonePosition == pos + 1, "nonfinal summon immediately right");
+            L.Check(firstRat.ZonePosition == pos && network.ZonePosition == pos + 1, "nonfinal summon takes location slot");
             L.End(game); L.End(game); L.End(game); L.End(game); L.Use(network);
             var finalRat = p.BoardZone.Single(m => m.Card.Id == "JAIL_877t" && m.Id != firstRat.Id);
-            L.Check(finalRat.ZonePosition == pos && p.BoardZone.GetSlot(pos).Id == finalRat.Id, "new final-charge Rat at former location index");
+            L.Check(finalRat.ZonePosition == pos + 1 && p.BoardZone.GetSlot(pos + 1).Id == finalRat.Id, "new final-charge Rat at former location index");
             int[][] expected = {
-                new[] { finalRat.Id, firstRat.Id, left.Id, right.Id },
-                new[] { left.Id, finalRat.Id, firstRat.Id, right.Id },
-                new[] { left.Id, right.Id, finalRat.Id, firstRat.Id }
+                new[] { firstRat.Id, finalRat.Id, left.Id, right.Id },
+                new[] { left.Id, firstRat.Id, finalRat.Id, right.Id },
+                new[] { left.Id, right.Id, firstRat.Id, finalRat.Id }
             };
             L.Check(p.BoardZone.Slots.Select(e => e.Id).SequenceEqual(expected[pos]), "full physical Slots order after final charge");
         }

@@ -27,9 +27,10 @@ internal static partial class Program
             && forwarded.Any(t => t.Name == 15000 && t.Value == 43), "ToNativeTags forwards 1254 and unknown numeric tags");
         int cases = 0;
         foreach (bool bot in new[] { false, true })
-        foreach (string id in new[] { "JAIL_877", "JAIL_511", "FIREBALL_GOLEM", "CS2_027", "EX1_025", "CATA_725", "REBORN", "CAP_804" })
+        foreach (var (id, finalCharge) in new[] { "JAIL_877", "JAIL_511", "FIREBALL_GOLEM", "CS2_027", "EX1_025", "CATA_725", "REBORN", "CAP_804" }
+            .SelectMany(id => (id.StartsWith("JAIL_") ? new[] { false, true } : new[] { false }).Select(final => (id, final))))
         {
-            string name = $"{id}-{(bot ? "opponent" : "owner")}";
+            string name = $"{id}-{(bot ? "opponent" : "owner")}-final={finalCharge}";
             var (match, capture) = AnimationMatch(bot);
             var game = match.Game; var owner = game.CurrentPlayer;
             foreach (var old in owner.HandZone.Concat(owner.BoardZone).Concat(owner.Opponent.BoardZone).ToArray())
@@ -58,6 +59,8 @@ internal static partial class Program
             EngineEntity.FromCard(owner, Cards.FromId("CS2_182"), zone: owner.BoardZone); // B
             EngineEntity.FromCard(owner, Cards.FromId("CS2_182"), zone: owner.BoardZone); // C
             if (id == "CAP_804") owner.BoardZone[0][GameTag.REBORN] = 1;
+            int formerSlot = source.ZonePosition + 1;
+            if (finalCharge) source[GameTag.DAMAGE] = source[GameTag.HEALTH] - 1;
             var existing = owner.BoardZone.Select(m => m.Id).Append(source.Id).ToHashSet();
             FlushFieldHistory(match);
             int cursor = capture.Packets.Count;
@@ -97,8 +100,15 @@ internal static partial class Program
                     if (id == "FIREBALL_GOLEM") Expect(rows.Take(at).Any(e => e.HasPowerStart
                         && (int)e.PowerStart.Type == (int)BlockType.TRIGGER && e.PowerStart.Source == victim.Id), "dead minion owns TRIGGER");
                 }
-                if (id == "JAIL_877") Expect(rows.Take(at).Count(e => e.HasSubSpellStart) > rows.Take(at).Count(e => e.HasSubSpellEnd),
-                    "OverrideSpawn sub-spell contains summon");
+                if (location)
+                {
+                    Expect(SnapshotTag(rows[at], GameTag.ZONE_POSITION) == formerSlot, "FULL_ENTITY takes location's former slot");
+                    Expect(finalCharge ? source.Zone == owner.GraveyardZone : source.ZonePosition + 1 == formerSlot + 1,
+                        "final charge retires location; living location shifts right");
+                }
+                if (id == "JAIL_877") Expect(!rows.Any(e => e.HasSubSpellStart
+                    && e.SubSpellStart.SpellPrefabGuid.Contains("ReuseFX_Beast_OverrideSpawn_Paw_Super")),
+                    "standard spawn has no Paw override sub-spell");
                 var open = new Stack<int>();
                 for (int i = 0; i < at; i++)
                 {
@@ -116,8 +126,8 @@ internal static partial class Program
                     if (rows[end].HasPowerStart) depth++;
                     if (rows[end].HasPowerEnd && --depth == 0) break;
                 }
-                // Reborn resolves after DEATHS, directly in the enclosing play; ignore the earlier death's left shifts.
-                if (id == "REBORN")
+                // Ignore retirement/death left shifts before the summon's insertion shifts.
+                if (id == "REBORN" || location && finalCharge)
                 {
                     int deaths = rows.FindIndex(e => e.HasPowerStart && (int)e.PowerStart.Type == (int)BlockType.DEATHS);
                     start = deaths + 1; int deathDepth = 1;

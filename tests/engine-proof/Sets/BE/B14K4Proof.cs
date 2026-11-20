@@ -26,7 +26,7 @@ internal static class B14K4BEProof
             var token=owner.BoardZone.Single(m=>m.Card.Id=="BE_561t");
             Core2026Proof.Check(token.AttackDamage==(armor>=3?6:3) && token.Health==(armor>=3?6:3) && token.HasTaunt,"exact Golem stats, optional Armor threshold");
             Core2026Proof.Check(owner.Hero.Armor==armor-(armor>=3?3:0),"spends exactly three Armor when affordable");
-            Core2026Proof.Check(owner.BoardZone.Slots.Select(m=>m.Id).SequenceEqual(new[]{left.Id,forge.Id,token.Id,right.Id}),"summon immediately right of physical location");
+            Core2026Proof.Check(owner.BoardZone.Slots.Select(m=>m.Id).SequenceEqual(new[]{left.Id,token.Id,forge.Id,right.Id}),"summon takes physical location slot");
             Core2026Proof.Check(!LocationRules.CanActivate(owner,forge,null),"used location closed");
             var clone=branch.CloneExact(history:true);
             End(branch); End(branch); End(branch); End(branch);

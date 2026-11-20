@@ -98,14 +98,16 @@ namespace SabberStoneCore.Actions
                         Generic.AddEnchantmentBlock(g, Cards.FromId(part.Id + "e2"), (IPlayable)s, character);
                     break;
                 case 5:
-                    int position = SabberStoneCore.EffectSystem.EffectContext.DeathrattlePosition(c, s);
+                    int alternate = 0;
+                    int position = SummonTask.GetPosition(s, SummonSide.LEFT, 0, ref alternate);
                     for (int i = 0; i < scale && !c.BoardZone.IsFull; i++)
                         new SummonTask(SummonSide.NUMBER, Cards.FromId("TLC_101t")).Process(g, c, s, null, new TaskStack { Number = position + i + 1 });
                     break;
                 case 6: c.Hero.Armor += scale * 3; break;
                 case 7:
                     if (t == null || !FriendlyTarget(c, t) || c.BoardZone.IsFull) break;
-                    Generic.Copy(c, s, t, Zone.PLAY, preserveBoardMinionState: true,
+                    int copyAlternate = 0;
+                    Generic.Copy(c, s, t, Zone.PLAY, zonePosition: SummonTask.GetPosition(s, SummonSide.LEFT, 0, ref copyAlternate), preserveBoardMinionState: true,
                         initialize: copy => Generic.AddEnchantmentBlock(copy.Game, Cards.FromId(part.Id + "e"), (IPlayable)s, copy));
                     break;
             }
