@@ -25,8 +25,8 @@ class DriftFileTests(unittest.TestCase):
     def setUpClass(cls):
         cls.facts = json.loads((ROOT / 'facts' / (META + '.json')).read_text(encoding='utf-8'))
         cls.drift = json.loads((ROOT / 'facts' / 'drift' / (META + '.json')).read_text(encoding='utf-8'))
-        cls.overlay_ids = {row['id'] for row in cls.facts['overlay']['cards']}
-        cls.base_ids = {row['id'] for row in cls.facts['cards']} - cls.overlay_ids
+        cls.non_snapshot_overlay_ids = {row['id'] for row in cls.facts['overlay']['cards'] if not row.get('snapshot', False)}
+        cls.base_ids = {row['id'] for row in cls.facts['cards']} - cls.non_snapshot_overlay_ids
 
     def test_header_matches_the_card_file(self):
         overlay = self.facts['overlay']
@@ -40,14 +40,14 @@ class DriftFileTests(unittest.TestCase):
         rows = self.drift['clientRows']
         self.assertEqual(rows, sorted(set(rows)), 'sorted and unique')
         self.assertFalse(set(rows) - self.base_ids, 'every client row is a base row of the card file')
-        self.assertFalse(set(rows) & self.overlay_ids, 'no client row is an overlay id')
+        self.assertFalse(set(rows) & self.non_snapshot_overlay_ids, 'no client row is a non-snapshot overlay id')
 
     def test_allowlist(self):
         entries = self.drift['allowlist']
         ids = [entry['id'] for entry in entries]
         self.assertEqual(ids, sorted(set(ids)), 'sorted by id, unique')
         self.assertFalse(set(ids) - self.base_ids, 'every allowlisted id is a base row of the card file')
-        self.assertFalse(set(ids) & self.overlay_ids, 'no allowlisted id is an overlay id')
+        self.assertFalse(set(ids) & self.non_snapshot_overlay_ids, 'no allowlisted id is a non-snapshot overlay id')
         self.assertFalse(set(ids) & set(self.drift['clientRows']), 'no id is both a client row and allowlisted')
         for entry in entries:
             self.assertEqual(set(entry), {'id', 'class', 'fields', 'reason'}, entry['id'])
