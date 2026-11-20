@@ -1595,7 +1595,7 @@ namespace SabberStoneCore.CardSets.Standard
 						game.DeathProcessingAndAuraUpdate();
 						new DamageTask(2, EntityType.ALLMINIONS_NOSOURCE).Process(game, controller, source, target);
 						if (++waves < 14 && game.DeadMinions.Count > 0)
-							game.TaskQueue.Enqueue(wave, controller, source, target);
+							game.TaskQueue.Enqueue(wave, controller, source, target, separateActivation: true);
 					});
 					wave.Process(g, c, s, t, stack);
 				})

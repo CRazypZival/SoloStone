@@ -81,7 +81,7 @@ internal static partial class Program
         failures.AddRange(ContinuationHistory());
         failures.AddRange(RepeatSweep());
         Check(failures.Count == 0, string.Join("\n", failures));
-        Console.WriteLine($"PASS play effect once: {cases} original cases, 16 continuation cases, {RepeatSweepCards.Length}-card repeat sweep, Brann + Halazzi");
+        Console.WriteLine($"PASS play effect once: {cases} original cases, 18 continuation cases, {RepeatSweepCards.Length}-card repeat sweep, Brann + Halazzi");
     }
 
     // Every card whose power queued its repeats into same-source sibling POWER blocks (a sweep of all 2339 cards playable from
@@ -160,9 +160,10 @@ internal static partial class Program
     {
         var failures = new List<string>();
         foreach (bool bot in new[] { false, true })
-        foreach (string id in new[] { "ICC_041", "GIL_825", "ICC_054", "CFM_806", "ICC_201", "UNG_047", "FP1_002", "TRL_347" })
+        foreach (var (id, enrage) in new[] { ("ICC_041", false), ("GIL_825", false), ("GIL_825", true), ("ICC_054", false),
+            ("CFM_806", false), ("ICC_201", false), ("UNG_047", false), ("FP1_002", false), ("TRL_347", false) })
         {
-            string name = $"{id}-continuation-{(bot ? "opponent" : "owner")}";
+            string name = $"{id}{(enrage ? "-enrage" : "")}-continuation-{(bot ? "opponent" : "owner")}";
             var (match, capture) = AnimationMatch(bot);
             var game = match.Game;
             var owner = game.CurrentPlayer;
@@ -179,6 +180,8 @@ internal static partial class Program
                     if (id == "TRL_347") victim.Damage = victim.Health - 1;
                     victims.Add(victim);
                 }
+            // Survives wave one damaged: AuraUpdate writes its Enrage before the next wave's DEATHS block.
+            var berserker = enrage ? (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId("EX1_393"), zone: owner.Opponent.BoardZone) : null;
             if (id == "UNG_047")
                 victims.Add(EngineEntity.FromCard(owner, Cards.FromId("CS2_182"), zone: owner.BoardZone));
             var drawn = new List<IPlayable>();
@@ -223,11 +226,13 @@ internal static partial class Program
                 if (blocks.Count != waves || blocks.Any(b => b.Type != BlockType.POWER))
                     failures.Add(name + $": expected {waves} separate POWER waves (including the final empty wave), got " + shape);
                 Check(victims.All(v => v.Zone == owner.Opponent.GraveyardZone), name + ": all health steps die");
+                if (enrage) Check(berserker.Zone == owner.Opponent.GraveyardZone, name + ": Amani dies in wave two");
                 if (blocks.Count == waves)
                     for (int i = 0; i < waves; i++)
                         Check(rows.Skip(blocks[i].Start + 1).Take(blocks[i].End - blocks[i].Start - 1)
                             .Where(e => e.HasMetaData && (int)e.MetaData.Type == (int)MetaDataType.DAMAGE)
-                            .SelectMany(e => e.MetaData.Info).SequenceEqual(victims.Skip(i).Select(v => v.Id)),
+                            .SelectMany(e => e.MetaData.Info).SequenceEqual(victims.Skip(i).Select(v => v.Id)
+                                .Concat(enrage && i < 2 ? new[] { berserker.Id } : Array.Empty<int>())),
                             name + $": wave {i + 1} hits only remaining minions");
                 // Each recast starts by draining the preceding wave's deaths, before its own damage.
                 for (int i = 0; blocks.Count == waves && i < victims.Count; i++)
@@ -237,9 +242,18 @@ internal static partial class Program
                         e => e.HasMetaData && (int)e.MetaData.Type == (int)MetaDataType.DAMAGE);
                     Check(blocks[i].Depth == blocks[i + 1].Depth && blocks[i].End < blocks[i + 1].Start && death > blocks[i + 1].Start
                         && death < (nextHit < 0 ? blocks[i + 1].End : nextHit), name + $": death phase {i + 1} precedes next damage wave");
-                    Check(rows[blocks[i + 1].Start + 1].HasPowerStart
-                        && (int)rows[blocks[i + 1].Start + 1].PowerStart.Type == (int)BlockType.DEATHS,
-                        name + ": recast opens with DEATHS");
+                    if (!enrage)
+                        Check(rows[blocks[i + 1].Start + 1].HasPowerStart
+                            && (int)rows[blocks[i + 1].Start + 1].PowerStart.Type == (int)BlockType.DEATHS,
+                            name + ": recast opens with DEATHS");
+                    else if (i == 0)
+                    {
+                        int deaths = rows.FindIndex(blocks[1].Start + 1, blocks[1].End - blocks[1].Start - 1,
+                            e => e.HasPowerStart && (int)e.PowerStart.Type == (int)BlockType.DEATHS);
+                        int enraged = rows.FindIndex(blocks[1].Start + 1, blocks[1].End - blocks[1].Start - 1,
+                            e => e.HasTagChange && e.TagChange.Entity == berserker.Id && e.TagChange.Tag == (int)GameTag.ATK && e.TagChange.Value == 5);
+                        Check(enraged > blocks[1].Start && enraged < deaths, name + ": surviving Amani gains Enrage before DEATHS");
+                    }
                     if (id == "GIL_825" && i == 0)
                     {
                         int trigger = rows.FindIndex(blocks[i + 1].Start, blocks[i + 1].End - blocks[i + 1].Start,
