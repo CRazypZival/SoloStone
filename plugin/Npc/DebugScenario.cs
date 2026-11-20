@@ -13,8 +13,10 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 // One-shot debug scenario (docs/agent-workflows/steam-deck.md, `deck.py scenario`): stages the NEXT match so a live run can
 // show a specific situation (the NPC drawing Illusion first, a human with Fyrakk on turn 1, ...). The file is key=value lines:
 //   npcDeckTop=ID,ID   humanDeckTop=ID,...   (new hidden deck entities, drawn in the listed order)
-//   humanStartOfGame=ID,... npcStartOfGame=ID,... (up to three Start of Game sources each, added at deck bottom;
-//       normal eligibility is captured now and eligible effects resolve through MainBegin)
+//   humanStartOfGame=ID,... npcStartOfGame=ID,... (up to three sources each, added at deck bottom; effects use MainBegin).
+//       Eligibility is checked when applied: after the deal, mulligans and humanDeckTop, not before the deal. Godfrey (JAIL_509) has no condition.
+//       Staged cards are not added to the controller's recorded starting deck (DeckCards), so starting/opening-deck conditions can differ from retail:
+//       Nozdormu reads the opponent's DeckCards; Mug'Zee reads DeckCards when it resolves.
 //   humanOpeningHand=ID,... npcOpeningHand=ID,... (replace opening slots before mulligan offers; Coin excluded)
 //   npcHand=ID,...     humanHand=ID,...      (new cards added to the hand before turn 1)
 //   npcBoard=ID,...    humanBoard=ID,...     (up to seven minions/locations before turn 1)

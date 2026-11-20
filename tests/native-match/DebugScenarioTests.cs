@@ -339,6 +339,13 @@ internal static partial class Program
             Check(EngineIdentity(match.Game) == EngineIdentity(twin.Game), key + " stages deterministically from serialized text");
             if (npc)
             {
+                var history = SogHistory(run);
+                int reveal = history.FindIndex(x => x.HasShowEntity && x.ShowEntity.Entity == source.Id);
+                Check(reveal >= 0 && history.Take(reveal).Any(x => x.HasFullEntity && x.FullEntity.Entity == source.Id),
+                    "staged NPC source is created before its reveal");
+                Check(history.Take(reveal).Where(x => SnapshotEntity(x) == source.Id)
+                    .All(x => string.IsNullOrEmpty(SnapshotName(x))), "staged NPC identity stays hidden before reveal");
+                SogAssertPresentation(match, run, new[] { source.Id });
                 var firstDraw = owner.DeckZone.TopCard;
                 Check(firstDraw.Card.Id == "CS2_182", "NPC first draw remains its staged deck top");
                 SendEndTurn(match, run);
