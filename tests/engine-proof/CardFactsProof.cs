@@ -119,7 +119,8 @@ internal static class CardFactsProof
             if (!string.IsNullOrEmpty(text)) all.Add(new Tag(GameTag.CARDTEXT, text));
             var refs = row.GetProperty("referencedTags").EnumerateObject().Where(p => p.Value.GetInt32() != 0)
                 .Select(p => new Tag((GameTag)int.Parse(p.Name), p.Value.GetInt32())).OrderBy(t => (int)t.GameTag).ToArray();
-            var entity = new CardFacts.Entity { Id = id, AssetId = old.AssetId, Tags = all.ToArray(), ReferencedTags = refs.Length > 0 ? refs : null };
+            var entity = new CardFacts.Entity { Id = id, AssetId = old.AssetId, Tags = all.ToArray(), ReferencedTags = refs.Length > 0 ? refs : null,
+                Requirements = old.PlayRequirements?.ToDictionary(pair => pair.Key, pair => pair.Value), Entourage = old.Entourage?.ToArray() };
             baseCards[at] = CardLoader.Build(entity, false);
         }
         return ids.Count;
