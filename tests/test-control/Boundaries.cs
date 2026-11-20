@@ -3,10 +3,25 @@ namespace UnityEngine
 {
     internal static class Time { internal static int frameCount; internal static float realtimeSinceStartup; }
     internal struct Vector3 { internal float x, y, z; }
-    internal class Transform { internal Vector3 localPosition, position; }
+    internal class Transform
+    {
+        internal Transform parent;
+        internal Vector3 localPosition;
+        internal Vector3 position
+        {
+            get { var p = parent?.position ?? default; return new Vector3 { x = p.x + localPosition.x, y = p.y + localPosition.y, z = p.z + localPosition.z }; }
+        }
+        // Translation-only double; production uses Unity's inverse (including rotation and scale).
+        internal Vector3 InverseTransformPoint(Vector3 point) => new() { x = point.x - position.x, y = point.y - position.y, z = point.z - position.z };
+    }
 }
 internal enum GAME_TAG { ZONE_POSITION }
-internal sealed class Actor { internal UnityEngine.Transform transform = new(); }
+internal sealed class Actor
+{
+    internal UnityEngine.Transform transform = new();
+    internal bool Shown = true;
+    internal bool IsShown() => Shown;
+}
 internal sealed class Entity
 {
     internal int Id, Position;
@@ -17,6 +32,9 @@ internal sealed class Entity
 }
 internal sealed class Card
 {
+    internal UnityEngine.Transform transform = new();
+    internal bool Shown = true;
+    internal bool IsShown() => Shown;
     internal Entity Entity = new();
     internal Actor Actor = new();
     internal Entity GetEntity() => Entity;
@@ -24,6 +42,7 @@ internal sealed class Card
 }
 internal sealed class Zone
 {
+    internal UnityEngine.Transform transform = new();
     internal List<Card> Cards = new();
     internal bool Fail;
     internal List<Card> GetCards() => Fail ? throw new InvalidOperationException("sample failure") : Cards;

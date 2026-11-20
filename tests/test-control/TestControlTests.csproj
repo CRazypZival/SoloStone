@@ -9,7 +9,7 @@
     <Compile Include="../../plugin/NativeTestControlBoardTrace.cs" Link="NativeTestControlBoardTrace.cs" />
   </ItemGroup>
   <Target Name="ExtractProtocol" BeforeTargets="CoreCompile">
-    <Exec Command="&quot;$(SoloStonePython)&quot; &quot;$(MSBuildProjectDirectory)/extract_protocol.py&quot; &quot;$(IntermediateOutputPath)Protocol.g.cs&quot;" />
+    <Exec Command="&quot;$(SoloStonePython)&quot; -X utf8 &quot;$(MSBuildProjectDirectory)/extract_protocol.py&quot; &quot;$(IntermediateOutputPath)Protocol.g.cs&quot;" />
     <ItemGroup><Compile Include="$(IntermediateOutputPath)Protocol.g.cs" /></ItemGroup>
   </Target>
 </Project>
