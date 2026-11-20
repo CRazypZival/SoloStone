@@ -203,6 +203,15 @@ internal static class QueuedSummonHistoryProof
                 && full.Entity.Tags.TryGetValue(GameTag.ATTACHED, out int attached) && attached == copy.Id);
             Core2026Proof.Check(copy.IsDormant && parent >= 0 && enter > parent && child > enter,
                 "Dormant copy keeps FULL without entered DORMANT, then DORMANT change, then attached helper FULL");
+            // Its other Dormant entry tags stay changes after the FULL too: UNTOUCHABLE as in retail
+            // (49534_cached_tag_for_dormant_change.power.log:3016), DORMANT_VISUAL as before #261 (retail sends none).
+            foreach (var entry in new[] { GameTag.DORMANT_VISUAL, GameTag.UNTOUCHABLE })
+            {
+                var full = (PowerHistoryFullEntity)history[parent];
+                int change = history.FindIndex(e => e is PowerHistoryTagChange tag && tag.EntityId == copy.Id && tag.Tag == entry && tag.Value == 1);
+                Core2026Proof.Check((!full.Entity.Tags.TryGetValue(entry, out int folded) || folded == 0) && change > parent,
+                    "Dormant copy's " + entry + " entry stays a change after its FULL");
+            }
         }
     }
 

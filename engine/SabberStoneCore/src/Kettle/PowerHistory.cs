@@ -1138,8 +1138,13 @@ namespace SabberStoneCore.Kettle
             return true;
         }
 
-        // Like the entity-reference exception below, these need a client change event, not just a snapshot value.
-        private static readonly HashSet<GameTag> CreatedInPlayChangeTags = new HashSet<GameTag> { GameTag.DORMANT };
+        // Like the entity-reference exception below, these need a client change event, not just a snapshot value. The client
+        // sets its real-time Dormant state only from a DORMANT TAG_CHANGE, and NativeMatch.NormalizeDormantVisuals inserts
+        // the dormant-entering rows only for one. Retail creates a minion in PLAY without them, then sends DORMANT=1 and
+        // UNTOUCHABLE=1 as changes (hsreplay-test-data hslog-tests/49534_cached_tag_for_dormant_change.power.log:2991-3018).
+        // DORMANT_VISUAL keeps its pre-#261 shape (a change), as the client's dormant visual follows the same entry.
+        private static readonly HashSet<GameTag> CreatedInPlayChangeTags = new HashSet<GameTag>
+            { GameTag.DORMANT, GameTag.DORMANT_VISUAL, GameTag.UNTOUCHABLE };
 
         // Retail publishes all of one activation's summons inside its own block, so the client spawns them in one task list;
         // one block per queued summon makes it play each spawn to the end before the next. Retail, hsreplay-test-data
