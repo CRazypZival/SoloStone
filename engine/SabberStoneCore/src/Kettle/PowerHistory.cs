@@ -1231,7 +1231,8 @@ namespace SabberStoneCore.Kettle
         // across closed empty sibling blocks: a second Deathrattle of the same death phase that only queued its own summons
         // (two Haunted Creepers, Rivendare) runs before the first one's summons, and moving rows past an empty block changes
         // nothing the client is told. A child that cannot rejoin (a sibling activation with rows of its own between) becomes
-        // where the parent's later continuations gather, so they still run together. Nested blocks (Knife Juggler) stay nested.
+        // where the parent's later continuations gather, so they still run together. A leading death phase starts a new repeat
+        // wave (Lord Godfrey); nested blocks later in the child (Knife Juggler) stay nested.
         internal bool JoinQueuedContinuation(PowerHistoryBlockStart child, PowerHistoryBlockStart parent)
         {
             if (!_enabled || child == null || parent == null || child.Source != parent.Source) return false;
@@ -1256,7 +1257,8 @@ namespace SabberStoneCore.Kettle
             while (end >= 2 && Last[end] is PowerHistoryBlockEnd && Last[end - 1] is PowerHistoryBlockStart empty
                 && !ReferenceEquals(empty, home)) end -= 2;
             int fullEnd = full - (last - end);
-            bool joined = fullEnd >= 0 && Last[end] is PowerHistoryBlockEnd;
+            bool joined = !(Last[last + (header ? 2 : 1)] is PowerHistoryBlockStart deaths && deaths.BlockType == BlockType.DEATHS)
+                && fullEnd >= 0 && Last[end] is PowerHistoryBlockEnd;
             for (int i = 0; joined && i < last - end; i++) joined = ReferenceEquals(Full[fullEnd + i], Last[end + i]);
             if (joined)
             {

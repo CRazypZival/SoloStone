@@ -278,7 +278,7 @@ internal static class QueuedSummonHistoryProof
         }
         PredictedPlayClean(shape, spell.Id);
 
-        // Damage metadata already prevents Defile joins; inspect its real queued recast too, so removing the Repeat guard fails.
+        // Repeat casts have no continuation parent; inspect the real queued recast so removing the Repeat guard fails.
         g = NewGame(); p = g.Player1;
         Summon(p.Opponent, "CS2_182").BaseHealth = 1;
         var defile = (Spell)Add(p, "ICC_041");
@@ -291,7 +291,7 @@ internal static class QueuedSummonHistoryProof
         var recast = queue.Cast<object>().Single();
         var activation = (QueuedSpellActivation)recast.GetType().GetField("HistoryCast").GetValue(recast);
         Core2026Proof.Check(activation?.Kind == HistoryCastKind.Repeat
-            && recast.GetType().GetField("HistoryParent").GetValue(recast) == null, "Defile's queued Repeat has no summon history parent");
+            && recast.GetType().GetField("HistoryParent").GetValue(recast) == null, "Defile's queued Repeat has no continuation history parent");
         g.ProcessTasks();
         g.TaskQueue.EndEvent();
         cast.Complete();
@@ -343,22 +343,32 @@ internal static class QueuedSummonHistoryProof
     }
 
     // A queued activation with hits of its own joins the parent, as in retail (hslog-tests/toki.power.log:4239).
+    // Deaths after the first hit are inside this activation, not the start of another repeat wave.
     private static void ChildWithOwnHit()
     {
         var g = NewGame(); var p = g.Player1;
         var source = Summon(p, "CS2_182");
+        var victim = Summon(p.Opponent, "CS2_182");
         int cursor = g.PowerHistory.Full.Count;
         g.TaskQueue.StartEvent();
         g.TaskQueue.Enqueue(new SabberStoneCore.Tasks.SimpleTasks.EnqueueTask(2, SabberStoneCore.Tasks.ComplexTask.Create(
             new SabberStoneCore.Tasks.SimpleTasks.DamageTask(1, SabberStoneCore.Tasks.SimpleTasks.EntityType.OP_HERO),
+            new CustomTask((game, controller, s, t, stack) =>
+            {
+                if (victim.Zone == p.Opponent.BoardZone) victim.ToBeDestroyed = true;
+                game.DeathProcessingAndAuraUpdate();
+            }),
             new SabberStoneCore.Tasks.SimpleTasks.SummonTask("CS2_101t"))), p, source, null);
         g.ProcessTasks();
         g.TaskQueue.EndEvent();
         Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "CS2_101t") == 2 && p.Opponent.Hero.Damage == 2, "two hits, two Recruits");
         var shape = Shape(g, cursor);
         Together(shape, "CS2_101t", 2, 1);
-        Core2026Proof.Check(shape.Blocks.Count == 1
-            && shape.OwnRows[shape.Blocks[0]].OfType<PowerHistoryMetaData>().Count(m => m.Type == MetaDataType.DAMAGE) == 2,
+        var power = shape.Blocks.Single(b => b.Source == source.Id && b.BlockType == BlockType.POWER);
+        var deaths = shape.Blocks.Single(b => b.BlockType == BlockType.DEATHS);
+        Core2026Proof.Check(ReferenceEquals(shape.Parent[deaths], power) && victim.Zone == p.Opponent.GraveyardZone,
+            "later death phase stays inside the joined continuation" + shape.Dump);
+        Core2026Proof.Check(shape.OwnRows[power].OfType<PowerHistoryMetaData>().Count(m => m.Type == MetaDataType.DAMAGE) == 2,
             "both hits share the parent block with both Recruits" + shape.Dump);
     }
 

@@ -81,7 +81,7 @@ internal static partial class Program
         failures.AddRange(ContinuationHistory());
         failures.AddRange(RepeatSweep());
         Check(failures.Count == 0, string.Join("\n", failures));
-        Console.WriteLine($"PASS play effect once: {cases} original cases, 14 continuation cases, {RepeatSweepCards.Length}-card repeat sweep, Brann + Halazzi");
+        Console.WriteLine($"PASS play effect once: {cases} original cases, 16 continuation cases, {RepeatSweepCards.Length}-card repeat sweep, Brann + Halazzi");
     }
 
     // Every card whose power queued its repeats into same-source sibling POWER blocks (a sweep of all 2339 cards playable from
@@ -119,6 +119,11 @@ internal static partial class Program
             var blocks = game.PowerHistory.Full.Skip(from).OfType<PowerHistoryBlockStart>()
                 .Where(s => s.Source == source.Id && s.BlockType == BlockType.POWER)
                 .ToArray();
+            if (id == "GIL_825")
+            {
+                if (blocks.Length != 2) failures.Add(id + $": expected two separate POWER waves, got {blocks.Length}");
+                continue;
+            }
             var keys = blocks.Select(s => s.Index + "/" + s.EffectIndex).ToArray();
             if (keys.Length != keys.Distinct().Count())
                 failures.Add($"{id}: {keys.Length} same-source POWER blocks at any depth share an effect index ("
@@ -155,7 +160,7 @@ internal static partial class Program
     {
         var failures = new List<string>();
         foreach (bool bot in new[] { false, true })
-        foreach (string id in new[] { "ICC_041", "ICC_054", "CFM_806", "ICC_201", "UNG_047", "FP1_002", "TRL_347" })
+        foreach (string id in new[] { "ICC_041", "GIL_825", "ICC_054", "CFM_806", "ICC_201", "UNG_047", "FP1_002", "TRL_347" })
         {
             string name = $"{id}-continuation-{(bot ? "opponent" : "owner")}";
             var (match, capture) = AnimationMatch(bot);
@@ -165,11 +170,12 @@ internal static partial class Program
                 .Concat(owner.Opponent.BoardZone).ToArray()) old.Controller.SetasideZone.Add(old.Zone.Remove(old));
             var source = EngineEntity.FromCard(owner, Cards.FromId(id), zone: id == "FP1_002" ? owner.BoardZone : owner.HandZone);
             var victims = new List<IPlayable>();
-            if (id is "ICC_041" or "ICC_054" or "TRL_347")
-                for (int i = 0; i < (id == "TRL_347" ? 1 : 3); i++)
+            if (id is "ICC_041" or "GIL_825" or "ICC_054" or "TRL_347")
+                for (int i = 0; i < (id == "TRL_347" ? 1 : id == "GIL_825" ? 2 : 3); i++)
                 {
-                    var victim = (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId("CS2_182"), zone: owner.Opponent.BoardZone);
+                    var victim = (Minion)EngineEntity.FromCard(owner.Opponent, Cards.FromId(id == "GIL_825" && i == 0 ? "EX1_096" : "CS2_182"), zone: owner.Opponent.BoardZone);
                     if (id == "ICC_041") victim.Damage = victim.Health - (i + 1);
+                    if (id == "GIL_825") victim.BaseHealth = (i + 1) * 2;
                     if (id == "TRL_347") victim.Damage = victim.Health - 1;
                     victims.Add(victim);
                 }
@@ -211,28 +217,36 @@ internal static partial class Program
             var blocks = ContinuationBlocks(rows, source.Id, name);
             string shape = string.Join(",", blocks.Select(b => $"{b.Type}@{b.Depth}[{b.Start}:{b.End}]"));
             Console.WriteLine($"SHAPE {name}: {shape}; phases={string.Join(",", phases)}");
-            if (id == "ICC_041")
+            if (id is "ICC_041" or "GIL_825")
             {
-                if (blocks.Count != 4 || blocks.Any(b => b.Type != BlockType.POWER))
-                    failures.Add(name + ": expected four separate POWER waves (including the final empty wave), got " + shape);
-                Check(victims.All(v => v.Zone == owner.Opponent.GraveyardZone), name + ": all three health steps die");
-                if (blocks.Count == 4)
-                    for (int i = 0; i < 4; i++)
+                int waves = victims.Count + 1;
+                if (blocks.Count != waves || blocks.Any(b => b.Type != BlockType.POWER))
+                    failures.Add(name + $": expected {waves} separate POWER waves (including the final empty wave), got " + shape);
+                Check(victims.All(v => v.Zone == owner.Opponent.GraveyardZone), name + ": all health steps die");
+                if (blocks.Count == waves)
+                    for (int i = 0; i < waves; i++)
                         Check(rows.Skip(blocks[i].Start + 1).Take(blocks[i].End - blocks[i].Start - 1)
                             .Where(e => e.HasMetaData && (int)e.MetaData.Type == (int)MetaDataType.DAMAGE)
                             .SelectMany(e => e.MetaData.Info).SequenceEqual(victims.Skip(i).Select(v => v.Id)),
                             name + $": wave {i + 1} hits only remaining minions");
                 // Each recast starts by draining the preceding wave's deaths, before its own damage.
-                for (int i = 0; blocks.Count == 4 && i < 3; i++)
+                for (int i = 0; blocks.Count == waves && i < victims.Count; i++)
                 {
                     int death = rows.FindIndex(e => IsZone(e, victims[i].Id, EngineZone.GRAVEYARD));
                     int nextHit = rows.FindIndex(blocks[i + 1].Start, blocks[i + 1].End - blocks[i + 1].Start,
                         e => e.HasMetaData && (int)e.MetaData.Type == (int)MetaDataType.DAMAGE);
-                    Check(blocks[i].End < blocks[i + 1].Start && death > blocks[i + 1].Start
+                    Check(blocks[i].Depth == blocks[i + 1].Depth && blocks[i].End < blocks[i + 1].Start && death > blocks[i + 1].Start
                         && death < (nextHit < 0 ? blocks[i + 1].End : nextHit), name + $": death phase {i + 1} precedes next damage wave");
                     Check(rows[blocks[i + 1].Start + 1].HasPowerStart
                         && (int)rows[blocks[i + 1].Start + 1].PowerStart.Type == (int)BlockType.DEATHS,
                         name + ": recast opens with DEATHS");
+                    if (id == "GIL_825" && i == 0)
+                    {
+                        int trigger = rows.FindIndex(blocks[i + 1].Start, blocks[i + 1].End - blocks[i + 1].Start,
+                            e => e.HasPowerStart && e.PowerStart.Source == victims[0].Id
+                                && (int)e.PowerStart.Type == (int)BlockType.TRIGGER && e.PowerStart.TriggerKeyword == (int)GameTag.DEATHRATTLE);
+                        Check(trigger > death && trigger < nextHit, name + ": Deathrattle precedes next damage wave");
+                    }
                 }
             }
             if (id == "ICC_054")
