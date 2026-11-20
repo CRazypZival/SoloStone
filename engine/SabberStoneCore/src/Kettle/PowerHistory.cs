@@ -1138,20 +1138,28 @@ namespace SabberStoneCore.Kettle
             return true;
         }
 
-        // Retail publishes all of one activation's summons inside its own block (Unleash the Hounds, Muster for Battle,
-        // Haunted Creeper), so the client spawns them in one task list; one block per queued summon makes it play each
-        // spawn to the end before the next. The just-closed child block rejoins its parent when the two are adjacent
-        // siblings in the unflushed run. Nested blocks (Knife Juggler) stay nested and still delay the next spawn.
+        // Retail publishes all of one activation's summons inside its own block, so the client spawns them in one task list;
+        // one block per queued summon makes it play each spawn to the end before the next. Retail, hsreplay-test-data
+        // hslog-tests: 34104_subspell.power.log:11268-11359 (Swarm of Locusts: six FULL_ENTITY ZONE=PLAY in its POWER block,
+        // no SHOW_ENTITY), :28817-28883 (two Splitting Saplings die together: each Deathrattle is its own TRIGGER block with
+        // both of its summons inside), puzzlelab.power.log:6883-6916 (Reincarnate summons for the opponent: FULL_ENTITY
+        // CONTROLLER=2 ZONE=PLAY in player 1's POWER block, no ZONE change, no SHOW_ENTITY).
         // History-only: no state, RNG or HistoryFacts change.
-        // A minion created straight into PLAY (a Hound, a Silver Hand Recruit) is public from its FULL_ENTITY, and retail sends
-        // no SHOW_ENTITY for it. The client takes a SHOW_ENTITY as a reveal that a custom spawn spell waits for, so each spawn
-        // played to its end before the next one began (Muster for Battle: Recruits ~1.07 s apart, all three together without
-        // it). Publishes as TAG_CHANGEs only the snapshot tags that differ from what the unflushed run already told the client.
+        // A minion created straight into PLAY (a Hound, a Silver Hand Recruit, a Leeroy Whelp) is public from its FULL_ENTITY,
+        // and retail sends no SHOW_ENTITY for it. The client takes a SHOW_ENTITY as a reveal that a custom spawn spell waits
+        // for, so each spawn played to its end before the next one began (Muster for Battle: Recruits ~1.07 s apart, all three
+        // together without it). Publishes as TAG_CHANGEs only the snapshot tags that differ from what the unflushed run
+        // already told the client. A minion created in no zone and summoned before anything else names it (Entity.FromCard
+        // without a zone, then SummonBlock: SummonOpTask, SummonCopyTask, a Reborn copy) was never anywhere else, so its
+        // FULL_ENTITY is published as created in PLAY with its state at summon (34104_subspell.power.log:35320-35341, a
+        // reborn Colossus of the Moon: ZONE=PLAY, DAMAGE=9 in the FULL_ENTITY), and its own TAG_CHANGEs fold into it.
         // False (the caller sends SHOW_ENTITY) for a summon from a hidden zone, a hand or a deck, or across a flushed packet.
         internal bool PublishCreatedInPlay(IPlayable playable)
         {
             if (!_enabled) return false;
             Dictionary<GameTag, int> known = null;
+            // Anything but this minion's own TAG_CHANGEs to PLAY since its creation: a block or sub-spell edge, or a row naming it.
+            bool touched = false;
             int at = Last.Count - 1;
             for (; at >= 0; at--)
             {
@@ -1162,10 +1170,46 @@ namespace SabberStoneCore.Kettle
                     || entry is PowerHistoryResetGame) return false;
                 if (entry is PowerHistoryFullEntity full && full.Entity.Id == playable.Id)
                 {
-                    if (!full.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone) || zone != (int)Zone.PLAY) return false;
+                    if (!full.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone)) zone = (int)Zone.INVALID;
+                    if (zone == (int)Zone.INVALID && !touched)
+                    {
+                        // Nothing else has named it since, so its own TAG_CHANGEs and its current snapshot fold into the
+                        // FULL_ENTITY, which then carries the state retail creates it with (a reborn copy's DAMAGE).
+                        var own = new List<(int Last, int Full)>();
+                        for (int i = at + 1; i < Last.Count; i++)
+                            if (Last[i] is PowerHistoryTagChange tag && tag.EntityId == playable.Id)
+                            {
+                                int inFull = Full.LastIndexOf(tag);
+                                if (inFull < 0) return false;
+                                own.Add((i, inFull));
+                            }
+                        foreach (var (i, _) in own)
+                        {
+                            var tag = (PowerHistoryTagChange)Last[i];
+                            full.Entity.Tags[tag.Tag] = tag.Value;
+                        }
+                        for (int k = own.Count - 1; k >= 0; k--) { Full.RemoveAt(own[k].Full); Last.RemoveAt(own[k].Last); }
+                        foreach (var tag in PowerHistoryBuilder.ShowEntity(playable).Entity.Tags) full.Entity.Tags[tag.Key] = tag.Value;
+                        full.Entity.Tags[GameTag.ZONE] = (int)Zone.PLAY;
+                        full.HealthIsMaximum = true;
+                        // The client builds referencing text once when shown; it must already know the target entity.
+                        foreach (var tag in full.Entity.Tags.Where(t => Actions.PayloadRules.ReferencesEntity(playable.Card, t.Key)
+                            && Last.Skip(at + 1).Any(e => e is PowerHistoryFullEntity target && target.Entity.Id == t.Value)).ToList())
+                        {
+                            full.Entity.Tags.Remove(tag.Key);
+                            Add(PowerHistoryBuilder.TagChange(playable.Id, tag.Key, tag.Value));
+                        }
+                        return true;
+                    }
+                    if (zone != (int)Zone.PLAY) return false;
                     known = new Dictionary<GameTag, int>(full.Entity.Tags);
                     break;
                 }
+                if (entry is PowerHistoryBlockStart || entry is PowerHistoryBlockEnd || entry is PowerHistorySubSpellStart
+                    || entry is PowerHistorySubSpellEnd || entry is PowerHistoryMetaData meta && meta.Info != null && meta.Info.Contains(playable.Id)
+                    || entry is PowerHistoryTagChange zoneChange && zoneChange.EntityId == playable.Id && zoneChange.Tag == GameTag.ZONE
+                        && zoneChange.Value != (int)Zone.PLAY)
+                    touched = true;
             }
             if (known == null) return false;
             for (int i = at + 1; i < Last.Count; i++)
@@ -1178,35 +1222,73 @@ namespace SabberStoneCore.Kettle
             return true;
         }
 
-        internal bool JoinQueuedSummon(PowerHistoryBlockStart child, PowerHistoryBlockStart parent)
+        // One rule for every queued activation of a source's own running effect (EnqueueTask, EnqueueNumberTask, whatever task
+        // it queues: SummonTask, SummonOpTask, SummonCopyTask, a ComplexTask): the just-closed child block rejoins the block
+        // that queued it when the child's own rows summon a minion and carry no target header or hit of their own. It joins
+        // across closed empty sibling blocks: a second Deathrattle of the same death phase that only queued its own summons
+        // (two Haunted Creepers, Rivendare) runs before the first one's summons, and moving rows past an empty block changes
+        // nothing the client is told. A child that cannot rejoin (a sibling activation with rows of its own between) becomes
+        // where the parent's later summons gather, so they still spawn together. Nested blocks (Knife Juggler) stay nested.
+        internal bool JoinQueuedSummon(PowerHistoryBlockStart child, PowerHistoryBlockStart parent, Func<int, bool> isMinion)
         {
             if (!_enabled || child == null || parent == null || child.Source != parent.Source) return false;
             int full = Full.FindLastIndex(e => ReferenceEquals(e, child)), last = Last.FindLastIndex(e => ReferenceEquals(e, child));
             int length = Full.Count - full;
             if (full < 1 || last < 1 || Last.Count - last != length || !(Last[Last.Count - 1] is PowerHistoryBlockEnd)) return false;
             int depth = 0;
+            bool summons = false, header = false;
             for (int i = 0; i < length; i++)
             {
                 var entry = Last[last + i];
                 if (!ReferenceEquals(Full[full + i], entry) || entry is PowerHistoryResetGame) return false;
                 if (entry is PowerHistoryBlockStart) depth++;
                 else if (entry is PowerHistoryBlockEnd) depth--;
+                // The parent's own target again, as the child's leading header (Sapphire Spellstone's copies): dropped on joining.
+                else if (i == 1 && entry is PowerHistoryMetaData repeat && repeat.Type == MetaDataType.TARGET && child.Target != 0
+                    && child.Target == parent.Target && repeat.Info != null && repeat.Info.Count == 1 && repeat.Info[0] == child.Target)
+                    header = true;
                 // A target header or hit of its own would not read as part of the parent's effect.
                 else if (depth == 1 && entry is PowerHistoryMetaData) return false;
+                else if (depth == 1 && EntersPlay(entry, isMinion)) summons = true;
             }
-            if (!(Last[last - 1] is PowerHistoryBlockEnd parentEnd) || !ReferenceEquals(Full[full - 1], parentEnd)) return false;
-            depth = 1;
-            int open = last - 2;
-            for (; open >= 0; open--)
+            if (!summons) return false;
+            var home = parent.SummonHome ?? parent;
+            int end = last - 1;
+            while (end >= 2 && Last[end] is PowerHistoryBlockEnd && Last[end - 1] is PowerHistoryBlockStart empty
+                && !ReferenceEquals(empty, home)) end -= 2;
+            int fullEnd = full - (last - end);
+            bool joined = fullEnd >= 0 && Last[end] is PowerHistoryBlockEnd;
+            for (int i = 0; joined && i < last - end; i++) joined = ReferenceEquals(Full[fullEnd + i], Last[end + i]);
+            if (joined)
             {
-                if (Last[open] is PowerHistoryBlockEnd) depth++;
-                else if (Last[open] is PowerHistoryBlockStart && --depth == 0) break;
+                depth = 1;
+                int open = end - 1;
+                for (; open >= 0; open--)
+                {
+                    if (Last[open] is PowerHistoryBlockEnd) depth++;
+                    else if (Last[open] is PowerHistoryBlockStart && --depth == 0) break;
+                }
+                joined = open >= 0 && ReferenceEquals(Last[open], home);
             }
-            if (open < 0 || !ReferenceEquals(Last[open], parent)) return false;
-            Full.RemoveRange(full - 1, 2);
-            Last.RemoveRange(last - 1, 2);
+            if (!joined)
+            {
+                parent.SummonHome = child;
+                return false;
+            }
+            if (header) { Full.RemoveAt(full + 1); Last.RemoveAt(last + 1); }
+            // [home end, empty blocks, child start, child rows, child end] -> [child rows, child end (closes home), empty blocks]
+            var empties = Last.GetRange(end + 1, last - end - 1);
+            Full.RemoveRange(fullEnd, last - end + 1); Full.AddRange(empties);
+            Last.RemoveRange(end, last - end + 1); Last.AddRange(empties);
             return true;
         }
+
+        private static bool EntersPlay(IPowerHistoryEntry entry, Func<int, bool> isMinion) =>
+            entry is PowerHistoryFullEntity full && full.Entity.Tags.TryGetValue(GameTag.ZONE, out int created)
+                && created == (int)Zone.PLAY && isMinion(full.Entity.Id)
+            || entry is PowerHistoryShowEntity show && show.Entity.Tags.TryGetValue(GameTag.ZONE, out int shown)
+                && shown == (int)Zone.PLAY && isMinion(show.Entity.Id)
+            || entry is PowerHistoryTagChange move && move.Tag == GameTag.ZONE && move.Value == (int)Zone.PLAY && isMinion(move.EntityId);
 
 		public string Print(bool fullFlag = true)
 		{
@@ -1286,6 +1368,8 @@ namespace SabberStoneCore.Kettle
 		public int Source { get; set; }
 		public int Target { get; set; }
 		public string EffectCardId { get; set; } = "";
+        // History only, never published: the block this block's queued summons join (itself until one could not; JoinQueuedSummon).
+        internal PowerHistoryBlockStart SummonHome;
 
 		public string Print()
 		{
@@ -1324,6 +1408,11 @@ namespace SabberStoneCore.Kettle
 	{
 		public PowerType PowerType => PowerType.FULL_ENTITY;
 		public PowerHistoryEntity Entity { get; set; }
+		// History only, never on the wire: HEALTH is the maximum, next to DAMAGE (ShowEntity's form, as retail creates a summon in
+		// PLAY: PublishCreatedInPlay), not the current Health an ordinary FullEntity snapshot carries. A method over an internal
+		// field, so history serializers that read public members (the canonical history hash) do not see it.
+		internal bool HealthIsMaximum;
+		public bool CarriesMaximumHealth() => HealthIsMaximum;
 
 		public string Print()
 		{

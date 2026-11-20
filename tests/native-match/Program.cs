@@ -3385,11 +3385,11 @@ internal static partial class Program
             "Mirror fixture no longer carries the pinned source identity defect");
         List<PowerHistoryData> native = History(capture, cursor);
         PowerHistoryData full = native.Single(entry => entry.HasFullEntity && entry.FullEntity.Entity == copy.Id);
-        PowerHistoryData show = native.Single(entry => entry.HasShowEntity && entry.ShowEntity.Entity == copy.Id);
         Check(full.FullEntity.Name == "CS2_200" && SnapshotTag(full, GameTag.ENTITY_ID) == copy.Id,
             "Mirror FULL did not normalize embedded identity to its destination");
-        Check(show.ShowEntity.Name == "CS2_200" && SnapshotTag(show, GameTag.ENTITY_ID) == copy.Id,
-            "Mirror SHOW did not normalize embedded identity to its destination");
+        // Created straight into PLAY: the FULL_ENTITY is the only snapshot, as in retail (mirror_entity.log:1461-1478).
+        Check(SnapshotTag(full, GameTag.ZONE) == (int)EngineZone.PLAY && !native.Any(entry => entry.HasShowEntity && entry.ShowEntity.Entity == copy.Id),
+            "Mirror copy is created in PLAY with no SHOW_ENTITY");
         foreach (PowerHistoryData entry in native)
         {
             var snapshot = entry.HasFullEntity ? entry.FullEntity

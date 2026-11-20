@@ -343,7 +343,8 @@ internal sealed class MatchEventLog
         touched.Add(e.Id);
         if (ent.Type == 0 && game.IdEntityDic.TryGetValue(e.Id, out var typed)) ent.Type = (int)typed.Card.Type;
         // The engine's FullEntity health tag is the current health for a fresh actor; the log tracks max health + damage.
-        if (ent.Damage != 0 && ent.Type == (int)CardType.MINION) ent.Health += ent.Damage;
+        // A summon created in PLAY already carries the maximum (CarriesMaximumHealth), as a SHOW_ENTITY does.
+        if (ent.Damage != 0 && ent.Type == (int)CardType.MINION && !full.CarriesMaximumHealth()) ent.Health += ent.Damage;
         if (setup || inReset) { Count(ent.Controller, ent.Zone, 1); if (inReset) resetEntities++; return; }
         if (ent.Type == (int)CardType.ENCHANTMENT)
         {
@@ -368,7 +369,14 @@ internal sealed class MatchEventLog
         // The snapshot holds printed stats. A copy's enchantments (Specter Specialist on a buffed minion) raise them with no stat
         // tag change, so the stream never says so: read the engine, as a card entering the board does, unless the batch still says.
         if (live != null && !ChangedLater(ent.Id)) TakeLiveStats(ent, live);
+        // A Reborn copy is created in PLAY with its 1-Health return already in the FULL_ENTITY's DAMAGE, as in retail, so no
+        // DAMAGE write follows: log it as created whole, then returned, as when the DAMAGE came as its own change.
+        int reborn = facts.Reborn.Contains(ent.Id) && ent.Type == (int)CardType.MINION ? ent.Damage : 0;
+        ent.Damage -= reborn;
         EmitCreate(game, ent, Tag(tags, GameTag.CREATOR), Tag(tags, GameTag.DISPLAYED_CREATOR), (ZoneKind)ent.Zone, facts);
+        if (reborn == 0) return;
+        ent.Damage += reborn;
+        Emit(ent.Controller, "REBORN", "target=" + Ref(game, ent.Id, ent.Card) + " hp=" + ent.Health + "->" + (ent.Health - ent.Damage) + By(game, ent.Id));
     }
 
     private void EmitCreate(EngineGame game, Ent ent, int creator, int displayed, ZoneKind zone, Facts facts)

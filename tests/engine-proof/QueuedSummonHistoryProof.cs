@@ -3,19 +3,31 @@ using SabberStoneCore.Kettle;
 using SabberStoneCore.Model;
 using SabberStoneCore.Config;
 using SabberStoneCore.Model.Entities;
+using SabberStoneCore.Tasks.PlayerTasks;
 using static Core2026Proof;
 
 // Retail publishes all of one activation's summons in its own block, with no SHOW_ENTITY for a minion created straight into
 // play, so the client spawns them together. Summons queued by EnqueueTask / EnqueueNumberTask used to get one sibling POWER
 // block each, and each created minion a SHOW_ENTITY; either made the client play one spawn at a time.
 // A trigger of a spawn (Knife Juggler) stays nested between the spawns, as in retail.
+// Retail (hsreplay-test-data hslog-tests): 34104_subspell.power.log:11268-11359 (Swarm of Locusts: six FULL_ENTITY ZONE=PLAY
+// in its POWER block, no SHOW_ENTITY); :28817-28883 (two Splitting Saplings die together: each Deathrattle is its own
+// TRIGGER block holding both of its summons); puzzlelab.power.log:6883-6916 (Reincarnate summons for the opponent: one
+// FULL_ENTITY CONTROLLER=2 ZONE=PLAY in player 1's POWER block, no ZONE change, no SHOW_ENTITY).
 internal static class QueuedSummonHistoryProof
 {
     [GroupProof("queued-summon-history")]
     internal static void Run()
     {
         var failures = new List<string>();
-        foreach (var (name, run) in new (string, Action)[] { ("EX1_538", Hounds), ("CORE_GVG_061", Muster), ("FP1_002", Creeper) })
+        foreach (var (name, run) in new (string, Action)[] {
+            ("EX1_538", Hounds), ("CORE_GVG_061", Muster), ("FP1_002", Creeper),
+            ("EX1_248", FeralSpirit), ("EX1_573", Cenarius), ("ICC_832", Malfurion), ("EX1_116", Leeroy),
+            ("UNG_076", Eggnapper), ("FP1_019", PoisonSeeds), ("LOOT_080", EmeraldSpellstone), ("LOOT_064t1", SapphireSpellstone),
+            ("FP1_002x2", TwoCreepers), ("FP1_031", Rivendare), ("FP1_002+EX1_096", CreeperAndHoarder),
+            // Negative cases: these keep their own shape.
+            ("LOOT_093", RecruitFromDeck), ("summon-from-hand", SummonFromHand), ("UNG_854", DiscoverThenSummon),
+            ("own-hit", ChildWithOwnHit), ("TRL_232", OverkillSummon) })
         {
             try { run(); Console.WriteLine("QUEUED-SUMMON-HISTORY " + name + " PASS"); }
             catch (Exception error) { failures.Add(name + ": " + error.Message); Console.WriteLine("QUEUED-SUMMON-HISTORY " + name + " FAIL " + error.Message); }
@@ -23,11 +35,11 @@ internal static class QueuedSummonHistoryProof
         Core2026Proof.Check(failures.Count == 0, string.Join("\n", failures));
     }
 
-    private static Game NewGame()
+    private static Game NewGame(string deck = "CS2_182")
     {
         var game = new Game(new GameConfig { RandomSeed = 42, StartPlayer = 1, Shuffle = false,
             SkipMulligan = true, History = true, Logging = false, FormatType = FormatType.FT_WILD,
-            Player1Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(),
+            Player1Deck = Enumerable.Repeat(Cards.FromId(deck), 30).ToList(),
             Player2Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList() });
         game.StartGame();
         foreach (var player in new[] { game.Player1, game.Player2 })
@@ -48,6 +60,7 @@ internal static class QueuedSummonHistoryProof
         var power = shape.Blocks.Single(b => b.Source == spell.Id && b.BlockType == BlockType.POWER);
         var throws = shape.Blocks.Where(b => b.Source == juggler.Id && b.BlockType == BlockType.TRIGGER).ToList();
         Core2026Proof.Check(throws.Count == 3 && throws.All(b => ReferenceEquals(shape.Parent[b], power)), "each Knife Juggler throw nests inside the spell's block");
+        PredictedPlayClean(shape, spell.Id);
     }
 
     private static void Muster()
@@ -56,7 +69,9 @@ internal static class QueuedSummonHistoryProof
         int cursor = g.PowerHistory.Full.Count;
         var spell = Play(g, p, "CORE_GVG_061");
         Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "CS2_101t") == 3 && p.Hero.Weapon != null, "three Recruits and a weapon");
-        OneBlock(Shape(g, cursor), spell.Id, BlockType.POWER, "CS2_101t", 3);
+        var shape = Shape(g, cursor);
+        OneBlock(shape, spell.Id, BlockType.POWER, "CS2_101t", 3);
+        PredictedPlayClean(shape, spell.Id);
     }
 
     private static void Creeper()
@@ -69,42 +84,335 @@ internal static class QueuedSummonHistoryProof
         OneBlock(Shape(g, cursor), creeper.Id, BlockType.TRIGGER, "FP1_002t", 2);
     }
 
+    private static void FeralSpirit()
+    {
+        var g = NewGame(); var p = g.Player1;
+        int cursor = g.PowerHistory.Full.Count;
+        var spell = Play(g, p, "EX1_248");
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "EX1_tk11") == 2, "two Spirit Wolves summoned");
+        var shape = Shape(g, cursor);
+        OneBlock(shape, spell.Id, BlockType.POWER, "EX1_tk11", 2);
+        PredictedPlayClean(shape, spell.Id);
+    }
+
+    // Choose One: the summon option runs the chosen option's task; its summons still share one block.
+    private static void Cenarius()
+    {
+        var g = NewGame(); var p = g.Player1;
+        int cursor = g.PowerHistory.Full.Count;
+        var cenarius = PlayChoice(g, p, "EX1_573", 2);
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "EX1_573t") == 2, "two Treants summoned");
+        var shape = Shape(g, cursor);
+        Together(shape, "EX1_573t", 2, 1);
+        PredictedPlayClean(shape, cenarius.Id);
+    }
+
+    private static void Malfurion()
+    {
+        var g = NewGame(); var p = g.Player1;
+        int cursor = g.PowerHistory.Full.Count;
+        var hero = PlayChoice(g, p, "ICC_832", 1);
+        var summoned = p.BoardZone.Select(m => m.Card.Id).Distinct().ToList();
+        Core2026Proof.Check(summoned.Count == 1 && p.BoardZone.Count == 2, "two of one Malfurion token summoned: " + string.Join(",", p.BoardZone.Select(m => m.Card.Id)));
+        var shape = Shape(g, cursor);
+        Together(shape, summoned[0], 2, 1);
+        PredictedPlayClean(shape, hero.Id);
+    }
+
+    // Summoned for the opponent from a card, not created in play: the FULL_ENTITY must still say PLAY (puzzlelab.power.log:6913).
+    private static void Leeroy()
+    {
+        var g = NewGame(); var p = g.Player1;
+        int cursor = g.PowerHistory.Full.Count;
+        var leeroy = Play(g, p, "EX1_116");
+        Core2026Proof.Check(p.Opponent.BoardZone.Count(m => m.Card.Id == "EX1_116t") == 2, "two Whelps for the opponent");
+        var shape = Shape(g, cursor);
+        OneBlock(shape, leeroy.Id, BlockType.POWER, "EX1_116t", 2);
+        PredictedPlayClean(shape, leeroy.Id);
+    }
+
+    private static void Eggnapper()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var eggnapper = Summon(p, "UNG_076");
+        int cursor = g.PowerHistory.Full.Count;
+        Kill(g, eggnapper);
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "UNG_076t1") == 2, "two Raptors summoned");
+        OneBlock(Shape(g, cursor), eggnapper.Id, BlockType.TRIGGER, "UNG_076t1", 2);
+    }
+
+    // Both sides' Treants come from one activation: friendly ones by SummonTask, the opponent's by SummonOpTask.
+    private static void PoisonSeeds()
+    {
+        var g = NewGame(); var p = g.Player1;
+        Summon(p, "CS2_182");
+        for (int i = 0; i < 2; i++) Summon(p.Opponent, "CS2_182");
+        int cursor = g.PowerHistory.Full.Count;
+        var spell = Play(g, p, "FP1_019");
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "FP1_019t") == 1 && p.Opponent.BoardZone.Count(m => m.Card.Id == "FP1_019t") == 2,
+            "a Treant for each destroyed minion, on its side");
+        var shape = Shape(g, cursor);
+        OneBlock(shape, spell.Id, BlockType.POWER, "FP1_019t", 3);
+        PredictedPlayClean(shape, spell.Id);
+    }
+
+    private static void EmeraldSpellstone()
+    {
+        var g = NewGame(); var p = g.Player1;
+        int cursor = g.PowerHistory.Full.Count;
+        var spell = Play(g, p, "LOOT_080");
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "LOOT_077t") == 2, "two Wolves summoned");
+        var shape = Shape(g, cursor);
+        OneBlock(shape, spell.Id, BlockType.POWER, "LOOT_077t", 2);
+        PredictedPlayClean(shape, spell.Id);
+    }
+
+    // Copies of a friendly minion (SummonCopyTask), queued twice by a targeted spell.
+    private static void SapphireSpellstone()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var target = Summon(p, "CS2_182");
+        int cursor = g.PowerHistory.Full.Count;
+        var spell = Play(g, p, "LOOT_064t1", target);
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "CS2_182") == 3, "two copies summoned");
+        var shape = Shape(g, cursor);
+        OneBlock(shape, spell.Id, BlockType.POWER, "CS2_182", 2);
+        PredictedPlayClean(shape, spell.Id);
+    }
+
+    // Two Deathrattles of one death phase: each its own TRIGGER block with its own summons (34104_subspell.power.log:28817-28883).
+    private static void TwoCreepers()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var first = Summon(p, "FP1_002"); var second = Summon(p, "FP1_002");
+        int cursor = g.PowerHistory.Full.Count;
+        first.ToBeDestroyed = true; second.ToBeDestroyed = true;
+        g.DeathProcessingAndAuraUpdate();
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "FP1_002t") == 4, "four Spectral Spiders summoned");
+        var shape = Shape(g, cursor);
+        foreach (var creeper in new[] { first, second }) PerActivation(shape, creeper.Id, "FP1_002t", 1, 2);
+    }
+
+    // Rivendare repeats one Deathrattle: each repeat is its own activation with its own summons.
+    private static void Rivendare()
+    {
+        var g = NewGame(); var p = g.Player1;
+        Summon(p, "FP1_031");
+        var creeper = Summon(p, "FP1_002");
+        int cursor = g.PowerHistory.Full.Count;
+        Kill(g, creeper);
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "FP1_002t") == 4, "four Spectral Spiders summoned");
+        PerActivation(Shape(g, cursor), creeper.Id, "FP1_002t", 2, 2);
+    }
+
+    // A sibling Deathrattle with rows of its own (Loot Hoarder's draw) runs before the Creeper's queued summons; they cannot
+    // rejoin the Creeper's block past it, but still share one block instead of one each.
+    private static void CreeperAndHoarder()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var creeper = Summon(p, "FP1_002"); var hoarder = Summon(p, "EX1_096");
+        int cursor = g.PowerHistory.Full.Count;
+        creeper.ToBeDestroyed = true; hoarder.ToBeDestroyed = true;
+        g.DeathProcessingAndAuraUpdate();
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "FP1_002t") == 2, "two Spectral Spiders summoned");
+        Together(Shape(g, cursor), "FP1_002t", 2, 1);
+    }
+
+    // A summon of a card that already exists in a hidden zone is a reveal: it keeps its SHOW_ENTITY.
+    private static void RecruitFromDeck()
+    {
+        var g = NewGame("CS2_168"); var p = g.Player1;
+        int cursor = g.PowerHistory.Full.Count;
+        var spell = Play(g, p, "LOOT_093");
+        var recruits = p.BoardZone.Where(m => m.Card.Id == "CS2_168").Select(m => m.Id).ToList();
+        Core2026Proof.Check(recruits.Count == 3, "three minions recruited from the deck");
+        var shape = Shape(g, cursor);
+        Core2026Proof.Check(recruits.All(shape.Shown.Contains) && !shape.Creations.Any(c => recruits.Contains(c.Id)),
+            "each recruited minion is revealed by SHOW_ENTITY, not created" + shape.Dump);
+        PredictedPlayClean(shape, spell.Id);
+    }
+
+    // A minion created in no zone that went somewhere else first (here its hand) is not created in PLAY when summoned later.
+    private static void SummonFromHand()
+    {
+        var g = NewGame(); var p = g.Player1;
+        int cursor = g.PowerHistory.Full.Count;
+        var minion = (Minion)Add(p, "CS2_182");
+        SabberStoneCore.Actions.Generic.RemoveFromZone(p, minion);
+        SabberStoneCore.Actions.Generic.SummonBlock(g, minion, -1, null);
+        var history = g.PowerHistory.Full.Skip(cursor).ToList();
+        var created = history.OfType<PowerHistoryFullEntity>().SingleOrDefault(f => f.Entity.Id == minion.Id);
+        Core2026Proof.Check(created != null && (!created.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone) || zone != (int)Zone.PLAY)
+            && history.OfType<PowerHistoryShowEntity>().Any(show => show.Entity.Id == minion.Id), "a summon from hand keeps its SHOW_ENTITY");
+    }
+
+    // A Discover offer is created in SETASIDE; the summoned pick keeps its FULL_ENTITY there and its move to PLAY.
+    private static void DiscoverThenSummon()
+    {
+        var g = NewGame(); var p = g.Player1;
+        int cursor = g.PowerHistory.Full.Count;
+        Play(g, p, "UNG_854");
+        Core2026Proof.Check(p.Choice != null, "Discover offered");
+        int pick = p.Choice.Choices[0];
+        Core2026Proof.Check(g.Process(ChooseTask.Pick(p, pick)), "pick accepted");
+        Core2026Proof.Check(p.BoardZone.Any(m => m.Id == pick), "the pick is summoned");
+        var history = g.PowerHistory.Full.Skip(cursor).ToList();
+        var created = history.OfType<PowerHistoryFullEntity>().Single(f => f.Entity.Id == pick);
+        Core2026Proof.Check(created.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone) && zone == (int)Zone.SETASIDE
+            && history.OfType<PowerHistoryTagChange>().Any(t => t.EntityId == pick && t.Tag == GameTag.ZONE && t.Value == (int)Zone.PLAY),
+            "the Discover pick is not rewritten as created in PLAY");
+    }
+
+    // A queued activation that hits something of its own stays its own block, even when it also summons.
+    private static void ChildWithOwnHit()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var source = Summon(p, "CS2_182");
+        int cursor = g.PowerHistory.Full.Count;
+        g.TaskQueue.StartEvent();
+        g.TaskQueue.Enqueue(new SabberStoneCore.Tasks.SimpleTasks.EnqueueTask(2, SabberStoneCore.Tasks.ComplexTask.Create(
+            new SabberStoneCore.Tasks.SimpleTasks.DamageTask(1, SabberStoneCore.Tasks.SimpleTasks.EntityType.OP_HERO),
+            new SabberStoneCore.Tasks.SimpleTasks.SummonTask("CS2_101t"))), p, source, null);
+        g.ProcessTasks();
+        g.TaskQueue.EndEvent();
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "CS2_101t") == 2 && p.Opponent.Hero.Damage == 2, "two hits, two Recruits");
+        Together(Shape(g, cursor), "CS2_101t", 1, 2);
+    }
+
+    // An Overkill summon runs in its own block inside the ATTACK block, never in the ATTACK block's own rows.
+    private static void OverkillSummon()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var direhorn = Summon(p, "TRL_232");
+        var victim = Summon(p.Opponent, "CS2_168");
+        int cursor = g.PowerHistory.Full.Count;
+        Attack(g, direhorn, victim);
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "TRL_232t") == 1, "Overkill summoned the Direhorn Hatchling");
+        var shape = Shape(g, cursor);
+        var spawn = shape.Creations.Single(c => c.Card == "TRL_232t");
+        var attack = shape.Blocks.Single(b => b.BlockType == BlockType.ATTACK);
+        Core2026Proof.Check(spawn.Block.BlockType != BlockType.ATTACK && spawn.Block.Source == direhorn.Id
+            && ReferenceEquals(shape.Parent[spawn.Block], attack), "summoned in its own block nested in the ATTACK block" + shape.Dump);
+        CreatedInPlay(shape, new List<(int, string, PowerHistoryBlockStart, int)> { spawn });
+    }
+
+    private static IPlayable PlayChoice(Game game, Controller player, string id, int choice)
+    {
+        var source = Add(player, id);
+        player.BaseMana = 10; player.UsedMana = 0; player.TemporaryMana = 0;
+        var task = player.Options().OfType<PlayCardTask>().FirstOrDefault(t => t.Source?.Id == source.Id && t.ChooseOne == choice);
+        Core2026Proof.Check(task != null, "legal choice missing: " + id + " " + choice);
+        Core2026Proof.Check(game.Process(task), "legal choice rejected: " + id + " " + choice);
+        return source;
+    }
+
     private static void OneBlock(HistoryShape shape, int source, BlockType type, string summoned, int count)
     {
-        var own = shape.Blocks.Where(b => b.Source == source && b.BlockType != BlockType.PLAY).ToList();
-        Core2026Proof.Check(own.Count == 1 && own[0].BlockType == type, $"one {type} block from the source, found " + string.Join(",", own.Select(b => b.BlockType)));
+        // Other blocks of the source may follow (Feral Spirit's Overload is its own POWER block); none may hold a spawn.
         var spawns = shape.Creations.Where(c => c.Card == summoned).ToList();
-        Core2026Proof.Check(spawns.Count == count && spawns.All(c => ReferenceEquals(c.Block, own[0])), $"all {count} {summoned} created directly in that block");
+        var own = shape.Blocks.Where(b => b.Source == source && b.BlockType != BlockType.PLAY && spawns.Any(c => ReferenceEquals(c.Block, b))).ToList();
+        Core2026Proof.Check(own.Count == 1 && own[0].BlockType == type, $"one {type} block from the source holds the spawns, found " + string.Join(",", own.Select(b => b.BlockType)) + shape.Dump);
+        Core2026Proof.Check(spawns.Count == count && spawns.All(c => ReferenceEquals(c.Block, own[0])), $"all {count} {summoned} created directly in that block" + shape.Dump);
+        CreatedInPlay(shape, spawns);
+    }
+
+    // The summons of one activation share one block that is not the PLAY block, however the source is named.
+    private static void Together(HistoryShape shape, string summoned, int count, int blocks)
+    {
+        var spawns = shape.Creations.Where(c => c.Card == summoned).ToList();
+        var groups = spawns.GroupBy(c => c.Block).ToList();
+        Core2026Proof.Check(spawns.Count == count * blocks && groups.Count == blocks && groups.All(group => group.Count() == count
+            && group.Key.BlockType != BlockType.PLAY), $"{blocks} block(s) of {count} {summoned}" + shape.Dump);
+        CreatedInPlay(shape, spawns);
+    }
+
+    private static void PerActivation(HistoryShape shape, int source, string summoned, int activations, int count)
+    {
+        var own = shape.Blocks.Where(b => b.Source == source).ToList();
+        Core2026Proof.Check(own.Count == activations && own.All(b => b.BlockType == BlockType.TRIGGER),
+            $"{activations} TRIGGER block(s) from {source}, found " + string.Join(",", own.Select(b => b.BlockType)) + shape.Dump);
+        var spawns = shape.Creations.Where(c => c.Card == summoned && own.Contains(c.Block)).ToList();
+        Core2026Proof.Check(own.All(b => spawns.Count(c => ReferenceEquals(c.Block, b)) == count), $"{count} {summoned} directly in each activation" + shape.Dump);
+        CreatedInPlay(shape, spawns);
+    }
+
+    private static void CreatedInPlay(HistoryShape shape, List<(int Id, string Card, PowerHistoryBlockStart Block, int Zone)> spawns)
+    {
         // A SHOW_ENTITY of a minion its FULL_ENTITY already put in play reads to the client as a reveal the spawn waits for.
-        Core2026Proof.Check(!shape.Shown.Overlaps(spawns.Select(c => c.Id)), $"no SHOW_ENTITY for a created {summoned}");
+        Core2026Proof.Check(!shape.Shown.Overlaps(spawns.Select(c => c.Id)), "no SHOW_ENTITY for a created summon" + shape.Dump);
+        Core2026Proof.Check(spawns.All(c => c.Zone == (int)Zone.PLAY) && !shape.ZoneMoved.Overlaps(spawns.Select(c => c.Id)),
+            "each created summon's FULL_ENTITY says PLAY, with no ZONE change after it" + shape.Dump);
+    }
+
+    // Admission rule R7 (docs/TESTING.md, Client drop prediction), headless: the client ignores every card zone change in
+    // the lists of a predicted PLAY block's own rows, so no summoned minion may be created, revealed or moved there.
+    private static void PredictedPlayClean(HistoryShape shape, int played)
+    {
+        var play = shape.Blocks.Single(b => b.Source == played && b.BlockType == BlockType.PLAY);
+        var stray = shape.OwnRows[play].Where(entry => entry is PowerHistoryFullEntity full && shape.Summoned.Contains(full.Entity.Id)
+            || entry is PowerHistoryShowEntity show && shape.Summoned.Contains(show.Entity.Id)
+            || entry is PowerHistoryTagChange tag && (tag.Tag == GameTag.ZONE || tag.Tag == GameTag.CONTROLLER)
+                && shape.Summoned.Contains(tag.EntityId)).ToList();
+        Core2026Proof.Check(stray.Count == 0, "R7: summons stay nested, out of the PLAY block's own lists: " + string.Join(",", stray.Select(e => e.GetType().Name)) + shape.Dump);
     }
 
     private sealed class HistoryShape
     {
         internal readonly List<PowerHistoryBlockStart> Blocks = new();
         internal readonly Dictionary<PowerHistoryBlockStart, PowerHistoryBlockStart> Parent = new();
-        internal readonly List<(int Id, string Card, PowerHistoryBlockStart Block)> Creations = new();
+        internal readonly Dictionary<PowerHistoryBlockStart, List<IPowerHistoryEntry>> OwnRows = new();
+        internal readonly List<(int Id, string Card, PowerHistoryBlockStart Block, int Zone)> Creations = new();
         internal readonly HashSet<int> Shown = new();
+        internal readonly HashSet<int> ZoneMoved = new();
+        // Minions that entered PLAY in this run (created there or moved there), other than the played card itself.
+        internal readonly HashSet<int> Summoned = new();
+        internal string Dump = "";
     }
 
     private static HistoryShape Shape(Game game, int cursor)
     {
         var shape = new HistoryShape();
         var open = new Stack<PowerHistoryBlockStart>();
+        var dump = new System.Text.StringBuilder();
+        var created = new HashSet<int>();
+        var played = new HashSet<int>();
         foreach (var entry in game.PowerHistory.Full.Skip(cursor))
         {
+            string pad = new string(' ', 2 * open.Count);
             if (entry is PowerHistoryBlockStart start)
             {
+                dump.Append($"\n  {pad}{start.BlockType} src={start.Source}");
+                if (start.BlockType == BlockType.PLAY) played.Add(start.Source);
                 shape.Blocks.Add(start);
                 shape.Parent[start] = open.Count > 0 ? open.Peek() : null;
+                shape.OwnRows[start] = new List<IPowerHistoryEntry>();
                 open.Push(start);
+                continue;
             }
-            else if (entry is PowerHistoryBlockEnd) open.Pop();
-            else if (entry is PowerHistoryFullEntity full && open.Count > 0)
-                shape.Creations.Add((full.Entity.Id, game.IdEntityDic[full.Entity.Id].Card.Id, open.Peek()));
-            else if (entry is PowerHistoryShowEntity show) shape.Shown.Add(show.Entity.Id);
+            if (entry is PowerHistoryBlockEnd) { open.Pop(); continue; }
+            if (open.Count > 0) shape.OwnRows[open.Peek()].Add(entry);
+            if (entry is PowerHistoryFullEntity full && open.Count > 0)
+            {
+                var entity = game.IdEntityDic[full.Entity.Id];
+                int zone = full.Entity.Tags.TryGetValue(GameTag.ZONE, out int z) ? z : 0;
+                shape.Creations.Add((full.Entity.Id, entity.Card.Id, open.Peek(), zone));
+                created.Add(full.Entity.Id);
+                if (entity is Minion) dump.Append($"\n  {pad}FULL {full.Entity.Id} {entity.Card.Id} zone={(Zone)zone}");
+            }
+            else if (entry is PowerHistoryShowEntity show) { shape.Shown.Add(show.Entity.Id); dump.Append($"\n  {pad}SHOW {show.Entity.Id}"); }
+            else if (entry is PowerHistoryMetaData meta) dump.Append($"\n  {pad}META {meta.Type} {string.Join(",", meta.Info ?? new List<int>())}");
+            else if (entry is PowerHistoryTagChange tag && tag.Tag == GameTag.ZONE)
+            {
+                if (created.Contains(tag.EntityId)) shape.ZoneMoved.Add(tag.EntityId);
+                if (tag.Value == (int)Zone.PLAY && game.IdEntityDic[tag.EntityId] is Minion) shape.Summoned.Add(tag.EntityId);
+                dump.Append($"\n  {pad}ZONE {tag.EntityId}={(Zone)tag.Value}");
+            }
         }
+        foreach (var creation in shape.Creations)
+            if (creation.Zone == (int)Zone.PLAY && game.IdEntityDic[creation.Id] is Minion) shape.Summoned.Add(creation.Id);
+        shape.Summoned.ExceptWith(played);
         Core2026Proof.Check(open.Count == 0, "every block closed");
+        shape.Dump = dump.ToString();
         return shape;
     }
 }

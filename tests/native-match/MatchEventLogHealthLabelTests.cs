@@ -88,6 +88,27 @@ internal static partial class Program
         Check(((ICharacter)returned).Health == 1 && returned.Id != yeti.Id, "Reborn returned a 1-Health copy");
         Check(Kind(lines, "REBORN").Any(l => l.Contains("target=CS2_182#" + returned.Id) && l.Contains("hp=5->1")), "Reborn return is REBORN" + Dump(lines));
         Check(!Kind(lines, "DAMAGE").Any(l => l.Contains("#" + returned.Id)), "returned copy took no damage" + Dump(lines));
+        HealthLabelsRebornHitInSameBatch();
+    }
+
+    // The return carries its damage in a FULL_ENTITY whose HEALTH is the maximum. When a later row of the same batch changes it
+    // (Defile's recast hits it), the log cannot read the live entity and must not take that HEALTH for current Health
+    // (review of 76bab96b: CREATE 4/9, REBORN 9->5, then a wrong hit and a RESYNC).
+    private static void HealthLabelsRebornHitInSameBatch()
+    {
+        var (match, _, lines) = LoggedBoard();
+        var game = match.Game; var player = game.Player1;
+        var yeti = (Minion)EngineEntity.FromCard(player, Cards.FromId("CS2_182"), zone: player.BoardZone);
+        yeti[GameTag.REBORN] = 1; yeti.Damage = 4;
+        var defile = EngineEntity.FromCard(player, Cards.FromId("ICC_041"), zone: player.HandZone);
+        FlushHistory(match); lines.Clear();
+        PlayAndFlush(match, player, defile);
+        var copy = game.IdEntityDic.Values.OfType<Minion>().Single(m => m.Card.Id == "CS2_182" && m.Id > defile.Id);
+        Check(copy.Zone?.Type != SabberStoneCore.Enums.Zone.PLAY, "Defile's recast killed the returned copy in the same batch");
+        Check(EventLines(lines, "CREATE").Any(l => l.Contains("CS2_182#" + copy.Id) && l.Contains("stats=4/5")), "return created whole" + Dump(lines));
+        Check(Kind(lines, "REBORN").Any(l => l.Contains("target=CS2_182#" + copy.Id) && l.Contains("hp=5->1")), "same-batch Reborn return is REBORN 5->1" + Dump(lines));
+        Check(Kind(lines, "DAMAGE").Any(l => l.Contains("target=CS2_182#" + copy.Id) && l.Contains("hp=1->0")), "the recast hits the return at 1 Health" + Dump(lines));
+        Check(EventLines(lines, "RESYNC").Length == 0, "no RESYNC for a Reborn return changed in the same batch" + Dump(lines));
     }
 
     // ---- regression net: every real hit and heal keeps its DAMAGE / HEAL label exactly as before (probed identical on main) ----

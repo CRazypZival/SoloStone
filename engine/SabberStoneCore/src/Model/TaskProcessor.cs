@@ -177,10 +177,13 @@ namespace SabberStoneCore.Model
 
 			var capturedTarget = target ?? Actions.PayloadRules.ExecutionCapture(source);
             int repeats = triggerKeyword == (int)GameTag.DEATHRATTLE ? Actions.DeathrattleRules.Repeats(controller,source) : 1;
-            // A summon queued by its source's own running effect (EnqueueTask, EnqueueNumberTask) belongs to that block.
+            // A task queued by its source's own running effect (EnqueueTask, EnqueueNumberTask) rejoins that block if it summons
+            // (PowerHistory.JoinQueuedSummon). Only an activation's POWER or TRIGGER block: never a PLAY block, whose own lists'
+            // card zone changes the client ignores (R7), nor an ATTACK block.
             PowerHistoryBlockStart historyParent = null;
-            if (_game.History && task is Tasks.SimpleTasks.SummonTask && !historyTrigger && !triggerKeyword.HasValue && !task.IsTrigger
-                && _game.PowerHistory.CurrentBlock is PowerHistoryBlockStart open && open.Source == source?.Id)
+            if (_game.History && !historyTrigger && !triggerKeyword.HasValue && !task.IsTrigger
+                && _game.PowerHistory.CurrentBlock is PowerHistoryBlockStart open
+                && (open.BlockType == BlockType.POWER || open.BlockType == BlockType.TRIGGER) && open.Source == source?.Id)
                 historyParent = open;
             for (int i = 0; i < repeats; i++)
                 queue.Enqueue(new TaskInstance(task, controller, source, capturedTarget, _game.Resolution.Queued(task), deathId, orderDeathByPlay, deathOrder, deathTrigger, historyCast,
@@ -333,7 +336,8 @@ namespace SabberStoneCore.Model
                 && !DiscardUnfiredSecret(historyTrigger, source, historyStart, parentHadEffects))
             {
                 _game.PowerHistory.Add(PowerHistoryBuilder.BlockEnd());
-                if (historyParent != null) _game.PowerHistory.JoinQueuedSummon(historyStart, historyParent);
+                if (historyParent != null)
+                    _game.PowerHistory.JoinQueuedSummon(historyStart, historyParent, id => _game.IdEntityDic.TryGetValue(id, out var e) && e is Minion);
             }
 
 			// reset between task execution

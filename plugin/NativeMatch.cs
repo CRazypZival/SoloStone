@@ -5500,7 +5500,7 @@ public sealed class NativeMatch
         {
             if (!entityPremiums.ContainsKey(full.Entity.Id) && CarriesPremium(full.Entity, out string createdId))
                 DeriveCreatedPremium(full.Entity.Id, createdId);
-            return new PowerHistoryData { FullEntity = ToNativeHistoryEntity(full.Entity, currentHealthSnapshot: true) };
+            return new PowerHistoryData { FullEntity = ToNativeHistoryEntity(full.Entity, currentHealthSnapshot: !full.CarriesMaximumHealth()) };
         }
         if (entry is PowerHistoryShowEntity show)
             return new PowerHistoryData
