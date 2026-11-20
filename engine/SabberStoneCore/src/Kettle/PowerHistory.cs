@@ -1181,25 +1181,23 @@ namespace SabberStoneCore.Kettle
                     if (!full.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone)) zone = (int)Zone.INVALID;
                     if ((zone == (int)Zone.INVALID || zone == (int)Zone.PLAY) && !touched)
                     {
-                        MoveSummonNeighbourShifts(full, from);
-                        at = Last.IndexOf(full);
                         // Nothing else has named it since, so its own TAG_CHANGEs and its current snapshot fold into the
                         // FULL_ENTITY, which then carries the state retail creates it with (a reborn copy's DAMAGE).
-                        var own = new List<(int Last, int Full)>();
+                        var own = new List<PowerHistoryTagChange>();
                         for (int i = at + 1; i < Last.Count; i++)
                             if (Last[i] is PowerHistoryTagChange tag && tag.EntityId == playable.Id
                                 && !CreatedInPlayChangeTags.Contains(tag.Tag))
                             {
                                 int inFull = Full.LastIndexOf(tag);
                                 if (inFull < 0) return false;
-                                own.Add((i, inFull));
+                                own.Add(tag);
                             }
-                        foreach (var (i, _) in own)
-                        {
-                            var tag = (PowerHistoryTagChange)Last[i];
+                        MoveSummonNeighbourShifts(full, from);
+                        at = Last.IndexOf(full);
+                        foreach (var tag in own)
                             full.Entity.Tags[tag.Tag] = tag.Value;
-                        }
-                        for (int k = own.Count - 1; k >= 0; k--) { Full.RemoveAt(own[k].Full); Last.RemoveAt(own[k].Last); }
+                        for (int k = own.Count - 1; k >= 0; k--)
+                        { Full.RemoveAt(Full.LastIndexOf(own[k])); Last.RemoveAt(Last.LastIndexOf(own[k])); }
                         // Keep event tags at their original position and the FULL's value from before those events.
                         foreach (var tag in PowerHistoryBuilder.ShowEntity(playable).Entity.Tags)
                             if (!CreatedInPlayChangeTags.Contains(tag.Key) || !Last.Skip(at + 1).Any(e =>

@@ -29,7 +29,8 @@ internal static class QueuedSummonHistoryProof
             ("FP1_002x2", TwoCreepers), ("FP1_031", Rivendare), ("FP1_002+EX1_096", CreeperAndHoarder),
             ("chained-continuations", ChainedContinuations), ("ICC_054", SpreadingPlague), ("ICC_041", Defile),
             ("dormant-copy", DormantCopy),
-            ("created-in-play-boundaries", CreatedInPlayBoundaries), ("untouchable-slot", UntouchableSlot),
+            ("created-in-play-boundaries", CreatedInPlayBoundaries), ("refused-fold-order", RefusedFoldOrder),
+            ("summon-slot", SummonSlot), ("untouchable-slot", UntouchableSlot),
             // Negative cases: these keep their own shape.
             ("LOOT_093", RecruitFromDeck), ("summon-from-hand", SummonFromHand), ("UNG_854", DiscoverThenSummon),
             ("own-hit", ChildWithOwnHit), ("TRL_232", OverkillSummon) })
@@ -55,6 +56,7 @@ internal static class QueuedSummonHistoryProof
     private static void CreatedInPlayBoundaries()
     {
         foreach (bool inPlay in new[] { false, true })
+        foreach (bool productionOrder in new[] { false, true })
         foreach (string boundary in new[] { "block-before", "subspell-before", "flush-before", "block-after", "subspell-after", "flush-after" })
         {
             var g = NewGame(); var p = g.Player1; var h = g.PowerHistory;
@@ -69,22 +71,26 @@ internal static class QueuedSummonHistoryProof
             if (boundary.EndsWith("before")) Edge();
             var minion = (Minion)Entity.FromCard(p, Cards.FromId("CS2_182"),
                 inPlay ? new EntityData { [GameTag.ZONE] = (int)Zone.PLAY } : null);
+            // SummonPhase records the insertion cursor after creation.
+            if (productionOrder) from = (h.Full.Count, h.Last.Count);
             if (boundary.EndsWith("after")) Edge();
             minion.Damage = 1;
             p.BoardZone.Add(minion, 1);
             var full = h.Full.OfType<PowerHistoryFullEntity>().Single(e => e.Entity.Id == minion.Id);
             var before = h.Full.ToArray();
             bool published = h.PublishCreatedInPlay(minion, from);
-            string name = $"{boundary} inPlay={inPlay}";
+            string name = $"{boundary} inPlay={inPlay} productionOrder={productionOrder}";
             if (boundary.EndsWith("before"))
             {
                 // Retail 186852_hearthstone_access_eoe.power.log:3333-3338: state belongs in FULL; an edge/flush
-                // before creation forbids pulling neighbour shifts across it, even when the FULL itself can still fold.
+                // before creation only prevents relocation when the insertion cursor still includes that boundary.
                 Core2026Proof.Check(published && full.Entity.Tags[GameTag.ZONE_POSITION] == 2
                     && full.Entity.Tags[GameTag.DAMAGE] == 1 && full.HealthIsMaximum
                     && full.Entity.Tags[GameTag.HEALTH] == minion.Health + minion.Damage, name + ": fold state and maximum Health");
-                Core2026Proof.Check(h.Full.IndexOf(full) < h.Full.FindIndex(e => e is PowerHistoryTagChange t
-                    && t.EntityId == right.Id && t.Tag == GameTag.ZONE_POSITION), name + ": leave shift order across boundary");
+                int shift = h.Full.FindIndex(e => e is PowerHistoryTagChange t
+                    && t.EntityId == right.Id && t.Tag == GameTag.ZONE_POSITION);
+                Core2026Proof.Check(shift >= 0 && (shift < h.Full.IndexOf(full)) == productionOrder,
+                    name + ": relocate shifts only within insertion boundary");
                 Core2026Proof.Check(!h.Full.OfType<PowerHistoryTagChange>().Any(t => t.EntityId == minion.Id),
                     name + ": own state folded");
             }
@@ -96,6 +102,44 @@ internal static class QueuedSummonHistoryProof
                     name + ": touched/flushed creation stays unchanged");
             }
         }
+    }
+
+    private static void RefusedFoldOrder()
+    {
+        var g = NewGame(); var p = g.Player1; var h = g.PowerHistory;
+        Summon(p, "CS2_182"); Summon(p, "CS2_182");
+        var minion = (Minion)Entity.FromCard(p, Cards.FromId("CS2_182"));
+        minion.Damage = 1;
+        // An own row absent from Full before the insertion cursor must refuse the fold before moving neighbours.
+        h.Full.Remove(h.Last.OfType<PowerHistoryTagChange>().Single(t => t.EntityId == minion.Id && t.Tag == GameTag.DAMAGE));
+        var from = (h.Full.Count, h.Last.Count);
+        p.BoardZone.Add(minion, 1);
+        var full = h.Full.ToArray(); var last = h.Last.ToArray();
+        Core2026Proof.Check(!h.PublishCreatedInPlay(minion, from) && h.Full.SequenceEqual(full) && h.Last.SequenceEqual(last),
+            "refused fold leaves both history lists in their original order");
+    }
+
+    private static void SummonSlot()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var source = Summon(p, "CS2_182");
+        var right = new[] { Summon(p, "CS2_182"), Summon(p, "CS2_182"), Summon(p, "CS2_182") };
+        int cursor = g.PowerHistory.Full.Count;
+        new SummonTask("CS2_231", SummonSide.RIGHT).Process(g, p, source, null);
+        var minion = p.BoardZone.Single(m => m.Card.Id == "CS2_231");
+        var rows = g.PowerHistory.Full.Skip(cursor).ToList();
+        var full = rows.OfType<PowerHistoryFullEntity>().Single(f => f.Entity.Id == minion.Id);
+        var shifts = rows.OfType<PowerHistoryTagChange>().Where(t => t.Tag == GameTag.ZONE_POSITION
+            && right.Any(m => m.Id == t.EntityId)).ToList();
+        Core2026Proof.Check(shifts.Select(t => t.EntityId).SequenceEqual(right.Reverse().Select(m => m.Id))
+            && shifts.All(t => rows.IndexOf(t) < rows.IndexOf(full)
+                && t.Value == right.Single(m => m.Id == t.EntityId).ZonePosition + 1),
+            "every right neighbour shifts before FULL, highest position first");
+        Core2026Proof.Check(minion.ZonePosition == 1 && full.Entity.Tags[GameTag.ZONE] == (int)Zone.PLAY
+            && full.Entity.Tags[GameTag.ZONE_POSITION] == minion.ZonePosition + 1,
+            "normal SummonTask FULL carries PLAY and final nonzero mid-row slot");
+        Core2026Proof.Check(!rows.OfType<PowerHistoryTagChange>().Any(t => t.EntityId == minion.Id && t.Tag == GameTag.ZONE_POSITION)
+            && !rows.OfType<PowerHistoryShowEntity>().Any(), "no own position TAG_CHANGE or SHOW_ENTITY");
     }
 
     private static void UntouchableSlot()
