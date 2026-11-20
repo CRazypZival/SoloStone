@@ -33,7 +33,7 @@ public sealed class NativeMatch
     private const int BotPlayerId = 2;
     private const int MaxBotActions = 128;
     private const int CurrentSpellPowerBaseTag = 291;
-    // Retail summon source (see PowerHistoryBuilder); an entity reference with CREATOR's privacy rules.
+    // Retail summon source (see PowerHistoryBuilder); masked when its source is hidden from this seat.
     private const GameTag SummonSourceTag = (GameTag)1254;
     // Engine-side Temporary tag. The client's TagVisualConfiguration reads GHOSTLY (785) for the Temporary hand look, not 3630,
     // so transport projects Temporary onto GHOSTLY; an Echo card's own GHOSTLY stays independent of it.
@@ -5552,7 +5552,8 @@ public sealed class NativeMatch
                 && sent.TryGetValue((int)GameTag.CARDTYPE, out int type) && type == (int)CardType.SPELL)
                 nativeTag = GameTag.CURRENT_SPELLPOWER;
             int value = tag.Value;
-            if ((tag.Tag == GameTag.CREATOR || tag.Tag == SummonSourceTag) && value != 0 && IsHiddenFromHuman(value, null)) value = 0;
+            if ((tag.Tag == SummonSourceTag || tag.Tag == GameTag.CREATOR && IsWireOnlySummonCreator(tag.EntityId, value))
+                && value != 0 && IsHiddenFromHuman(value, null)) value = 0;
             if (tag.Tag == TemporaryCardTag || tag.Tag == GameTag.GHOSTLY)
             {
 #if ENGINE_SOURCE
@@ -6578,6 +6579,15 @@ public sealed class NativeMatch
         return new NativeEntity { Id = entity.Id, Tags = ToNativeTags(entity.Tags) };
     }
 
+    private bool IsWireOnlySummonCreator(int id, int creator, IDictionary<GameTag, int> tags = null)
+    {
+        if (!Game.IdEntityDic.TryGetValue(id, out var entity) || !(entity is Minion) || entity[GameTag.CREATOR] == creator)
+            return false;
+        int zone = tags != null ? TagValue(tags, GameTag.ZONE)
+            : historicalZones.TryGetValue(id, out var historicalZone) ? (int)historicalZone : (int)(entity.Zone?.Type ?? EngineZone.INVALID);
+        return zone == (int)EngineZone.PLAY;
+    }
+
     private PegasusGame.PowerHistoryEntity ToNativeHistoryEntity(EngineHistoryEntity entity, bool revealToHuman = false, bool completeSnapshot = true,
         IReadOnlyDictionary<int, EngineHistoryEntity> resetEntities = null, bool currentHealthSnapshot = false)
     {
@@ -6607,8 +6617,9 @@ public sealed class NativeMatch
                 ? new KeyValuePair<GameTag, int>(pair.Key, entity.Id) : pair);
         var tags = ToNativeTags(hidden && outboundTags != null
             ? outboundTags.Where(pair => IsPublicHiddenTag(pair.Key)) : outboundTags);
-        // A public summon must not identify the opponent's hidden hand/deck source.
-        foreach (var tag in tags.Where(tag => (tag.Name == (int)GameTag.CREATOR || tag.Name == (int)SummonSourceTag) && tag.Value != 0))
+        // Mask hidden sources in 1254 and wire-only summon CREATOR; preserve engine-held CREATOR's legacy pass-through.
+        foreach (var tag in tags.Where(tag => (tag.Name == (int)SummonSourceTag
+            || tag.Name == (int)GameTag.CREATOR && IsWireOnlySummonCreator(entity.Id, tag.Value, entity.Tags)) && tag.Value != 0))
             if (IsHiddenFromHuman(tag.Value, null, resetEntities)) tag.Value = 0;
         if (!hidden && (!completeSnapshot || temporaryDiscardVisuals.Contains(entity.Id)))
         {

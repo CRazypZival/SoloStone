@@ -201,16 +201,25 @@ internal static partial class Program
             if (SnapshotTag(preserved, SummonSourceTag) != owner.Hero.Id) failures.Add("FULL 1254 differs from preserved CREATOR");
             // Already registered public actors exercise TAG_CHANGE rather than a folded FULL_ENTITY.
             FlushFieldHistory(match); cursor = capture.Packets.Count;
+            game.PowerHistory.Add(PowerHistoryBuilder.TagChange(summon.Id, GameTag.CREATOR, source.Id));
             copy[GameTag.CREATOR] = source.Id;
             game.PowerHistory.Add(PowerHistoryBuilder.TagChange(copy.Id, SummonSourceTag, source.Id));
+            game.PowerHistory.Add(PowerHistoryBuilder.ShowEntity(copy, source.Id, source.Id));
             FlushFieldHistory(match);
+            var injected = History(capture, cursor).Single(e => e.HasTagChange && e.TagChange.Entity == summon.Id
+                && e.TagChange.Tag == (int)GameTag.CREATOR);
+            if (injected.TagChange.Value != (hidden ? 0 : source.Id) || summon[GameTag.CREATOR] != 0)
+                failures.Add("wire-only CREATOR delta must mask hidden source without changing engine state");
             var change = History(capture, cursor).Single(e => e.HasTagChange && e.TagChange.Entity == copy.Id
                 && e.TagChange.Tag == (int)GameTag.CREATOR);
-            if (change.TagChange.Value != (hidden ? 0 : source.Id)) failures.Add("CREATOR delta leaked hidden source");
+            if (change.TagChange.Value != source.Id) failures.Add("engine-held CREATOR delta must pass through");
             var summonChange = History(capture, cursor).Single(e => e.HasTagChange && e.TagChange.Entity == copy.Id
                 && e.TagChange.Tag == (int)SummonSourceTag);
             if (summonChange.TagChange.Value != (hidden ? 0 : source.Id) || copy[SummonSourceTag] != 0)
                 failures.Add("1254 delta must mask hidden source without changing engine state");
+            var shown = History(capture, cursor).Single(e => e.HasShowEntity && e.ShowEntity.Entity == copy.Id);
+            if (SnapshotTag(shown, GameTag.CREATOR) != source.Id || SnapshotTag(shown, SummonSourceTag) != (hidden ? 0 : source.Id))
+                failures.Add("engine-held CREATOR snapshot must pass through while 1254 masks hidden source");
             var returning = (Minion)EngineEntity.FromCard(owner, Cards.FromId("CS2_231"), zone: owner.HandZone);
             FlushFieldHistory(match); cursor = capture.Packets.Count;
             owner.HandZone.Remove(returning);

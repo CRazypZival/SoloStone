@@ -79,7 +79,7 @@ internal static class OfflinePoolProof
         Check(board.Id == OfflineCardPools.Pick(reference, OfflinePoolTestRecipes.Past, CardClass.MAGE, source.Card.AssetId).Id, "board pick");
         int boardId = context.Summon(board.Id);
         session.Flush();
-        Identity(game, session, game.Player1.HandZone.Last().Id, hand, source.Id, Zone.HAND, engineCreator: 0);
+        Identity(game, session, game.Player1.HandZone.Last().Id, hand, source.Id, Zone.HAND, engineCreator: 0, nativeSummonSource: 0);
         Identity(game, session, boardId, board, source.Id, Zone.PLAY,
             engineCreator: 0, nativeCreator: source.Id, nativeSummonSource: source.Id);
         Check(game.Random.CaptureState().Equals(reference.Random.CaptureState()), "generation exact RNG");
@@ -157,8 +157,7 @@ internal static class OfflinePoolProof
         if (opponent)
         {
             session.Process(PlayCardTask.Any(player, game.IdEntityDic[ids[0]]));
-            Identity(game, session, ids[0], game.IdEntityDic[ids[0]].Card, source.Id, Zone.PLAY,
-                nativeCreator: source.Zone?.Type == Zone.HAND ? 0 : source.Id);
+            Identity(game, session, ids[0], game.IdEntityDic[ids[0]].Card, source.Id, Zone.PLAY);
             Check(ids.Skip(1).All(id => session.Client.Entities[id].CardId == ""), "unchosen offers stay private after selected card is played");
         }
     }
@@ -320,7 +319,7 @@ internal static class OfflinePoolProof
                 bool summoned = output is Minion && output.Zone.Type == Zone.PLAY;
                 Identity(game, session, output.Id, output.Card, output[GameTag.DISPLAYED_CREATOR], output.Zone.Type,
                     engineCreator: engineCreator, nativeCreator: summoned ? source.Id : engineCreator,
-                    nativeSummonSource: summoned ? source.Id : null, cost: output.Cost);
+                    nativeSummonSource: summoned ? source.Id : 0, cost: output.Cost);
             }
             Check(!Invariants.Compare(game, session.Client).Any(), declaration.CardId + " pilot transport");
         }
