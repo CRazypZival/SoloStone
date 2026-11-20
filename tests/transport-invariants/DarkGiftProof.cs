@@ -396,10 +396,13 @@ internal static class DarkGiftProof
             foreach (var minion in new[] { original, summoned, copied })
             {
                 var enchant = minion.AppliedEnchantments.Single(e => e[GameTag.IS_NIGHTMARE_BONUS] == 1);
+                int engineCreator = minion == original ? spell.Id : summoned.Id;
+                int nativeCreator = opponent && minion == original ? 0 : engineCreator;
                 Check(session.Client.Entities[minion.Id].CardId == "CS2_231"
                     && session.Client.Entities[enchant.Id].CardId == "EDR_100te"
                     && session.Client.Entities[enchant.Id].Get(GameTag.ATTACHED) == minion.Id
-                    && session.Client.Entities[enchant.Id].Get(GameTag.CREATOR) == enchant.Creator.Id,
+                    && enchant.Creator.Id == engineCreator
+                    && session.Client.Entities[enchant.Id].Get(GameTag.CREATOR) == nativeCreator,
                     "public full copy identity/attachment/creator");
             }
             if (opponent) Private(session, new[] { handCopy.Id, handGift.Id });
