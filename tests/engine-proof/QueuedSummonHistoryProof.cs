@@ -28,6 +28,7 @@ internal static class QueuedSummonHistoryProof
             ("UNG_076", Eggnapper), ("FP1_019", PoisonSeeds), ("LOOT_080", EmeraldSpellstone), ("LOOT_064t1", SapphireSpellstone),
             ("FP1_002x2", TwoCreepers), ("FP1_031", Rivendare), ("FP1_002+EX1_096", CreeperAndHoarder),
             ("chained-continuations", ChainedContinuations), ("ICC_054", SpreadingPlague), ("ICC_041", Defile),
+            ("dormant-copy", DormantCopy),
             // Negative cases: these keep their own shape.
             ("LOOT_093", RecruitFromDeck), ("summon-from-hand", SummonFromHand), ("UNG_854", DiscoverThenSummon),
             ("own-hit", ChildWithOwnHit), ("TRL_232", OverkillSummon) })
@@ -181,6 +182,28 @@ internal static class QueuedSummonHistoryProof
         var shape = Shape(g, cursor);
         OneBlock(shape, spell.Id, BlockType.POWER, "CS2_182", 2);
         PredictedPlayClean(shape, spell.Id);
+    }
+
+    private static void DormantCopy()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var source = (Minion)Play(g, p, "EDR_469");
+        int cursor = g.PowerHistory.Full.Count;
+        g.PowerHistory.Last.Clear();
+        var copy = (Minion)SabberStoneCore.Actions.Generic.Copy(p, p.Hero, source, Zone.PLAY);
+        var helper = copy.AppliedEnchantments.Single(e => e.Card.Id == "EDR_469e");
+        foreach (var history in new[] { g.PowerHistory.Full.Skip(cursor).ToList(), g.PowerHistory.Last })
+        {
+            int parent = history.FindIndex(e => e is PowerHistoryFullEntity full && full.Entity.Id == copy.Id
+                && full.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone) && zone == (int)Zone.PLAY
+                && (!full.Entity.Tags.TryGetValue(GameTag.DORMANT, out int sleep) || sleep == 0));
+            int enter = history.FindIndex(e => e is PowerHistoryTagChange tag && tag.EntityId == copy.Id
+                && tag.Tag == GameTag.DORMANT && tag.Value == 1);
+            int child = history.FindIndex(e => e is PowerHistoryFullEntity full && full.Entity.Id == helper.Id
+                && full.Entity.Tags.TryGetValue(GameTag.ATTACHED, out int attached) && attached == copy.Id);
+            Core2026Proof.Check(copy.IsDormant && parent >= 0 && enter > parent && child > enter,
+                "Dormant copy keeps FULL without entered DORMANT, then DORMANT change, then attached helper FULL");
+        }
     }
 
     // Two Deathrattles of one death phase: each its own TRIGGER block with its own summons (34104_subspell.power.log:28817-28883).

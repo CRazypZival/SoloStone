@@ -1138,6 +1138,9 @@ namespace SabberStoneCore.Kettle
             return true;
         }
 
+        // Like the entity-reference exception below, these need a client change event, not just a snapshot value.
+        private static readonly HashSet<GameTag> CreatedInPlayChangeTags = new HashSet<GameTag> { GameTag.DORMANT };
+
         // Retail publishes all of one activation's summons inside its own block, so the client spawns them in one task list;
         // one block per queued summon makes it play each spawn to the end before the next. Retail, hsreplay-test-data
         // hslog-tests: 34104_subspell.power.log:11268-11359 (Swarm of Locusts: six FULL_ENTITY ZONE=PLAY in its POWER block,
@@ -1177,7 +1180,8 @@ namespace SabberStoneCore.Kettle
                         // FULL_ENTITY, which then carries the state retail creates it with (a reborn copy's DAMAGE).
                         var own = new List<(int Last, int Full)>();
                         for (int i = at + 1; i < Last.Count; i++)
-                            if (Last[i] is PowerHistoryTagChange tag && tag.EntityId == playable.Id)
+                            if (Last[i] is PowerHistoryTagChange tag && tag.EntityId == playable.Id
+                                && !CreatedInPlayChangeTags.Contains(tag.Tag))
                             {
                                 int inFull = Full.LastIndexOf(tag);
                                 if (inFull < 0) return false;
@@ -1189,7 +1193,11 @@ namespace SabberStoneCore.Kettle
                             full.Entity.Tags[tag.Tag] = tag.Value;
                         }
                         for (int k = own.Count - 1; k >= 0; k--) { Full.RemoveAt(own[k].Full); Last.RemoveAt(own[k].Last); }
-                        foreach (var tag in PowerHistoryBuilder.ShowEntity(playable).Entity.Tags) full.Entity.Tags[tag.Key] = tag.Value;
+                        // Keep event tags at their original position and the FULL's value from before those events.
+                        foreach (var tag in PowerHistoryBuilder.ShowEntity(playable).Entity.Tags)
+                            if (!CreatedInPlayChangeTags.Contains(tag.Key) || !Last.Skip(at + 1).Any(e =>
+                                e is PowerHistoryTagChange changeTag && changeTag.EntityId == playable.Id && changeTag.Tag == tag.Key))
+                                full.Entity.Tags[tag.Key] = tag.Value;
                         full.Entity.Tags[GameTag.ZONE] = (int)Zone.PLAY;
                         full.HealthIsMaximum = true;
                         // The client builds referencing text once when shown; it must already know the target entity.
