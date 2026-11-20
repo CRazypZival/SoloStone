@@ -3,6 +3,8 @@ using SabberStoneCore.Kettle;
 using SabberStoneCore.Model;
 using SabberStoneCore.Config;
 using SabberStoneCore.Model.Entities;
+using SabberStoneCore.Tasks;
+using SabberStoneCore.Tasks.SimpleTasks;
 using SabberStoneCore.Tasks.PlayerTasks;
 using static Core2026Proof;
 
@@ -25,6 +27,7 @@ internal static class QueuedSummonHistoryProof
             ("EX1_248", FeralSpirit), ("EX1_573", Cenarius), ("ICC_832", Malfurion), ("EX1_116", Leeroy),
             ("UNG_076", Eggnapper), ("FP1_019", PoisonSeeds), ("LOOT_080", EmeraldSpellstone), ("LOOT_064t1", SapphireSpellstone),
             ("FP1_002x2", TwoCreepers), ("FP1_031", Rivendare), ("FP1_002+EX1_096", CreeperAndHoarder),
+            ("chained-continuations", ChainedContinuations), ("ICC_054", SpreadingPlague), ("ICC_041", Defile),
             // Negative cases: these keep their own shape.
             ("LOOT_093", RecruitFromDeck), ("summon-from-hand", SummonFromHand), ("UNG_854", DiscoverThenSummon),
             ("own-hit", ChildWithOwnHit), ("TRL_232", OverkillSummon) })
@@ -216,6 +219,82 @@ internal static class QueuedSummonHistoryProof
         g.DeathProcessingAndAuraUpdate();
         Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "FP1_002t") == 2, "two Spectral Spiders summoned");
         Together(Shape(g, cursor), "FP1_002t", 2, 1);
+    }
+
+    private static void ChainedContinuations()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var source = Summon(p, "CS2_182");
+        ISimpleTask chain = new SummonTask("CS2_101t");
+        for (int i = 0; i < 3; i++)
+            chain = ComplexTask.Create(new SummonTask("CS2_101t"), new EnqueueTask(1, chain));
+        int cursor = g.PowerHistory.Full.Count;
+        g.TaskQueue.StartEvent();
+        g.TaskQueue.Enqueue(chain, p, source, null);
+        g.ProcessTasks();
+        g.TaskQueue.EndEvent();
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "CS2_101t") == 4, "four chained Recruits summoned");
+        OneBlock(Shape(g, cursor), source.Id, BlockType.POWER, "CS2_101t", 4);
+    }
+
+    private static void SpreadingPlague()
+    {
+        var g = NewGame(); var p = g.Player1;
+        for (int i = 0; i < 4; i++) Summon(p.Opponent, "CS2_182");
+        int cursor = g.PowerHistory.Full.Count;
+        var spell = Play(g, p, "ICC_054");
+        Core2026Proof.Check(p.BoardZone.Count(m => m.Card.Id == "ICC_832t4") == 4, "four Scourges summoned");
+        var shape = Shape(g, cursor);
+        var waves = shape.Blocks.Where(b => b.Source == spell.Id && b.BlockType == BlockType.POWER).ToList();
+        Core2026Proof.Check(waves.Count == 4 && waves.All(b => shape.Creations.Count(c => c.Card == "ICC_832t4"
+            && ReferenceEquals(c.Block, b)) == 1), "one Scourge in each of four cast blocks" + shape.Dump);
+        CreatedInPlay(shape, shape.Creations.Where(c => c.Card == "ICC_832t4").ToList());
+        PredictedPlayClean(shape, spell.Id);
+    }
+
+    private static void Defile()
+    {
+        var g = NewGame(); var p = g.Player1;
+        var victims = Enumerable.Range(1, 3).Select(health => {
+            var minion = Summon(p.Opponent, "CS2_182"); minion.BaseHealth = health; return minion;
+        }).ToList();
+        int cursor = g.PowerHistory.Full.Count;
+        var spell = Play(g, p, "ICC_041");
+        Core2026Proof.Check(victims.All(m => m.Zone == p.Opponent.GraveyardZone), "Defile kills the 1/2/3 Health ladder");
+        var shape = Shape(g, cursor);
+        var waves = shape.Blocks.Where(b => b.Source == spell.Id && b.BlockType == BlockType.POWER).ToList();
+        Core2026Proof.Check(waves.Count == 4, "four Defile waves, including the final empty wave" + shape.Dump);
+        var history = g.PowerHistory.Full.Skip(cursor).ToList();
+        for (int i = 0; i < victims.Count; i++)
+        {
+            var deaths = shape.Blocks.Single(b => b.BlockType == BlockType.DEATHS && shape.OwnRows[b].Any(e =>
+                e is PowerHistoryTagChange tag && tag.EntityId == victims[i].Id && tag.Tag == GameTag.ZONE && tag.Value == (int)Zone.GRAVEYARD));
+            // Defile's next wave starts by processing the previous wave's deaths, before dealing its own damage.
+            Core2026Proof.Check(ReferenceEquals(shape.Parent[deaths], waves[i + 1])
+                && history.IndexOf(waves[i]) < history.IndexOf(deaths)
+                && shape.OwnRows[waves[i + 1]].Where(e => e is PowerHistoryMetaData meta && meta.Type == MetaDataType.DAMAGE)
+                    .All(hit => history.IndexOf(deaths) < history.IndexOf(hit)),
+                "death phase precedes the next Defile hit" + shape.Dump);
+        }
+        PredictedPlayClean(shape, spell.Id);
+
+        // Damage metadata already prevents Defile joins; inspect its real queued recast too, so removing the Repeat guard fails.
+        g = NewGame(); p = g.Player1;
+        Summon(p.Opponent, "CS2_182").BaseHealth = 1;
+        var defile = (Spell)Add(p, "ICC_041");
+        using var cast = g.Facts.Cast(defile, HistoryCastKind.Player);
+        g.TaskQueue.StartEvent();
+        defile.ActivateTask();
+        g.TaskQueue.Process();
+        var queue = (System.Collections.IEnumerable)typeof(TaskQueue).GetProperty("CurrentQueue",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(g.TaskQueue);
+        var recast = queue.Cast<object>().Single();
+        var activation = (QueuedSpellActivation)recast.GetType().GetField("HistoryCast").GetValue(recast);
+        Core2026Proof.Check(activation?.Kind == HistoryCastKind.Repeat
+            && recast.GetType().GetField("HistoryParent").GetValue(recast) == null, "Defile's queued Repeat has no summon history parent");
+        g.ProcessTasks();
+        g.TaskQueue.EndEvent();
+        cast.Complete();
     }
 
     // A summon of a card that already exists in a hidden zone is a reveal: it keeps its SHOW_ENTITY.

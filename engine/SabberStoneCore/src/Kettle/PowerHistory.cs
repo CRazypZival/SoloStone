@@ -1280,6 +1280,7 @@ namespace SabberStoneCore.Kettle
             var empties = Last.GetRange(end + 1, last - end - 1);
             Full.RemoveRange(fullEnd, last - end + 1); Full.AddRange(empties);
             Last.RemoveRange(end, last - end + 1); Last.AddRange(empties);
+            child.SummonHome = home;
             return true;
         }
 

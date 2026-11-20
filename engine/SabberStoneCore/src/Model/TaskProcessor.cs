@@ -179,9 +179,9 @@ namespace SabberStoneCore.Model
             int repeats = triggerKeyword == (int)GameTag.DEATHRATTLE ? Actions.DeathrattleRules.Repeats(controller,source) : 1;
             // A task queued by its source's own running effect (EnqueueTask, EnqueueNumberTask) rejoins that block if it summons
             // (PowerHistory.JoinQueuedSummon). Only an activation's POWER or TRIGGER block: never a PLAY block, whose own lists'
-            // card zone changes the client ignores (R7), nor an ATTACK block.
+            // card zone changes the client ignores (R7), nor an ATTACK block. A recast keeps its own activation block.
             PowerHistoryBlockStart historyParent = null;
-            if (_game.History && !historyTrigger && !triggerKeyword.HasValue && !task.IsTrigger
+            if (_game.History && historyCast?.Kind != HistoryCastKind.Repeat && !historyTrigger && !triggerKeyword.HasValue && !task.IsTrigger
                 && _game.PowerHistory.CurrentBlock is PowerHistoryBlockStart open
                 && (open.BlockType == BlockType.POWER || open.BlockType == BlockType.TRIGGER) && open.Source == source?.Id)
                 historyParent = open;
