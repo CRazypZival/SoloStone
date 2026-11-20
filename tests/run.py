@@ -111,6 +111,8 @@ class Suite:
 GOLDENS = ('classic-source', 'modern', 'core-reprints', 'core-2026', 'offline-standard-pools-v1')
 
 SUITES = [
+    Suite('test-control', 'dotnet', 'test-control board trace sampling and request validation without a client',
+          'tests/test-control/TestControlTests.csproj', artifacts='test-control'),
     Suite('cards', 'dotnet', 'card catalog and pool counts, rarity rules, and card scenarios on the engine (damage, auras, deathrattles, secrets)', 'tests/cards/CardsTests.csproj'),
     Suite('fair-packs', 'dotnet', 'pack opening: fair rolls, pity rules and the frozen pack results', 'tests/fair-packs/FairPackTests.csproj'),
     Suite('ladder-rules', 'dotnet', 'ranked ladder rules (stars, floors, rewards) and a simulated climb through a synthetic opponent world',
