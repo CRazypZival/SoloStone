@@ -327,7 +327,7 @@ public sealed class NativeMatch
     private readonly HashSet<int> privateChoiceOffers = new HashSet<int>();
     private readonly Stack<bool> visibleSubSpells = new Stack<bool>();
     private readonly Stack<int> visualBlockSources = new Stack<int>();
-    private readonly HashSet<int> replacedHeroPlayers = new HashSet<int>();
+    private readonly Dictionary<int, int> replacedHeroBlockDepths = new Dictionary<int, int>();
     private readonly Stack<bool> revealedTriggerScopes = new Stack<bool>();
     private readonly HashSet<int> pendingTriggerReveals = new HashSet<int>();
     private readonly HashSet<int> startOfGameSources = new HashSet<int>();
@@ -4441,7 +4441,7 @@ public sealed class NativeMatch
     // Hero-swap spells read the FULL snapshot's zone before queued TAG_CHANGE rows execute.
     private bool FoldHeroReplacementSpawnZone(PowerHistoryData row, List<IPowerHistoryEntry> entries, int index)
     {
-        if (!row.HasFullEntity || index + 1 >= entries.Count
+        if (visualBlockSources.Count == 0 || !row.HasFullEntity || index + 1 >= entries.Count
             || !(entries[index + 1] is SabberStoneCore.Kettle.PowerHistoryTagChange move)
             || move.EntityId != row.FullEntity.Entity || move.Tag != GameTag.ZONE || move.Value != (int)EngineZone.PLAY)
             return false;
@@ -4455,7 +4455,7 @@ public sealed class NativeMatch
             int controller = full.Tags.FirstOrDefault(tag => tag.Name == (int)GameTag.CONTROLLER)?.Value ?? 0;
             int player = controller == Game.Player1.PlayerId ? Game.Player1.Id
                 : controller == Game.Player2.PlayerId ? Game.Player2.Id : 0;
-            if (player == 0 || !replacedHeroPlayers.Contains(player)) return false;
+            if (player == 0 || !replacedHeroBlockDepths.ContainsKey(player)) return false;
         }
         zone.Value = (int)EngineZone.PLAY;
         return true;
@@ -5091,7 +5091,7 @@ public sealed class NativeMatch
         milledOpposingActors.Clear(); milledOpposingActors.UnionWith(stillMilled);
         revealedEntities.Clear(); visibleTransportTags.Clear(); clientTransportTags.Clear(); clientTransportCards.Clear();
         historicalControllers.Clear(); historicalZones.Clear(); historicalPositions.Clear(); historicalTemporaryVisuals.Clear(); temporaryDiscardVisuals.Clear();
-        privacyTargets.Clear(); retiredChoiceActors.Clear(); opposingProxies.Clear(); deckChoiceOriginals.Clear(); privateDeckOffers.Clear(); privateChoiceOffers.Clear(); visibleSubSpells.Clear(); visualBlockSources.Clear(); replacedHeroPlayers.Clear(); revealedTriggerScopes.Clear(); pendingTriggerReveals.Clear(); lastSpellPower.Clear(); poweredUpHighlights.Clear();
+        privacyTargets.Clear(); retiredChoiceActors.Clear(); opposingProxies.Clear(); deckChoiceOriginals.Clear(); privateDeckOffers.Clear(); privateChoiceOffers.Clear(); visibleSubSpells.Clear(); visualBlockSources.Clear(); replacedHeroBlockDepths.Clear(); revealedTriggerScopes.Clear(); pendingTriggerReveals.Clear(); lastSpellPower.Clear(); poweredUpHighlights.Clear();
         opposingChoices = null; opposingChoiceSource = null; opposingChoiceOriginals = null; opposingPicks = null; deferredOpposing.Clear();
         decisionHandTargetSource = 0;
         substitutedTargetSource = 0;
@@ -5541,7 +5541,7 @@ public sealed class NativeMatch
         {
 #if ENGINE_SOURCE
             if (tag.Tag == GameTag.HERO_ENTITY && visualBlockSources.Count > 0)
-                replacedHeroPlayers.Add(tag.EntityId);
+                replacedHeroBlockDepths[tag.EntityId] = visualBlockSources.Count;
 #endif
             if (tag.Tag == GameTag.CONTROLLER && powerControllers.ContainsKey(tag.EntityId))
                 ObservePowerController(tag.EntityId, tag.Value);
@@ -5634,7 +5634,7 @@ public sealed class NativeMatch
         if (entry is PowerHistoryBlockStart start)
         {
 #if ENGINE_SOURCE
-            if (visualBlockSources.Count == 0) replacedHeroPlayers.Clear();
+            if (visualBlockSources.Count == 0) replacedHeroBlockDepths.Clear();
             visualBlockSources.Push(start.Source);
             // The pre-PLAY reveal of an automatic play scopes its presentation flags to this block only.
             effectPlayScopes.Push(start is PowerHistoryEffectPlayStart && start.Source == scopedRevealSource ? start.Source : 0);
@@ -5672,7 +5672,8 @@ public sealed class NativeMatch
         {
 #if ENGINE_SOURCE
             if (visualBlockSources.Count > 0) visualBlockSources.Pop();
-            if (visualBlockSources.Count == 0) replacedHeroPlayers.Clear();
+            foreach (var swap in replacedHeroBlockDepths.Where(pair => pair.Value > visualBlockSources.Count).ToArray())
+                replacedHeroBlockDepths.Remove(swap.Key);
             if (revealedTriggerScopes.Count > 0) revealedTriggerScopes.Pop();
             if (effectPlayScopes.Count > 0) effectPlayScopes.Pop();
 #endif

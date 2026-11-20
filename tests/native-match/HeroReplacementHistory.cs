@@ -119,6 +119,7 @@ internal static partial class Program
     private static void HeroReplacementHistory(bool dump = false)
     {
         HeroSlotAcrossRoutes();
+        // The 37.0 client defines EX1_323 as a hero card; this legacy minion is only a ReplaceHeroTask packet-shape fixture, not client-playable.
         foreach (var (cardId, generated) in new[] { ("CORE_EX1_323", true), ("CORE_EX1_323", false),
             ("EX1_323", false), ("TLC_513t", false), ("CATA_190h", false), ("ICC_829", false), ("ICC_834", false) })
         {
@@ -402,7 +403,18 @@ internal static partial class Program
 
     private static void HeroReplacementSpawnZoneScopes()
     {
-        var (match, _) = AnimationMatch();
+        var (match, capture) = AnimationMatch();
+        var opening = capture.HistorySnapshots().First().List;
+        foreach (var seat in new[] { match.Game.Player1, match.Game.Player2 })
+        {
+            var engine = match.Game.PowerHistory.Full.OfType<SabberStoneCore.Kettle.PowerHistoryFullEntity>()
+                .Single(row => row.Entity.Id == seat.Hero.Id);
+            var full = opening.Single(row => row.HasFullEntity && row.FullEntity.Entity == seat.Hero.Id);
+            Check(engine.Entity.Tags.TryGetValue(GameTag.ZONE, out int zone) && zone == 0
+                && full.FullEntity.Tags.Single(tag => tag.Name == (int)GameTag.ZONE).Value == zone,
+                "first history packet preserves starting hero FULL ZONE for seat " + seat.PlayerId);
+        }
+        Console.WriteLine("PASS starting hero FULL zones: both seats match engine in first history packet");
         var method = typeof(NativeMatch).GetMethod("FoldHeroReplacementSpawnZone", BindingFlags.Instance | BindingFlags.NonPublic);
         var convert = typeof(NativeMatch).GetMethod("ToNativeHistory", BindingFlags.Instance | BindingFlags.NonPublic);
         SabberStoneCore.Kettle.IPowerHistoryEntry Start() => new SabberStoneCore.Kettle.PowerHistoryBlockStart { BlockType = BlockType.POWER };
@@ -432,9 +444,15 @@ internal static partial class Program
         }
         int owner = match.Game.Player1.Id, opponent = match.Game.Player2.Id;
         Case("hero independent of card id", 3, new[] { Start() }, true);
+        Case("hero outside any block", 3, Array.Empty<SabberStoneCore.Kettle.IPowerHistoryEntry>(), false);
+        Case("weapon in the same block as the swap", 7, new[] { Start(), Hero(owner) }, true);
         Case("weapon in nested POWER", 7, new[] { Start(), Hero(owner), Start() }, true);
-        Case("weapon after completed sibling", 7, new[] { Start(), Start(), Hero(owner), End(), Start() }, true);
+        Case("weapon after completed sibling", 7, new[] { Start(), Start(), Hero(owner), End(), Start() }, false);
+        Case("weapon in a sibling block after the swap block ended, same outer block", 7,
+            new[] { Start(), Start(), Hero(owner), End(), Start(), Start() }, false);
+        Case("weapon after descendant ends, swap block still open", 7, new[] { Start(), Hero(owner), Start(), End() }, true);
         Case("replacement in earlier packet", 7, new[] { Start(), Hero(owner), Start() }, true, continuation: true);
+        Case("completed swap block in earlier packet", 7, new[] { Start(), Start(), Hero(owner), End(), Start() }, false, continuation: true);
         Case("ordinary weapon", 7, new[] { Start() }, false);
         Case("other controller replacement", 7, new[] { Start(), Hero(opponent) }, false);
         Case("previous completed outer block", 7, new[] { Start(), Hero(owner), End(), Start() }, false);
@@ -443,7 +461,7 @@ internal static partial class Program
         Case("not moving to PLAY", 3, new[] { Start() }, false, destination: 6);
         Case("different entity moves", 3, new[] { Start() }, false, moving: 73);
         Case("minion", 4, new[] { Start(), Hero(owner) }, false);
-        Console.WriteLine("PASS hero replacement spawn-zone scopes: generic hero, outermost block, controller and adjacent move guards");
+        Console.WriteLine("PASS hero replacement spawn-zone scopes: open hero block, swap subtree across packets, controller and adjacent move guards");
     }
 
     private static void CheckJaraxxusSpawnZones(List<PowerHistoryData> body, int controller)
