@@ -798,6 +798,7 @@ public sealed class NativeMatch
         Game = new EngineGame(config);
 #if ENGINE_SOURCE
         Game.RewindBoundaryDiagnostic = message => BotTrace?.Invoke("REWIND_BOUNDARY " + message);
+        Game.CycleBudgetExhaustedDiagnostic = message => BotTrace?.Invoke("CLEANUP_CYCLE_LIMIT " + message + " (the game ends)");
 #endif
         OpponentPlateName = NpcMemoryText.Plate(OpponentName, npcProfile != null ? NpcMemory : null);
 
@@ -835,6 +836,7 @@ public sealed class NativeMatch
             config.Player2HeroCard = ordinaryBotHero; config.Player2HeroClass = ordinaryBotHero.Class;
             Game = new EngineGame(config);
             Game.RewindBoundaryDiagnostic = message => BotTrace?.Invoke("REWIND_BOUNDARY " + message);
+            Game.CycleBudgetExhaustedDiagnostic = message => BotTrace?.Invoke("CLEANUP_CYCLE_LIMIT " + message + " (the game ends)");
             Game.StartGame();
         }
 #endif
