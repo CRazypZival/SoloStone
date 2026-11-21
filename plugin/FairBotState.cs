@@ -625,6 +625,10 @@ public sealed class FairBotState
                     foreach (var branch in kept.ChooseOnePlayables ?? Array.Empty<IPlayable>())
                         if (branch != null) visibleOffboard.Add(branch.Id);
                 }
+        // C'Thun's set-aside proxy (RitualTask) carries the buffs from rituals both players saw played; masked, the next ritual
+        // found no ongoing effect on it and the search copy failed.
+        foreach (var player in new[] { copy.Player1, copy.Player2 })
+            if (player.SeenCthun && copy.IdEntityDic.ContainsKey(player.ProxyCthun)) visibleOffboard.Add(player.ProxyCthun);
         // Nellie's chooser knows its selected crew; a later controller does not inherit that knowledge.
         var knownCrew = new HashSet<int>();
         var crew = copyChooser.SetasideZone.Where(c => c[SabberStoneCore.Actions.PayloadRules.Key] == 74894).ToArray();
@@ -1110,6 +1114,9 @@ public sealed class FairBotState
             if (!kept.Contains(actor.Id) && actor.Controller.SetasideZone.Contains(actor)) actor.Controller.SetasideZone.Remove(actor);
             game.IdEntityDic.Remove(actor.Id);
         }
+        // A trigger registered apart from its owner's ActivatedTrigger (an enchantment's hand trigger: Shifting Scroll,
+        // Shadow Reflection) outlived its masked owner; cloning the view then failed to find the owner.
+        foreach (var stale in game.Triggers.Where(t => !game.IdEntityDic.ContainsKey(t.SourceId)).ToList()) stale.Remove();
         // EntityList.Remove deliberately leaves its count unchanged; repair the clone's registry before reuse.
         entityCount.SetValue(game.IdEntityDic, visible.Length);
         int next = visible.Select(c => c.Id).DefaultIfEmpty(3).Max() + 1;
