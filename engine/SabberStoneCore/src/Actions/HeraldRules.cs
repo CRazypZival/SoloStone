@@ -5,6 +5,7 @@ using SabberStoneCore.Enums;
 using SabberStoneCore.EffectSystem;
 using SabberStoneCore.Model;
 using SabberStoneCore.Model.Entities;
+using SabberStoneCore.Tasks.SimpleTasks;
 
 namespace SabberStoneCore.Actions
 {
@@ -72,11 +73,12 @@ namespace SabberStoneCore.Actions
                 var minion = (Minion)Entity.FromCard(controller, Cards.FromId(token), new EntityData {
                     [GameTag.ZONE] = (int)Zone.PLAY, [GameTag.DISPLAYED_CREATOR] = source.Id });
                 ConfigureSummon(minion, tier);
-                int position = source is BoardObject location
-                    ? Math.Min(controller.BoardZone.SlotCount, location.Zone == controller.BoardZone ? location.ZonePosition + 1 : location.LastBoardPosition)
+                int alternate = 0;
+                int position = source is BoardObject
+                    ? SummonTask.GetPosition(source, SummonSide.LEFT, 0, ref alternate)
                     : EffectContext.DeathrattlePosition(controller, source);
-                // Repeated Heralds append after the source's existing Soldiers in creation order.
-                while (position < controller.BoardZone.SlotCount
+                // A location's fresh Soldier belongs immediately right of it; non-location sources retain their existing row order.
+                while (source is not BoardObject && position < controller.BoardZone.SlotCount
                     && IsSoldier(controller.BoardZone.GetSlot(position).Card)
                     && controller.BoardZone.GetSlot(position)[GameTag.DISPLAYED_CREATOR] == source.Id)
                     position++;
