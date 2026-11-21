@@ -26,6 +26,12 @@ namespace SabberStoneCore.Actions
             CardClass.WARLOCK => "CATA_725t", CardClass.WARRIOR => "CATA_580t", _ => null
         };
         public static bool IsSoldier(Card card) => card != null && Soldier(card.Class) == card.Id;
+        // #192, read by the native transport only (never stored): tag 955 (USE_ALTERNATE_CARD_TEXT) picks the "@" text of a
+        // tiered card: 0 "Herald twice to upgrade", 1 "Herald once to upgrade", 2 the final text. Lean, derived from the card text,
+        // not from a retail trace: it follows the controller's count (upgrades at 2 and 4 Heralds).
+        public static int Variant(Controller controller) => Count(controller) >= 4 ? 2 : Count(controller) % 2;
+        /// <summary>Cards whose text and stats follow the Herald tier: Soldiers and Herald Colossal appendages.</summary>
+        public static bool IsTiered(Card card) => IsSoldier(card) || ColossalRules.IsHeraldAppendage(card);
         /// <summary>Branch (a): the controller's own Soldier class: selected profile, else current hero class.</summary>
         public static CardClass OwnClass(Controller controller)
         {

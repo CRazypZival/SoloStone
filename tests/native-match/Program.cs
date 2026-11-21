@@ -1517,6 +1517,7 @@ internal static partial class Program
             capture.SerializeAll();
         }
         JadeCoinSequence();
+        HeraldDefinitionHistory();
         Check(NativeMatch.TransportCardId("CFM_712_t31") == "CFM_712_t31" && NativeMatch.TransportCardId(null) == "", "Jade mapping is bounded to legacy identities");
         Console.WriteLine("PASS Jade Golem projection: 30 legacy sizes, four pinned native identities, exact printed and current stats");
     }

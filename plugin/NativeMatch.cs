@@ -3526,6 +3526,7 @@ public sealed class NativeMatch
         AppendHeraldState(packet);
 #endif
 #if ENGINE_SOURCE
+        AppendHeraldDefinitions(packet);
         AppendDecisionHandTarget(packet);
 #endif
 #if ENGINE_SOURCE
@@ -4002,8 +4003,11 @@ public sealed class NativeMatch
         yield return new KeyValuePair<GameTag, int>(GameTag.TAG_SCRIPT_DATA_NUM_2, number2);
         yield return new KeyValuePair<GameTag, int>((GameTag)1115, entity.Card[(GameTag)1115]);
         yield return new KeyValuePair<GameTag, int>((GameTag)1116, entity.Card[(GameTag)1116]);
-        yield return new KeyValuePair<GameTag, int>((GameTag)955, AlternateCardText(entity.Card.Id,
-            entity.Zone?.Type ?? (EngineZone)entity[GameTag.ZONE], number, number2, entity[(GameTag)955]));
+        // #192: a tiered card's variant follows its controller's live Herald count (never stored on the entity), so a bounce,
+        // shuffle, side change or Herald is picked up by the endpoint refresh.
+        yield return new KeyValuePair<GameTag, int>((GameTag)955, SabberStoneCore.Actions.HeraldRules.IsTiered(entity.Card)
+            ? SabberStoneCore.Actions.HeraldRules.Variant(entity.Controller)
+            : AlternateCardText(entity.Card.Id, entity.Zone?.Type ?? (EngineZone)entity[GameTag.ZONE], number, number2, entity[(GameTag)955]));
 #endif
         if (entity is Minion minion)
         {
@@ -4105,6 +4109,81 @@ public sealed class NativeMatch
         TrackVisibility(update);
         lastSpellPower[controller.PlayerId] = current;
     }
+
+#if ENGINE_SOURCE
+    // #192: an upgraded Soldier or Herald Colossal appendage keeps its card id and scales its printed stats. The client colours
+    // ATK/HEALTH green when they exceed the entity's definition (Entity.GetDefATK/GetDefHealth), so the definition must carry the
+    // scaled printed stats: DefTags on FULL/SHOW/CHANGE_ENTITY (which reload the definition), else a ChangeDef tag change. A real
+    // buff on top still shows green. The factor is the Soldier's script 2 or the appendage's 31010; Silence resets the stats to printed.
+    internal static int HeraldDefinitionFactor(EngineCard card, IDictionary<GameTag, int> tags)
+    {
+        if (card == null || tags == null || !SabberStoneCore.Actions.HeraldRules.IsTiered(card)
+            || tags.TryGetValue(GameTag.SILENCED, out int silenced) && silenced != 0) return 1;
+        // Soldiers: script 2 (Silence, transform and Reset clear it). Appendages: engine 31010 (Silence resets the stats to printed).
+        var tag = SabberStoneCore.Actions.HeraldRules.IsSoldier(card) ? SabberStoneCore.Actions.HeraldRules.RealizedFactor
+            : SabberStoneCore.Actions.ColossalRules.RealizedFactor;
+        return tags.TryGetValue(tag, out int factor) && factor > 1 ? factor : 1;
+    }
+
+    // The text variant for a snapshot of a tiered card owned by CONTROLLER (player id): its controller's count when it is sent.
+    private int HeraldVariant(int controller) =>
+        Game.Player1.PlayerId == controller ? SabberStoneCore.Actions.HeraldRules.Variant(Game.Player1)
+        : Game.Player2.PlayerId == controller ? SabberStoneCore.Actions.HeraldRules.Variant(Game.Player2) : 0;
+
+    private static List<NativeTag> HeraldDefinitionTags(EngineCard card, int factor) => new List<NativeTag> {
+        new NativeTag { Name = (int)GameTag.ATK, Value = card.ATK * factor },
+        new NativeTag { Name = (int)GameTag.HEALTH, Value = card.Health * factor } };
+
+    // Definition ATK/HEALTH the client holds for each shown tiered entity (the printed ones unless DefTags or ChangeDef said otherwise).
+    private readonly Dictionary<int, (int Atk, int Health)> heraldDefinitions = new Dictionary<int, (int Atk, int Health)>();
+
+    private void AppendHeraldDefinitions(NativePowerHistory packet)
+    {
+        // What this packet already does to the definitions: every FULL/SHOW/CHANGE reloads the card's definition, then applies DefTags.
+        var anchors = new Dictionary<int, int>();
+        for (int i = 0; i < packet.List.Count; i++)
+        {
+            var row = packet.List[i];
+            if (row.HasCreateGame || row.HasResetGame) { heraldDefinitions.Clear(); anchors.Clear(); continue; }
+            if (row.HasHideEntity) { heraldDefinitions.Remove(row.HideEntity.Entity); continue; }
+            var identity = row.HasFullEntity ? row.FullEntity : row.HasShowEntity ? row.ShowEntity : row.HasChangeEntity ? row.ChangeEntity : null;
+            if (identity == null) continue;
+            anchors[identity.Entity] = i + 1;
+            var card = LookupCard(identity.Name);
+            if (card == null || !SabberStoneCore.Actions.HeraldRules.IsTiered(card)) { heraldDefinitions.Remove(identity.Entity); continue; }
+            heraldDefinitions[identity.Entity] = (identity.DefTags.FirstOrDefault(tag => tag.Name == (int)GameTag.ATK)?.Value ?? card.ATK,
+                identity.DefTags.FirstOrDefault(tag => tag.Name == (int)GameTag.HEALTH)?.Value ?? card.Health);
+        }
+        foreach (int id in revealedEntities.OrderBy(value => value).ToArray())
+        {
+            if (!Game.IdEntityDic.TryGetValue(id, out var entity) || !SabberStoneCore.Actions.HeraldRules.IsTiered(entity.Card)
+                || !clientTransportCards.TryGetValue(id, out string shown) || shown != entity.Card.Id || IsHiddenFromHuman(id, null)) continue;
+            int factor = HeraldDefinitionFactor(entity.Card, entity.NativeTags);
+            var wanted = (Atk: entity.Card.ATK * factor, Health: entity.Card.Health * factor);
+            var held = heraldDefinitions.TryGetValue(id, out var known) ? known : (Atk: entity.Card.ATK, Health: entity.Card.Health);
+            if (held == wanted) continue;
+            // After the stat changes that realized (or reset) the scaling, so the entity already holds the value the definition gets.
+            int at = anchors.TryGetValue(id, out int anchor) ? anchor : 0, first = -1;
+            for (int i = at; i < packet.List.Count && first < 0; i++)
+                if (packet.List[i].HasTagChange && packet.List[i].TagChange.Entity == id
+                    && (packet.List[i].TagChange.Tag == (int)GameTag.ATK || packet.List[i].TagChange.Tag == (int)GameTag.HEALTH)) first = i;
+            if (first >= 0)
+            {
+                at = first + 1;
+                while (at < packet.List.Count && packet.List[at].HasTagChange && packet.List[at].TagChange.Entity == id) at++;
+            }
+            else if (!anchors.ContainsKey(id))
+            {
+                at = packet.List.Count;
+                while (at > 0 && packet.List[at - 1].HasPowerEnd) at--;
+            }
+            packet.List.InsertRange(at, new[] { (GameTag.ATK, wanted.Atk), (GameTag.HEALTH, wanted.Health) }.Select(stat =>
+                new PowerHistoryData { TagChange = new PegasusGame.PowerHistoryTagChange {
+                    Entity = id, Tag = (int)stat.Item1, Value = stat.Item2, ChangeDef = true } }));
+            heraldDefinitions[id] = wanted;
+        }
+    }
+#endif
 
 #if ENGINE_SOURCE || MODERN_MECHANICS
     // Pinned HeraldCardTextBuilder reads controller 4534; see tests/transport-invariants/herald-native-evidence.md.
@@ -6889,8 +6968,9 @@ public sealed class NativeMatch
                     ? referenced
                     : SabberStoneCore.Actions.PayloadRules.UsesReferenceTag(raceDefinition) ? 0 : TextValue(GameTag.TAG_SCRIPT_DATA_NUM_1);
             int number2 = raceDefinition.Id == "BE_850t" ? TextValue(GameTag.ATK) : TextValue(GameTag.TAG_SCRIPT_DATA_NUM_2);
-            int alternateText = AlternateCardText(raceDefinition.Id, (EngineZone)TextValue(GameTag.ZONE),
-                number, number2, TextValue((GameTag)955));
+            int alternateText = SabberStoneCore.Actions.HeraldRules.IsTiered(raceDefinition)
+                ? HeraldVariant(TextValue(GameTag.CONTROLLER))
+                : AlternateCardText(raceDefinition.Id, (EngineZone)TextValue(GameTag.ZONE), number, number2, TextValue((GameTag)955));
             bool formattedText = raceDefinition.Text?.Contains("@") == true
                 || System.Text.RegularExpressions.Regex.IsMatch(raceDefinition.Text ?? "", @"\{[0-9]+\}");
             // Entity-reference text (Reference*Entity builders): a stored entity this viewer cannot name is sent as 0.
@@ -7002,6 +7082,10 @@ public sealed class NativeMatch
                 : changedOffer && !hidden && name.Length > 0
                 ? new[] { GameTag.ATK, GameTag.HEALTH, GameTag.COST }.Select(tag => new NativeTag { Name = (int)tag,
                     Value = tags.FirstOrDefault(shown => shown.Name == (int)tag)?.Value ?? 0 }).ToList()
+#if ENGINE_SOURCE
+                : raceDefinition != null && !hidden && name == raceDefinition.Id && HeraldDefinitionFactor(raceDefinition, entity.Tags) > 1
+                ? HeraldDefinitionTags(raceDefinition, HeraldDefinitionFactor(raceDefinition, entity.Tags))
+#endif
                 : CreationBuilderDefTags(name, hidden, tags),
             Tags = tags.OrderBy(tag => tag.Name).ToList()
         };
