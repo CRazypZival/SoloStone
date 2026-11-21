@@ -150,7 +150,15 @@ internal static partial class Program
         var copy = (Minion)player.BoardZone.Single(minion => minion != yeti && minion.Card.Id == "CS2_182");
         copy.PeekStats(out int atk, out int maxHealth, out int damage);
         Check(atk == 4 && maxHealth - damage == 7, "the copy carries the buff in the engine");
-        EventCheck(lines, "CREATE", "copy created with its real stats", "CS2_182#" + copy.Id, "stats=4/7");
+        // The copy is created straight into PLAY (one FULL_ENTITY, no SHOW_ENTITY, as in retail), so the log either reads its
+        // real stats at CREATE or follows the stream: CREATE with printed stats, its copied enchantment, then the stat change.
+        var created = EventLines(lines, "CREATE").Where(l => l.Contains("CS2_182#" + copy.Id)).ToArray();
+        Check(created.Length == 1, "copy logged as created once:\n" + string.Join("\n", lines));
+        var after = lines.SkipWhile(l => l != created[0]).Skip(1).ToList();
+        int enchant = after.FindIndex(l => l.Contains(" ENCHANT target=CS2_182#" + copy.Id));
+        int stats = after.FindIndex(l => l.Contains(" STATS target=CS2_182#" + copy.Id) && l.Contains("stats=4/5->4/7"));
+        Check(created[0].Contains("stats=4/5") && enchant >= 0 && stats > enchant,
+            "copy logged CREATE 4/5, then its copied enchantment, then STATS 4/5->4/7:\n" + string.Join("\n", lines));
         Check(EventLines(lines, "RESYNC").Length == 0, "no RESYNC for an enchanted copy:\n" + string.Join("\n", lines));
     }
 
