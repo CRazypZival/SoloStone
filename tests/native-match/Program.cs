@@ -204,6 +204,7 @@ internal static partial class Program
         if (args.Contains("--auto-cast-only")) { AutomaticQuestHistory(); AutomaticSecretHistory(); FacelessEnigmaHistory(); return; }
         if (args.Contains("--overdraw-only")) { OverdrawHistory(); return; }
         if (args.Contains("--draw-spell-only")) { DrawSpellHistory(); return; }
+        if (args.Contains("--quest-complete-only")) { NativeMatch.ClockFreeBot = true; QuestCompleteHistory(); return; }
         if (args.Contains("--subspell-only")) { ModernSubSpellHistory(); return; }
         if (args.Contains("--spell-vfx-only")) { SpellVfxHistory(); return; }
         if (args.Contains("--defile-only")) { DefilePrivateTagsNeverReachWire(); return; }
@@ -243,6 +244,7 @@ internal static partial class Program
         ChillmawHistory();
         TriggerVisualKeywordHistory();
         DrawSpellHistory();
+        QuestCompleteHistory();
         OverdrawHistory();
         ChaosStrikeHistory();
         CthunNativeProof();
