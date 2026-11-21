@@ -63,7 +63,19 @@ namespace SabberStoneCore.Actions
 			{
 				int baseMana = c.BaseMana;
 				int total = baseMana + amount;
-				if (total > c[GameTag.MAXRESOURCES])
+				if (fill && amount > 0)
+				{
+					// A filled gain of N raises Mana by N in total: max rises up to the cap, and the part over the cap
+					// refills spent crystals (never Overloaded ones, never temporary Mana above max).
+					int rise = Math.Min(amount, Math.Max(0, c[GameTag.MAXRESOURCES] - baseMana));
+					c.BaseMana = baseMana + rise;
+					if (rise < amount)
+					{
+						c.Game.Log(LogLevel.INFO, BlockType.PLAY, "ChangeManaCrystal", !c.Game.Logging ? "" : $"{c.Name} is capped in {c[GameTag.MAXRESOURCES]} mana crystals; the overflow refills spent crystals.");
+						c.UsedMana = Math.Max(0, c.UsedMana - (amount - rise));
+					}
+				}
+				else if (total > c[GameTag.MAXRESOURCES])
 				{
 					c.Game.Log(LogLevel.INFO, BlockType.PLAY, "ChangeManaCrystal", !c.Game.Logging ? "" : $"{c.Name} is already capped in {c[GameTag.MAXRESOURCES]} mana crystals.");
 					if (!fill)
