@@ -178,6 +178,8 @@ SUITES += [
           'tests/native-match-logic/NativeMatchLogicTests.csproj'),
     Suite('native-bindings-logic', 'dotnet', 'plugin logic that needs no client: home, strings, status, crafting, matchmaking and rank hooks, and the plugin source-text pins',
           'tests/native-bindings-logic/NativeBindingsLogicTests.csproj'),
+    Suite('test-control', 'dotnet', 'test-control board trace sampling and request validation without a client',
+          'tests/test-control/TestControlTests.csproj', artifacts='test-control'),
     Suite('fx-harmony', 'mono', 'the effect patches applied by the real Harmony library under Mono (the sub-spell pin needs a client)',
           'tests/fx-harmony/FxHarmonyTests.csproj', prebuild_in_tree_with_client=['plugin/OfflineProbe.csproj']),
 ]

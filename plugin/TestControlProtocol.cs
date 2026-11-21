@@ -78,10 +78,12 @@ internal sealed class BoardActorFaultTracker
             + (time - sinceTime).ToString("0.0", CultureInfo.InvariantCulture));
 }
 
-// No Unity/client types: no suite compiles this file; the launcher tests (installer/SoloStone.Launcher.Tests) read it as text.
+// No Unity/client types: the test-control suite compiles its request validation (tests/test-control/extract_protocol.py),
+// and the launcher tests (installer/SoloStone.Launcher.Tests) read it as text.
 internal static class TestControlProtocol
 {
     internal const int MaxLine = 64 * 1024, MaxQueue = 32, MaxResponse = 1024 * 1024, MaxLedger = 1024;
+    internal const int BoardTraceMaxFrames = 1200;
     internal const int MulliganReadyFrames = 10, MulliganSendSeconds = 15, ChoiceReadyFrames = 3, EndTurnReadyFrames = 2;
     internal static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
     private const string StringToken = "\"(?:[^\"\\\\\\x00-\\x1f]|\\\\(?:[\"\\\\/bfnrt]|u[0-9a-fA-F]{4}))*\"";
@@ -286,6 +288,8 @@ internal sealed class ControlRequest
                 if (!Has("name") && !Has("source")) throw new FormatException("name or source required");
                 Integer("seconds", 1, 600);
                 break;
+            case "board-trace-start": extras = "frames"; Integer("frames", 1, TestControlProtocol.BoardTraceMaxFrames); break;
+            case "board-trace-read": extras = ""; break;
             case "entity-drag":
                 extras = "matchId optionsId entityId target position click"; Text("matchId"); Integer("optionsId", 0); Integer("entityId", 1);
                 // click: press and release on the source itself (an untargeted board location); exclusive with a destination.
