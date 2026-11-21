@@ -1236,20 +1236,24 @@ namespace SabberStoneCore.Kettle
         }
 
         // One rule for every queued activation of a source's own running effect (EnqueueTask, EnqueueNumberTask, whatever task
-        // it queues: SummonTask, SummonOpTask, SummonCopyTask, a ComplexTask): the just-closed child block rejoins the block
-        // that queued it when the child's own rows summon a minion and carry no target header or hit of their own. It joins
+        // it queues: a summon, a card made in hand or deck, an enchantment, a ComplexTask): the just-closed child block
+        // rejoins the block that queued it, including target headers and hits of its own. The client runs a
+        // card's play effect once per POWER task list of it (PowerSpellController), so one block per repeat replayed it per
+        // repeat (#195: Halazzi once per Lynx); retail sends one POWER block per effect index and creates every card of one
+        // effect in it (hsreplay-test-data: Unleash the Hounds, Burgle, Animal Companion). It joins
         // across closed empty sibling blocks: a second Deathrattle of the same death phase that only queued its own summons
         // (two Haunted Creepers, Rivendare) runs before the first one's summons, and moving rows past an empty block changes
         // nothing the client is told. A child that cannot rejoin (a sibling activation with rows of its own between) becomes
-        // where the parent's later summons gather, so they still spawn together. Nested blocks (Knife Juggler) stay nested.
-        internal bool JoinQueuedSummon(PowerHistoryBlockStart child, PowerHistoryBlockStart parent, Func<int, bool> isMinion)
+        // where the parent's later continuations gather, so they still run together. A leading death phase starts a new repeat
+        // wave (Lord Godfrey); nested blocks later in the child (Knife Juggler) stay nested.
+        internal bool JoinQueuedContinuation(PowerHistoryBlockStart child, PowerHistoryBlockStart parent)
         {
             if (!_enabled || child == null || parent == null || child.Source != parent.Source) return false;
             int full = Full.FindLastIndex(e => ReferenceEquals(e, child)), last = Last.FindLastIndex(e => ReferenceEquals(e, child));
             int length = Full.Count - full;
             if (full < 1 || last < 1 || Last.Count - last != length || !(Last[Last.Count - 1] is PowerHistoryBlockEnd)) return false;
             int depth = 0;
-            bool summons = false, header = false;
+            bool header = false;
             for (int i = 0; i < length; i++)
             {
                 var entry = Last[last + i];
@@ -1260,17 +1264,14 @@ namespace SabberStoneCore.Kettle
                 else if (i == 1 && entry is PowerHistoryMetaData repeat && repeat.Type == MetaDataType.TARGET && child.Target != 0
                     && child.Target == parent.Target && repeat.Info != null && repeat.Info.Count == 1 && repeat.Info[0] == child.Target)
                     header = true;
-                // A target header or hit of its own would not read as part of the parent's effect.
-                else if (depth == 1 && entry is PowerHistoryMetaData) return false;
-                else if (depth == 1 && EntersPlay(entry, isMinion)) summons = true;
             }
-            if (!summons) return false;
-            var home = parent.SummonHome ?? parent;
+            var home = parent.ContinuationHome ?? parent;
             int end = last - 1;
             while (end >= 2 && Last[end] is PowerHistoryBlockEnd && Last[end - 1] is PowerHistoryBlockStart empty
                 && !ReferenceEquals(empty, home)) end -= 2;
             int fullEnd = full - (last - end);
-            bool joined = fullEnd >= 0 && Last[end] is PowerHistoryBlockEnd;
+            bool joined = !(Last[last + (header ? 2 : 1)] is PowerHistoryBlockStart deaths && deaths.BlockType == BlockType.DEATHS)
+                && fullEnd >= 0 && Last[end] is PowerHistoryBlockEnd;
             for (int i = 0; joined && i < last - end; i++) joined = ReferenceEquals(Full[fullEnd + i], Last[end + i]);
             if (joined)
             {
@@ -1285,7 +1286,7 @@ namespace SabberStoneCore.Kettle
             }
             if (!joined)
             {
-                parent.SummonHome = child;
+                parent.ContinuationHome = child;
                 return false;
             }
             if (header) { Full.RemoveAt(full + 1); Last.RemoveAt(last + 1); }
@@ -1293,16 +1294,9 @@ namespace SabberStoneCore.Kettle
             var empties = Last.GetRange(end + 1, last - end - 1);
             Full.RemoveRange(fullEnd, last - end + 1); Full.AddRange(empties);
             Last.RemoveRange(end, last - end + 1); Last.AddRange(empties);
-            child.SummonHome = home;
+            child.ContinuationHome = home;
             return true;
         }
-
-        private static bool EntersPlay(IPowerHistoryEntry entry, Func<int, bool> isMinion) =>
-            entry is PowerHistoryFullEntity full && full.Entity.Tags.TryGetValue(GameTag.ZONE, out int created)
-                && created == (int)Zone.PLAY && isMinion(full.Entity.Id)
-            || entry is PowerHistoryShowEntity show && show.Entity.Tags.TryGetValue(GameTag.ZONE, out int shown)
-                && shown == (int)Zone.PLAY && isMinion(show.Entity.Id)
-            || entry is PowerHistoryTagChange move && move.Tag == GameTag.ZONE && move.Value == (int)Zone.PLAY && isMinion(move.EntityId);
 
 		public string Print(bool fullFlag = true)
 		{
@@ -1382,8 +1376,9 @@ namespace SabberStoneCore.Kettle
 		public int Source { get; set; }
 		public int Target { get; set; }
 		public string EffectCardId { get; set; } = "";
-        // History only, never published: the block this block's queued summons join (itself until one could not; JoinQueuedSummon).
-        internal PowerHistoryBlockStart SummonHome;
+        // History only, never published: the block this block's queued continuations join (itself until one could not;
+        // JoinQueuedContinuation).
+        internal PowerHistoryBlockStart ContinuationHome;
 
 		public string Print()
 		{
