@@ -250,6 +250,10 @@ public sealed class NativeMatch
         (GameTag)4162, // DYNAMIC_KEYWORD2: DynamicKeywordCardTextBuilder and keyword help resolve keyword two.
         (GameTag)4174, // DONT_PLAY_VFX_FROM_EXTRA_TRIGGERED_POWER: TriggerSpellController suppresses duplicate effects.
         (GameTag)4213, // SUPPRESS_IMMOLATE_VISUAL_FOR_OPPONENT: Actor.UpdateImmolating controls opponent visuals.
+        // IMMOLATESTAGE before IMMOLATING: on discard the stage must reach 0 while the fire is still on, so the client's
+        // Actor.UpdateImmolating plays the burn-up stage instead of going straight to Idle.
+        (GameTag)2600, // IMMOLATESTAGE: Actor.UpdateImmolating selects the countdown's fire stage.
+        (GameTag)2505, // IMMOLATING: the client's tag visual data switches the hand fire spell (221) on and off.
         (GameTag)4238, // REPEATABLE: QuestProgressUI renders repeatable quest arrow.
         (GameTag)4239, // SHATTER: EntityBase.IsShatterable enables Shatter interaction.
         (GameTag)4257, // USES_CHARGES: PlayErrors selects charge-cost error text.
@@ -3641,6 +3645,17 @@ public sealed class NativeMatch
             default: return current;
         }
     }
+
+    // Smoldering family only (FIR_911, FIR_914, FIR_916 are the only cards with these definition tags): turnsLeft is their
+    // TAG_SCRIPT_DATA_NUM_2 countdown. A future card with the same tags but another meaning for that counter needs its own rule.
+    private static int? HandBurnTag(EngineCard card, GameTag tag, EngineZone zone, int turnsLeft)
+    {
+        if (((int)tag != 2505 && (int)tag != 2600) || card[(GameTag)2505] != 1
+            || card[(GameTag)4213] != 1 || card[(GameTag)2600] != 3) return null;
+        // Smoldering's script counter owns the timer; CardDef's stage 3 is only its initial value.
+        int stage = zone == EngineZone.HAND ? Math.Max(0, Math.Min(3, turnsLeft)) : 0;
+        return (int)tag == 2505 ? (stage > 0 ? 1 : 0) : stage;
+    }
 #endif
 
     // Owned premium of a deck copy or the starting hero; 0 leaves engine-authored values (e.g. Zola's Golden copy) intact.
@@ -3793,6 +3808,8 @@ public sealed class NativeMatch
     {
         if (tag == GameTag.GHOSTLY) return Math.Max(entity[GameTag.GHOSTLY], entity[TemporaryCardTag]);
 #if ENGINE_SOURCE
+        if (!entity.NativeTags.ContainsKey(tag) && HandBurnTag(entity.Card, tag, entity.Zone?.Type ?? (EngineZone)entity[GameTag.ZONE],
+            entity[GameTag.TAG_SCRIPT_DATA_NUM_2]) is int burn) return burn;
         if (entity.Card.Id == "JAIL_EVENT_100t" && tag == GameTag.MODULAR_ENTITY_PART_1) return 0;
 #endif
         // Elusive is an alias: Silence and targeting auras never write tag 1211.
@@ -6915,6 +6932,9 @@ public sealed class NativeMatch
                 if (tags.Any(tag => tag.Name == (int)printedTag)) continue;
                 if (raceDefinition.Type == CardType.SPELL && printedTag == GameTag.SPELLPOWER) continue;
                 int value = raceDefinition[printedTag];
+#if ENGINE_SOURCE
+                value = HandBurnTag(raceDefinition, printedTag, (EngineZone)TextValue(GameTag.ZONE), number2) ?? value;
+#endif
                 bool printed = value != 0;
                 // Targeting overrides are frozen in the engine snapshot, including Silence's zero.
                 if ((int)printedTag == 1211
