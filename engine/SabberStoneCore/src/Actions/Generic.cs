@@ -294,6 +294,18 @@ namespace SabberStoneCore.Actions
 				return true;
 			}
 
+		/// <summary>
+		/// Puts a freshly created card at a fixed deck position (0 is the bottom) with the same spawn-to-deck presentation a
+		/// shuffle gets. Not a shuffle: no RNG, no shuffle fact and no shuffle-into-deck listeners.
+		/// </summary>
+		public static bool InsertIntoDeck(Controller c, IPlayable playable, int position, bool reveal = false)
+		{
+			if (c.DeckZone.IsFull) return false;
+			c.DeckZone.Add(playable, position);
+			if (c.Game.History) c.Game.PowerHistory.GeneratedShuffle(playable, reveal);
+			return true;
+		}
+
 		public static Func<Controller, Card, Minion, bool> TransformBlock
 			=> delegate (Controller c, Card card, Minion oldMinion)
 			{
