@@ -84,6 +84,16 @@ internal static partial class Program
                     || !data[power + 1].MetaData.Info.SequenceEqual(new[] { source.Id }))
                     failures.Add(name + ": Baron POWER must target its visible source before drawing (retail 7507-7508)");
             }
+            if (card == "CORE_BT_491")
+            {
+                // Retail (tradeable.annotated.xml, build 88998): the TARGET meta of Spectral Sight is the caster's own hero.
+                int power = data.FindIndex(e => e.HasPowerStart && e.PowerStart.Source == source.Id && (int)e.PowerStart.Type == 3);
+                var meta = power >= 0 ? data.Skip(power + 1).TakeWhile(e => !e.HasPowerEnd && !e.HasPowerStart)
+                    .Where(e => e.HasMetaData && (int)e.MetaData.Type == 0).ToArray() : Array.Empty<PegasusGame.PowerHistoryData>();
+                if (!emptyDeck && (meta.Length != 1 || !meta[0].MetaData.Info.SequenceEqual(new[] { owner.Hero.Id })))
+                    failures.Add(name + ": Spectral Sight POWER must target the caster's hero, got ["
+                        + string.Join(",", meta.SelectMany(e => e.MetaData.Info)) + "] hero " + owner.Hero.Id);
+            }
             if (deathrattle)
             {
                 int trigger = data.FindIndex(e => e.HasPowerStart && e.PowerStart.Source == source.Id
