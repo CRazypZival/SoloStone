@@ -1387,6 +1387,38 @@ catch (Exception error) { failures.Add("ChoiceCardMgr.ChoiceState opposing revea
         || !StaticOwners(plugin, pluginMetadata, loanerPath).Contains("NativeUIProjection"))
         failures.Add("OfflineProbe.ConfigureLoanerGroupPath no longer isolates the card catalog initialization");
 }
+// #146: the start-of-turn banner hold (NativeTurnBannerHold) postfixes GameState.CanProcessPowerQueue and reads the turn-start banner state.
+foreach (var contract in new[] {
+    ("GameState", "CanProcessPowerQueue", Array.Empty<string>(), "Boolean"),
+    ("GameState", "IsGameOverNowOrPending", Array.Empty<string>(), "Boolean"),
+    ("GameState", "WasRestartRequested", Array.Empty<string>(), "Boolean"),
+    ("GameState", "IsLocalSidePlayerTurn", Array.Empty<string>(), "Boolean"),
+    ("GameState", "GetPowerProcessor", Array.Empty<string>(), "PowerProcessor"),
+    ("PowerProcessor", "GetPowerQueue", Array.Empty<string>(), "PowerQueue"),
+    ("PowerTaskList", "GetBlockStart", Array.Empty<string>(), "HistBlockStart"),
+    ("PowerTaskList", "IsStartOfBlock", Array.Empty<string>(), "Boolean"),
+    ("PowerTaskList", "GetSourceEntity", new[] { "Boolean" }, "Entity"),
+    ("EntityBase", "IsSecret", Array.Empty<string>(), "Boolean"),
+    ("TurnStartManager", "Get", Array.Empty<string>(), "TurnStartManager"),
+    ("TurnStartManager", "IsListeningForTurnEvents", Array.Empty<string>(), "Boolean"),
+    ("TurnStartManager", "NotifyOfTriggerVisual", Array.Empty<string>(), "Void"),
+    ("TurnStartManager", "IsTurnStartIndicatorShowing", Array.Empty<string>(), "Boolean"),
+    ("HistBlockStart", "get_TriggerKeyword", Array.Empty<string>(), "Int32"),
+    ("HistBlockStart", "get_BlockType", Array.Empty<string>(), "Type")
+}) try { MethodSignature(gameMetadata, contract.Item1, contract.Item2, contract.Item3, contract.Item4, signatures); }
+    catch (Exception) { failures.Add("turn banner hold: client contract changed: " + contract.Item1 + "." + contract.Item2); }
+{
+    var holdPatch = Method(pluginMetadata, "NativeTurnBannerHold", "AfterCanProcessPowerQueue");
+    var holdSignature = holdPatch.DecodeSignature(signatures, (object)null);
+    var holdParameters = Parameters(pluginMetadata, holdPatch);
+    if (holdSignature.ReturnType != "Void" || holdParameters.Length != 2
+        || pluginMetadata.GetString(holdParameters[0].Name) != "__instance" || holdSignature.ParameterTypes[0] != "GameState"
+        || pluginMetadata.GetString(holdParameters[1].Name) != "__result" || holdSignature.ParameterTypes[1] != "Boolean&")
+        failures.Add("NativeTurnBannerHold.AfterCanProcessPowerQueue: invalid Harmony postfix signature");
+    if (!File.ReadAllText(Path.Combine(root, "plugin/NativeTurnBannerHold.cs")).Contains("postfix: new HarmonyMethod(typeof(NativeTurnBannerHold)")
+        || !File.ReadAllText(Path.Combine(root, "plugin/ClientBridge.cs")).Contains("NativeTurnBannerHold.Initialize(harmony, logger)"))
+        failures.Add("NativeTurnBannerHold is not registered");
+}
 PackHookIlChecks.Run(root, (ok, message) => { if (!ok) failures.Add(message); });
 if (failures.Count != 0) throw new Exception(string.Join("\n", failures));
 Console.WriteLine("PASS native pack, deck, reward, crafting and onboarding hooks, scoped login sites, card audit APIs and reconcile contract against pinned metadata");
