@@ -77,7 +77,7 @@ internal static class B14H2CostcastProof
         var location = LocationProofs.Location(p);
         var right = Summon(p, "CS2_182");
         HeraldRules.Resolve(p, location);
-        Check(p.BoardZone.Slots.Last().Id == right.Id && HeraldRules.IsSoldier(p.BoardZone.GetSlot(location.ZonePosition - 1).Card),
-            "Herald takes living location slot");
+        Check(p.BoardZone.Slots.Last().Id == right.Id && HeraldRules.IsSoldier(p.BoardZone.GetSlot(location.ZonePosition + 1).Card),
+            "Herald appears immediately right of living location");
     }
 }

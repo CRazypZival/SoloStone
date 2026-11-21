@@ -96,6 +96,7 @@ namespace SabberStoneCore.Actions
                 copies.Add((Minion)Copy(minion.Controller, providers[0], minion, Zone.PLAY,
                     initialize: RestoreKhadgarReborn, zonePosition: Math.Min(minion.ZonePosition + 1 + i, minion.Controller.BoardZone.SlotCount),
                     preserveBoardMinionState: true, deferSummonAfter: true));
+            AdvanceRetiredLocationSlot(minion, summoner, 1 + copies.Count);
             AfterSummonTrigger(game, minion, summoner);
             foreach (var copy in copies)
                 if (copy.Zone == copy.Controller.BoardZone) AfterSummonTrigger(game, copy, providers[0]);
@@ -111,11 +112,6 @@ namespace SabberStoneCore.Actions
         {
             using (game.History ? game.PowerHistory.Visual(game, Presentation.VisualPhase.Summon, summoner as IPlayable, minion) : null)
                 SummonPhase(game, minion, position, summoner?.Id ?? 0);
-            var location = summoner as BoardObject ?? (summoner as Enchantment)?.Target as BoardObject;
-            // Advance a retired location's slot just as inserting before a living location shifts it right.
-            if (location != null && location.Controller == minion.Controller && location.Zone != location.Controller.BoardZone
-                && minion.Zone == minion.Controller.BoardZone && minion.ZonePosition == location.LastBoardPosition)
-                location.LastBoardPosition++;
             DeathContextRules.Summoned(minion, summoner);
         }
 
@@ -123,7 +119,17 @@ namespace SabberStoneCore.Actions
         {
             using var resolution = game.Resolution.Sequence(ResolutionKind.Summon, game, minion);
             SummonEntry(game, minion, position, summoner);
+            AdvanceRetiredLocationSlot(minion, summoner, 1);
             AfterSummonTrigger(game, minion, summoner);
+        }
+
+        private static void AdvanceRetiredLocationSlot(Minion minion, IEntity summoner, int count)
+        {
+            var location = summoner as BoardObject ?? (summoner as Enchantment)?.Target as BoardObject;
+            // A retired location's next summon follows every body created by this summon, including Khadgar copies.
+            if (location != null && location.Controller == minion.Controller && location.Zone != location.Controller.BoardZone
+                && minion.Zone == minion.Controller.BoardZone && minion.ZonePosition == location.LastBoardPosition)
+                location.LastBoardPosition += count;
         }
 
 		private static Action<Game, Minion, int, int> SummonPhase

@@ -77,8 +77,8 @@ namespace SabberStoneCore.Actions
                 int position = source is BoardObject
                     ? SummonTask.GetPosition(source, SummonSide.LEFT, 0, ref alternate)
                     : EffectContext.DeathrattlePosition(controller, source);
-                // Repeated Heralds append after the source's existing Soldiers in creation order.
-                while (position < controller.BoardZone.SlotCount
+                // A location's fresh Soldier belongs immediately right of it; non-location sources retain their existing row order.
+                while (source is not BoardObject && position < controller.BoardZone.SlotCount
                     && IsSoldier(controller.BoardZone.GetSlot(position).Card)
                     && controller.BoardZone.GetSlot(position)[GameTag.DISPLAYED_CREATOR] == source.Id)
                     position++;

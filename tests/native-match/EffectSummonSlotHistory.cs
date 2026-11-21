@@ -102,9 +102,10 @@ internal static partial class Program
                 }
                 if (location)
                 {
-                    Expect(SnapshotTag(rows[at], GameTag.ZONE_POSITION) == formerSlot, "FULL_ENTITY takes location's former slot");
-                    Expect(finalCharge ? source.Zone == owner.GraveyardZone : source.ZonePosition + 1 == formerSlot + 1,
-                        "final charge retires location; living location shifts right");
+                    Expect(SnapshotTag(rows[at], GameTag.ZONE_POSITION) == formerSlot + (finalCharge ? 0 : 1),
+                        "FULL_ENTITY is right of living location or in its former slot on final charge");
+                    Expect(finalCharge ? source.Zone == owner.GraveyardZone : source.ZonePosition + 1 == formerSlot,
+                        "final charge retires location; living location keeps its slot");
                 }
                 if (id == "JAIL_877") Expect(!rows.Any(e => e.HasSubSpellStart
                     && e.SubSpellStart.SpellPrefabGuid.Contains("ReuseFX_Beast_OverrideSpawn_Paw_Super")),

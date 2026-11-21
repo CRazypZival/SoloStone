@@ -22,7 +22,7 @@ internal static class ColossalAppendageProof
 {
     private const string Record = "tests/fixtures/playtest/match-706260b3-magmaw.jsonl";
     private const string RecordedMagmawFingerprint = "622f074660b48dd6739bee5a3cb87108bc9890edceccef8c6ae59bbca5b3e66a";
-    private const string RecordedMagmawState = "99d252fd570993ffc1a12bc9ed94ddd5e33ec859ad1b25a0e8021dcd183edd12";
+    private const string RecordedMagmawState = "b3f9ff66aaa0242f635a9a3bbbda2a897636677c3693445dfdc2e222774610f7";
     private static void Check(bool value, string message) => SelfChecks.Check(value, "Colossal appendages " + message);
 
     internal static void Run()
@@ -94,12 +94,6 @@ internal static class ColossalAppendageProof
             // game state without those two (the record's hash is that state plus its 2026-10-25 ledger), so gameplay
             // drift still fails while ledger or minion-age tag changes do not. The same goes for the entity-reference tag
             // (PayloadRules.ReferenceEntity, 2026-11-05) that grants such as Devoured Soul now carry for their client text.
-            //
-            // 2026-11-20 (#256): the recorded game activates Underbelly Network at sequence 8. Its rat now enters
-            // in the location's slot (left of it), per retail: the owner's retail video and Construct Quarter in
-            // hsreplay-test-data 176014_opponent_sideboard.power.log:3678-3722. At this checkpoint only the dead rat
-            // #69 (JAIL_877t) differs: ZONE_POSITION 2->1 and TAG_LAST_KNOWN_POSITION_ON_BOARD 1->0. The old hash,
-            // "b3f9ff66aaa0242f635a9a3bbbda2a897636677c3693445dfdc2e222774610f7", was the pre-fix placement.
             Check(Text(row, "fingerprint") == RecordedMagmawFingerprint && StateFingerprint(game) == RecordedMagmawState,
                 "record replays to the recorded Magmaw state");
             var tails = Appendages(magmaw);

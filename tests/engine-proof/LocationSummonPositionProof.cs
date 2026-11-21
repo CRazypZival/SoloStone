@@ -17,14 +17,14 @@ internal static class LocationSummonPositionProof
         foreach (bool triggered in id == "JAIL_887" ? new[] { false, true } : new[] { false })
         foreach (bool sparse in id == "TLC_100t3" ? new[] { false, true } : new[] { false })
         {
-            try { SummonInSlot(id, final, triggered, sparse); }
+            try { SummonFromLocation(id, final, triggered, sparse); }
             catch (Exception e) { failures.Add($"{id} final={final} triggered={triggered} sparse={sparse}: {e.Message}"); }
         }
         L.Check(failures.Count == 0, string.Join("\n", failures));
         Console.WriteLine("PASS location summon positions and creation order: 19 definitions, 42 cases, living/final charge or Deathrattle, mixed/sparse rows");
     }
 
-    private static void SummonInSlot(string id, bool final, bool triggered, bool sparse)
+    private static void SummonFromLocation(string id, bool final, bool triggered, bool sparse)
     {
         var game = L.Game(); var p = game.Player1;
         var left = L.Minion(p, "EX1_043");
@@ -57,10 +57,11 @@ internal static class LocationSummonPositionProof
         L.Check(summons.Length == expected, $"expected {expected} summons, got {summons.Length}");
         L.Check(summons.Select(m => m.Id).SequenceEqual(summons.Select(m => m.Id).OrderBy(id => id)),
             "summons stay left to right in creation order: " + string.Join(", ", summons.Select(m => $"{m.Card.Id}#{m.Id}")));
-        L.Check(left.ZonePosition == 0 && summons[0].ZonePosition == slot, "first summon takes location's former slot");
         bool remains = !final;
+        L.Check(left.ZonePosition == 0 && summons[0].ZonePosition == slot + (remains ? 1 : 0),
+            "first summon is right of living location or in retired location's slot");
         L.Check((source.Zone == p.BoardZone) == remains, "location survives only the non-final case");
-        L.Check(!remains || source.ZonePosition == slot + summons.Length, "living location shifts right of its summons");
+        L.Check(!remains || source.ZonePosition == slot, "living location keeps its slot, before its summons");
         L.Check(right == null || right.ZonePosition == slot + summons.Length + (remains ? 1 : 0), "right neighbour shifts past summons/location");
         L.Check(p.BoardZone.Slots.Select(e => e.ZonePosition).SequenceEqual(Enumerable.Range(0, p.BoardZone.SlotCount)), "contiguous physical slots");
     }

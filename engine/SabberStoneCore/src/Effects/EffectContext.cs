@@ -17,6 +17,8 @@ namespace SabberStoneCore.EffectSystem
     {
         private readonly Game _game;
         private readonly TaskStack _stack;
+        private IPlayable _locationSummonBoundary;
+        private bool _locationSummonBoundaryCaptured;
         public int SourceId { get; }
         public int ControllerId { get; }
         public int? TargetId { get; }
@@ -91,11 +93,27 @@ namespace SabberStoneCore.EffectSystem
 
         public void GiveBuff(int targetId, string enchantmentId, int amount) =>
             Generic.AddEnchantmentBlock(_game, Cards.FromId(enchantmentId), (IPlayable)Source, Target(targetId), amount, amount);
-        // Owner's retail Underbelly Network video; Construct Quarter, hsreplay-test-data 176014_opponent_sideboard.power.log:3678-3722.
+        // Owner ruling 2026-11-21 from retail video: right of a living location, in its slot on the final charge; creation order in both cases.
         public int SummonAtLocation(string cardId)
         {
-            int alternate = 0;
-            return Summon(cardId, SummonTask.GetPosition(Source, SummonSide.LEFT, 0, ref alternate));
+            return Summon(cardId, LocationSummonPosition());
+        }
+
+        private int LocationSummonPosition()
+        {
+            var location = Source as BoardObject;
+            if (location == null || location.Zone != Controller.BoardZone) {
+                int alternate = 0;
+                return SummonTask.GetPosition(Source, SummonSide.LEFT, 0, ref alternate);
+            }
+            if (!_locationSummonBoundaryCaptured)
+            {
+                int right = location.ZonePosition + 1;
+                _locationSummonBoundary = right < Controller.BoardZone.SlotCount ? Controller.BoardZone.GetSlot(right) : null;
+                _locationSummonBoundaryCaptured = true;
+            }
+            return _locationSummonBoundary?.Zone == Controller.BoardZone
+                ? _locationSummonBoundary.ZonePosition : Controller.BoardZone.SlotCount;
         }
 
         public void AdvanceLocationStage(string nextCardId) => LocationRules.AdvanceStage((BoardObject)Source, nextCardId);
