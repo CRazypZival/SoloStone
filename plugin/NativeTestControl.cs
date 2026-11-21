@@ -498,6 +498,7 @@ internal sealed partial class NativeTestControl
                         view.State["deckGuideCards"] = NativeGuideCards.State();
                         view.State["deckRecord"] = NativeDeckRecord.State();
                         view.State["deckImport"] = DeckImportState();
+                        view.State["deckExport"] = DeckExportState();
                         var settledMatch = LocalLadder.Profile?.LastSettledMatch;
                         view.State["settledMatch"] = settledMatch == null ? null : new JsonNode {
                             { "id", settledMatch.Id }, { "result", settledMatch.Result },

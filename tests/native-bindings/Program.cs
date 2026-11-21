@@ -66,10 +66,33 @@ foreach (var contract in new[] {
     ("CollectionManagerDisplay", "OnDeckCreatedFromClipboard", new[] { "Int64", "String" }, "Void"),
     ("CollectionManagerDisplay", "CreateDeckFromClipboard", new[] { "ShareableDeck" }, "Void"),
     ("CollectionInputMgr", "PasteDeckInEditModeFromShareableDeck", new[] { "ShareableDeck" }, "Void"),
-    ("UIStatus", "AddInfo", new[] { "String" }, "Void")
+    ("UIStatus", "AddInfo", new[] { "String" }, "Void"),
+    // Sharing a deck (#220): the client's own Copy, observed, and the pasted-text reader every paste goes through.
+    ("DeckOptionsMenu", "OnCopyButtonReleased", new[] { "UIEvent" }, "Void"),
+    ("ShareableDeck", "ParseDataFromDeckString", new[] { "String", "String&" }, "String"),
+    ("CollectionManager", "GetEditedDeck", Array.Empty<string>(), "CollectionDeck")
 }) MethodSignature(gameMetadata, contract.Item1, contract.Item2, contract.Item3, contract.Item4, signatures);
 Method(gameMetadata, "ShareableDeck", "get_DeckContents");
-Console.WriteLine("PASS deck-code import client members");
+if ((Method(gameMetadata, "ShareableDeck", "ParseDataFromDeckString").Attributes & MethodAttributes.Static) == 0)
+    throw new Exception("ShareableDeck.ParseDataFromDeckString is no longer static (FindPastedDeckCode takes no instance)");
+var copyObserver = Method(pluginMetadata, "NativeUIProbe", "ObserveDeckCopy");
+var copyObserverSignature = copyObserver.DecodeSignature(signatures, (object)null);
+var copyObserverParameters = Parameters(pluginMetadata, copyObserver);
+if (copyObserverSignature.ReturnType != "Void" || copyObserverParameters.Length != 1
+    || pluginMetadata.GetString(copyObserverParameters[0].Name) != "__exception" || copyObserverSignature.ParameterTypes[0] != "Exception")
+    throw new Exception("ObserveDeckCopy: invalid Harmony finalizer signature (void, Exception __exception: observes and rethrows)");
+// DeckCodeText accepts formats 1..4 (FT_WILD..FT_TWIST), as the client's reader checks them against PegasusShared.FormatType.
+using (var pegasusFile = new PEReader(File.OpenRead(Path.Combine(root, "references/game/blizzard.bgsclient.dll"))))
+{
+    var pegasus = pegasusFile.GetMetadataReader();
+    var formats = pegasus.TypeDefinitions.Select(pegasus.GetTypeDefinition)
+        .Single(t => pegasus.GetString(t.Name) == "FormatType" && pegasus.GetString(t.Namespace) == "PegasusShared")
+        .GetFields().Select(pegasus.GetFieldDefinition).Where(f => !f.GetDefaultValue().IsNil)
+        .Select(f => pegasus.GetBlobReader(pegasus.GetConstant(f.GetDefaultValue()).Value).ReadInt32()).ToArray();
+    if (formats.Min() != 0 || formats.Max() != 4 || formats.Length != 5)
+        throw new Exception("PegasusShared.FormatType changed (" + string.Join(",", formats) + "): update DeckCodeText.MaximumFormat");
+}
+Console.WriteLine("PASS deck-code import and share client members");
 MethodSignature(gameMetadata, "Actor", "GetPremium", Array.Empty<string>(), "TAG_PREMIUM", signatures);
 Console.WriteLine("PASS Actor.GetPremium(): TAG_PREMIUM pack reveal contract");
 MethodSignature(gameMetadata, "GameMgr", "ShowTransitionPopup", new[] { "String", "Int32" }, "Void", signatures);
@@ -126,6 +149,7 @@ var hooks = new[] {
     ("CollectionManagerDisplay", "CreateDeckFromClipboard", "NativeUIProbe", "PlanDeckCodeImport"),
     ("CollectionManagerDisplay", "OnDeckCreatedFromClipboard", "NativeUIProbe", "ProjectImportedDeck"),
     ("CollectionInputMgr", "PasteDeckInEditModeFromShareableDeck", "NativeUIProbe", "BlockDeckEditPaste"),
+    ("ShareableDeck", "ParseDataFromDeckString", "NativeUIProbe", "FindPastedDeckCode"),
     ("DeckTrayDeckListContent", "ShouldDeckBoxesBeLocked", "NativeUIProbe", "UnlockLocalDeckBoxSlots"),
     ("CollectionDeckBoxVisual", "SetDeckID", "NativeUIProbe", "LockLoanerBox"),
     ("CollectionDeckBoxVisual", "ShowDeleteButton", "NativeUIProbe", "HideLoanerDeleteButton"),
@@ -355,7 +379,10 @@ using (var unityCore = new PEReader(File.OpenRead(Path.Combine(root, "references
         failures.Add("UnityEngine.Application::set_runInBackground missing (lane background rendering)");
 }
 using (var imguiFile = new PEReader(File.OpenRead(Path.Combine(root, "references/game/UnityEngine.IMGUIModule.dll"))))
+{
     MethodSignature(imguiFile.GetMetadataReader(), "GUIUtility", "set_systemCopyBuffer", new[] { "String" }, "Void", signatures);
+    MethodSignature(imguiFile.GetMetadataReader(), "GUIUtility", "get_systemCopyBuffer", Array.Empty<string>(), "String", signatures);
+}
 foreach (var contract in new[] {
     ("GameMenu", "GameMenuHide", Array.Empty<string>(), "Void"),
     ("ButtonListMenu", "Show", new[] { "Boolean" }, "Void"),
