@@ -16,6 +16,7 @@ namespace SoloStone
         readonly WrapText headline = new WrapText("launcher.verdict"), detail = new WrapText("launcher.detail");
         readonly CheckBox accept = Ui.Check("launcher.accept", Texts.PlayWarning);
         readonly WrapText update = new WrapText("launcher.update") { MaxHeight = 160 };
+        readonly Font updateStatusFont, updateOfferFont;
         readonly ProgressBar bar = new ProgressBar { Name = "launcher.progress", Style = ProgressBarStyle.Marquee, Height = 16 };
         readonly Button skip = Ui.Button("launcher.skip", Texts.Skip), installUpdate = Ui.Button("launcher.update-confirm", Texts.InstallUpdate),
             updateNow = Ui.Button("launcher.update-now", Texts.UpdateNow), later = Ui.Button("launcher.update-later", Texts.Later), skipVersion = Ui.Button("launcher.update-skip-version", Texts.SkipVersion);
@@ -48,7 +49,8 @@ namespace SoloStone
             var logo = new PictureBox { Name = "launcher.icon", Image = Icon.ToBitmap(), SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(44, 44), Location = new Point(20, 12) };
             title.Location = new Point(76, 20); header.Controls.Add(logo); header.Controls.Add(title);
             headline.Font = new Font(Font, FontStyle.Bold);
-            update.ForeColor = SystemColors.GrayText; update.Font = new Font(Font.FontFamily, Font.Size * 0.9f);
+            updateStatusFont = new Font(Font.FontFamily, Font.Size * 0.9f);
+            updateOfferFont = new Font(Font.FontFamily, Font.Size * 1.35f, FontStyle.Bold);
             play.AutoSize = false; play.Size = new Size(180, 48); play.MinimumSize = play.Size;
             play.Font = new Font(Font.FontFamily, Font.Size * 1.15f, FontStyle.Bold); play.FlatStyle = FlatStyle.Flat;
             play.BackColor = Color.FromArgb(35, 97, 169); play.ForeColor = Color.White; play.UseVisualStyleBackColor = false;
@@ -159,13 +161,19 @@ namespace SoloStone
                 headline.ForeColor = WrapText.VerdictColor(model.Kind);
                 detail.Visible = installed && model.Detail.Length != 0; detail.SetText(model.Detail);
                 accept.Visible = model.ShowWarning; accept.Enabled = model.CanConfirmWarning; accept.Checked = model.WarningConfirmed;
+                bool offeringUpdate = model.CanOffer;
+                update.Font = offeringUpdate ? updateOfferFont : updateStatusFont;
+                update.ForeColor = offeringUpdate
+                    ? (SystemInformation.HighContrast ? SystemColors.ControlText : Color.FromArgb(24, 104, 59))
+                    : SystemColors.GrayText;
+                update.GapAfter = offeringUpdate ? 2 : (int?)null;
                 update.Visible = model.UpdateText.Length != 0; update.SetText(model.UpdateText);
                 bar.Visible = model.UpdateBusy;
-                updateButtons.Visible = model.CanSkip || model.CanConfirmUpdate || model.CanOffer;
+                updateButtons.Visible = model.CanSkip || model.CanConfirmUpdate || offeringUpdate;
                 skip.Visible = model.CanSkip; skip.Enabled = model.CanSkip && !(model.Update == UpdateUi.Applying ? applying : skipUpdate).IsCancellationRequested;
-                updateNow.Visible = model.CanOffer; updateNow.Enabled = model.CanOffer;
-                later.Visible = model.CanOffer; later.Enabled = model.CanOffer;
-                skipVersion.Visible = model.CanOffer; skipVersion.Enabled = model.CanSkipVersion;
+                updateNow.Visible = offeringUpdate; updateNow.Enabled = offeringUpdate;
+                later.Visible = offeringUpdate; later.Enabled = offeringUpdate;
+                skipVersion.Visible = offeringUpdate; skipVersion.Enabled = model.CanSkipVersion;
                 installUpdate.Visible = model.CanConfirmUpdate; installUpdate.Enabled = model.CanConfirmUpdate;
                 notice.Visible = model.Notice.Length != 0; notice.SetText(model.Notice);
                 notice.ForeColor = model.NoticeIsProblem ? Color.Firebrick : SystemColors.ControlText;
@@ -184,6 +192,7 @@ namespace SoloStone
         protected override void Dispose(bool disposing) {
             if (disposing) { skipUpdate.Dispose(); applying?.Dispose(); }
             base.Dispose(disposing);
+            if (disposing) { updateStatusFont?.Dispose(); updateOfferFont?.Dispose(); }
         }
     }
 }

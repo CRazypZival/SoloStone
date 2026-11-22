@@ -114,7 +114,7 @@ The desktop and Start menu shortcut opens the launcher. It shows the client vers
 yours, the SoloStone version, update status, **Play**, **Roll back**, the update switch and **Uninstall**.
 
 - On start it checks for an update. If a newer version exists, the window shows it ("SoloStone 0.3.0 is
-  available.") and nothing is downloaded yet. **Update now** installs it and restarts SoloStone after the swap.
+  available") and nothing is downloaded yet. **Update now** installs it and restarts SoloStone after the swap.
   **Later** does nothing this time and asks again on the next start. **Skip this version** remembers that
   version and stops asking about it; a newer version is offered again. To install a skipped version anyway, run
   `SoloStone.exe update`, or wait for a newer version. You can play the current version in all

@@ -168,7 +168,7 @@ namespace SoloStone
             var attempts=engine.Attempts();
             var until=problem==null && attempts!=null && attempts.Version==manifest.Latest.Version && attempts.From==installed?attempts.WaitsUntil(DateTime.UtcNow):null;
             if(until!=null) return new UpdateStatus { State=UpdateState.Held, Installed=installed, Latest=manifest.Latest, Message="SoloStone "+manifest.Latest.Version+" could not be installed twice, so SoloStone tries again after "+until.Value.ToLocalTime().ToString("g",System.Globalization.CultureInfo.CurrentCulture)+". Your version keeps working." };
-            if(problem==null) return new UpdateStatus { State=UpdateState.Available, Installed=installed, Latest=manifest.Latest, Message="SoloStone "+manifest.Latest.Version+" is available." };
+            if(problem==null) return new UpdateStatus { State=UpdateState.Available, Installed=installed, Latest=manifest.Latest, Message="SoloStone "+manifest.Latest.Version+" is available" };
             bool isHeld=held!=null && SemVer.Valid(installed) && SemVer.Newer(manifest.Latest.Version,installed);
             return new UpdateStatus { State=isHeld?UpdateState.Held:UpdateState.UpToDate, Installed=installed, Latest=manifest.Latest, Message=problem };
         }

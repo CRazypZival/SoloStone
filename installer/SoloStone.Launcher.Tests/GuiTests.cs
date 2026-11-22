@@ -68,7 +68,7 @@ sealed class FakeLauncherOps : ILauncherOps
     public UpdateStatus Check(CancellationToken cancel) { Calls.Add("Check"); if (CheckFails != null) throw CheckFails; cancel.ThrowIfCancellationRequested(); return Checked; }
     public UpdateResult Apply(bool acceptWarning, CancellationToken cancel, string offeredVersion, Action committing) {
         Calls.Add("Apply"); AppliedAccepting = acceptWarning; AppliedOffered = offeredVersion; cancel.ThrowIfCancellationRequested();
-        if (LatestNow != null && offeredVersion != null && LatestNow != offeredVersion) return new UpdateResult { Outcome = UpdateOutcome.NewerOffered, Version = LatestNow, Message = "SoloStone " + LatestNow + " is available." };
+        if (LatestNow != null && offeredVersion != null && LatestNow != offeredVersion) return new UpdateResult { Outcome = UpdateOutcome.NewerOffered, Version = LatestNow, Message = "SoloStone " + LatestNow + " is available" };
         return Applied;
     }
     public void Restart() { Calls.Add("Restart:leases=" + OpenLeases); }
@@ -319,13 +319,13 @@ static partial class Program
     }
     static void LauncherStart() {
         // Order: lease, resume, status, check, apply. The lease covers all of it.
-        var ops = new FakeLauncherOps { Checked = new UpdateStatus { State = UpdateState.Available, Message = "SoloStone 0.2.0 is available." }, Applied = new UpdateResult { Outcome = UpdateOutcome.Nothing, Message = "SoloStone is up to date." } };
+        var ops = new FakeLauncherOps { Checked = new UpdateStatus { State = UpdateState.Available, Message = "SoloStone 0.2.0 is available" }, Applied = new UpdateResult { Outcome = UpdateOutcome.Nothing, Message = "SoloStone is up to date." } };
         var m = new LauncherModel(); var runner = new LauncherRunner(m, ops, Inline);
         Check(!runner.Start(CancellationToken.None), "no restart without a swap");
         var order = ops.Calls.Where(c => c != "Status").ToList();
         Check(string.Join(",", order) == "Lease,Resume,Check,SkippedVersion,Unlease", "start order is resume, check under one lease, and no apply: " + string.Join(",", ops.Calls));
         Check(ops.Calls.IndexOf("Resume") < ops.Calls.IndexOf("Status") && m.Phase == LauncherPhase.Ready && m.CanPlay, "the window is ready only after the update step");
-        Check(m.Update == UpdateUi.Offered && m.CanOffer && !ops.Calls.Contains("Apply") && m.UpdateText == "SoloStone 0.2.0 is available.", "a newer release is offered, nothing is downloaded");
+        Check(m.Update == UpdateUi.Offered && m.CanOffer && !ops.Calls.Contains("Apply") && m.UpdateText == "SoloStone 0.2.0 is available", "a newer release is offered, nothing is downloaded");
         // Swapped: restart at once, after the lease is released, and nothing else runs.
         ops = new FakeLauncherOps { Checked = new UpdateStatus { State = UpdateState.Available }, Applied = new UpdateResult { Outcome = UpdateOutcome.Swapped, Version = "0.2.0", Message = "SoloStone 0.2.0 is installed. Restarting." } };
         m = new LauncherModel(); runner = new LauncherRunner(m, ops, Inline);
@@ -343,7 +343,7 @@ static partial class Program
         ops.Applied = new UpdateResult { Outcome = UpdateOutcome.Swapped, Message = "installed" };
         Check(runner.ConfirmUpdate(CancellationToken.None) && ops.AppliedAccepting == true && ops.Calls.Last().StartsWith("Restart"), "confirming applies with the warning accepted and restarts");
         // Offer buttons: Later, Skip this version, a newer one, off.
-        var avail = new UpdateStatus { State = UpdateState.Available, Latest = new LatestRelease { Version = "0.3.0" }, Message = "SoloStone 0.3.0 is available." };
+        var avail = new UpdateStatus { State = UpdateState.Available, Latest = new LatestRelease { Version = "0.3.0" }, Message = "SoloStone 0.3.0 is available" };
         ops = new FakeLauncherOps { Checked = avail };
         m = Started(ops);
         Check(m.Update == UpdateUi.Offered && m.OfferedVersion == "0.3.0" && m.CanOffer && m.CanSkipVersion && m.CanPlay && !ops.Calls.Contains("Apply"), "offer: three buttons live, Play on, no apply");
@@ -357,7 +357,7 @@ static partial class Program
         Check(ops.Skipped == "0.3.0" && m.Update == UpdateUi.Declined && !m.CanOffer && m.CanPlay && !ops.Calls.Contains("Apply") && ops.OpenLeases == 0, "Skip this version saves it and applies nothing");
         ops.Calls.Clear(); m = Started(ops);
         Check(m.Update == UpdateUi.Declined && !m.CanOffer && m.CanPlay && m.UpdateText.Contains("skipped") && !ops.Calls.Contains("Apply"), "the same version is not offered again");
-        ops.Checked = new UpdateStatus { State = UpdateState.Available, Latest = new LatestRelease { Version = "0.3.1" }, Message = "SoloStone 0.3.1 is available." };
+        ops.Checked = new UpdateStatus { State = UpdateState.Available, Latest = new LatestRelease { Version = "0.3.1" }, Message = "SoloStone 0.3.1 is available" };
         m = Started(ops); Check(m.Update == UpdateUi.Offered && m.OfferedVersion == "0.3.1" && m.CanOffer, "a newer version is offered despite an older skip");
         ops.Checked = new UpdateStatus { State = UpdateState.Available, Latest = new LatestRelease { Version = "0.2.9" }, Message = "x" };
         m = Started(ops); Check(m.Update == UpdateUi.Declined, "a release older than the skipped one stays quiet");

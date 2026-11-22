@@ -573,6 +573,7 @@ static partial class Program
         // Full path.
         var status=service.Check(none);
         Check(status.State==UpdateState.Available && status.Latest.Version=="2.0.0" && status.Installed=="1.0.0","newer signed version offered");
+        Check(status.Message=="SoloStone 2.0.0 is available","the signed release offer has no trailing period");
         var result=service.Apply(false,none);
         Check(result.Outcome==UpdateOutcome.Swapped && InstallRecord.Load(f.Root).ReleaseVersion=="2.0.0" && File.ReadAllText(Path.Combine(f.App,"SoloStone.exe"))=="launcher 2.0.0","signed update installs end to end");
         Check(http.Requests.All(u=>u.StartsWith("https://",StringComparison.Ordinal)) && http.Requests.All(u=>UpdateClient.PinnedHosts.Contains(new Uri(u).Host)),"every request stayed on the pinned hosts");
