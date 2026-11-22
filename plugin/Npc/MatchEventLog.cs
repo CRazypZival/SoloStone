@@ -45,7 +45,23 @@ internal sealed class MatchEventLog
     private bool inReset; private int resetEntities;
     // Test hook: throws from inside entry decoding to prove a fault disables the log and never reaches the match.
     internal Action<IPowerHistoryEntry> TestFault;
+    // Transport corrections (NativeMatch.RecordTransportCorrection): tag values the client receives at a history position with
+    // no engine entry of their own, e.g. a minion's stats when an aura on it is removed. The log applies them there as tag
+    // changes, so it follows what the client is sent instead of reporting it as drift.
+    internal Func<IList<IPowerHistoryEntry>, int, IEnumerable<TransportCorrection>> Corrections;
+    // Whether the transport has revealed an entity to the client before this batch; null counts every entity as revealed.
+    internal Func<int, bool> IsRevealed;
+    internal readonly struct TransportCorrection
+    {
+        internal readonly int EntityId;
+        internal readonly IReadOnlyDictionary<GameTag, int> Tags;
+        // The client gets it only if the entity is public at that position (NativeMatch.IsPublicAtReplay).
+        internal readonly bool RequiresPublicReplay;
+        internal TransportCorrection(int entityId, IReadOnlyDictionary<GameTag, int> tags, bool requiresPublicReplay)
+        { EntityId = entityId; Tags = tags; RequiresPublicReplay = requiresPublicReplay; }
+    }
     private readonly string humanSeat, npcSeat;
+    private readonly int humanPlayer;
     private static readonly Dictionary<string, string> Names = new Dictionary<string, string>(StringComparer.Ordinal);
 
     private sealed class Ent
@@ -53,8 +69,14 @@ internal sealed class MatchEventLog
         internal int Id, Controller, Zone, Type, Atk, Health, Damage, Armor;
         internal string Card;
         internal bool Fresh, Logged, Script1Known, Guessed;
+        // The part of the tracked stats that is an aura's (Attack, max Health). An aura's buff reaches the client through its
+        // attachment, not as a stat tag change, so the tracker meets it (and its end) only at the batch-end check. Every path
+        // that sets the tracked stats sets this too; a stat tag write and the printed-card fallbacks carry none.
+        internal int AuraAtk, AuraHealth;
         internal int Script1;
     }
+    // Entities the engine just announced a damage / heal for; the next DAMAGE tag write on them is that hit or heal.
+    private readonly HashSet<int> hitMeta = new HashSet<int>(), healMeta = new HashSet<int>();
     private sealed class Frame { internal PowerHistoryBlockStart Start; internal bool Auto; internal bool Silent; internal bool Reset; }
 
     private static readonly GameTag[] Keywords = { GameTag.TAUNT, GameTag.DIVINE_SHIELD, GameTag.STEALTH, GameTag.FROZEN,
@@ -67,6 +89,7 @@ internal sealed class MatchEventLog
         this.maxLinesPerTurn = maxLinesPerTurn;
         match = string.IsNullOrEmpty(matchId) ? "-" : matchId.Length > 8 ? matchId.Substring(0, 8) : matchId;
         this.sink = sink; this.humanSeat = humanSeat; this.npcSeat = npcSeat;
+        humanPlayer = int.TryParse(humanSeat, out int human) ? human : 0;
     }
 
     internal int Lines => sequence;
@@ -92,9 +115,11 @@ internal sealed class MatchEventLog
             batch = entries;
             for (batchIndex = start; batchIndex < entries.Count; batchIndex++)
             {
+                ApplyCorrections(game, entries, batchIndex, facts);
                 TestFault?.Invoke(entries[batchIndex]);
                 Handle(game, entries[batchIndex], facts);
             }
+            ApplyCorrections(game, entries, entries.Count, facts);
             FlushStat();
             AfterBatch(game, facts);
             EndBatch(game);
@@ -117,7 +142,7 @@ internal sealed class MatchEventLog
 
     private void Recover()
     {
-        frames.Clear(); created.Clear(); touched.Clear(); ents.Clear(); zoneCounts.Clear(); heraldProgress.Clear();
+        hitMeta.Clear(); healMeta.Clear(); frames.Clear(); created.Clear(); touched.Clear(); ents.Clear(); zoneCounts.Clear(); heraldProgress.Clear();
         pendingStat = null; inReset = false; pendingDraws = 0;
     }
 
@@ -132,6 +157,8 @@ internal sealed class MatchEventLog
         internal readonly Dictionary<int, int> CastCursor = new Dictionary<int, int>();
         internal readonly Dictionary<int, HandEnteredFact> HandEntries = new Dictionary<int, HandEnteredFact>();
         internal readonly List<DiscoverCompletedFact> Discoveries = new List<DiscoverCompletedFact>();
+        internal readonly HashSet<int> Reborn = new HashSet<int>();
+        internal readonly Dictionary<int, HashSet<int>> Payments = new Dictionary<int, HashSet<int>>();
     }
     // A Rewind restores an older ledger and regrows it inside the same batch, so sequence numbers alone cannot tell old from new.
     // Such a batch reads the whole (valid) ledger: entity-keyed burn/discard/entry facts stay correct, casts use the latest kind.
@@ -158,6 +185,10 @@ internal sealed class MatchEventLog
                     if (!facts.Casts.TryGetValue(cast.EntityId, out var list)) facts.Casts[cast.EntityId] = list = new List<HistoryCastKind>();
                     list.Add(cast.CasterKind); break;
                 case HandEnteredFact hand: facts.HandEntries[hand.EntityId] = hand; break;
+                case HeroHealthChangedFact health when health.Reason == HistoryHealthChangeReason.Payment:
+                    if (!facts.Payments.TryGetValue(health.HeroId, out var paid)) facts.Payments[health.HeroId] = paid = new HashSet<int>();
+                    paid.Add(health.NewHealth); break;
+                case MinionRebornFact reborn: facts.Reborn.Add(reborn.ReturnedEntityId); break;
                 case DiscoverCompletedFact discover:
                     // After a Rewind the ledger is the restored baseline: those picks are old history (already announced or
                     // abandoned), so they are only remembered. Operation ids are restored with the ledger, so a replayed Discover reuses
@@ -177,7 +208,8 @@ internal sealed class MatchEventLog
         // next logged event, which reports them as rng=N ("draws consumed since the previous logged event").
         pendingDraws += game.PowerHistory.RandomDrawsBefore(entry);
         if (setup || inReset) pendingDraws = 0;
-        if (!(entry is PowerHistoryTagChange change && IsStat(change))) FlushStat();
+        // A Health write is often HEALTH then DAMAGE on the same entity; the pending stat waits so HEALTH_SET reports the true Health before.
+        if (!(entry is PowerHistoryTagChange change && (IsStat(change) || change.Tag == GameTag.DAMAGE && pendingStat != null && pendingStat.Id == change.EntityId))) FlushStat();
         AnnouncePicks(game, entry, facts);
         switch (entry)
         {
@@ -207,6 +239,7 @@ internal sealed class MatchEventLog
         if (frames.Count == 0) return;
         var frame = frames[frames.Count - 1];
         frames.RemoveAt(frames.Count - 1);
+        hitMeta.Clear(); healMeta.Clear();
         if (!frame.Reset) return;
         inReset = false;
         Emit(0, "REWIND", "cause=" + Ref(game, frame.Start.Source) + " entities=" + resetEntities + " hand1=" + Zoned(1, (int)ZoneKind.HAND) + " deck1=" + Zoned(1, (int)ZoneKind.DECK)
@@ -266,7 +299,20 @@ internal sealed class MatchEventLog
         {
             character.PeekStats(out int atk, out int maxHealth, out int damage);
             ent.Atk = atk; ent.Health = maxHealth; ent.Damage = damage; ent.Armor = character.Armor;
+            ent.AuraAtk = character.AuraEffects?.ATK ?? 0; ent.AuraHealth = character.AuraEffects?.Health ?? 0;
         }
+    }
+
+    // Is the difference between the tracked stats and the live ones exactly an aura's change? Attack moves by the aura's Attack
+    // change, max Health by its Health change, and damage stays, except that losing a Health aura may clamp the current Health.
+    // A partly explained difference is drift.
+    private static bool AuraExplains(Ent ent, Character character, int atk, int maxHealth, int damage)
+    {
+        int dAtk = (character.AuraEffects?.ATK ?? 0) - ent.AuraAtk, dHealth = (character.AuraEffects?.Health ?? 0) - ent.AuraHealth;
+        if (!(character is Hero) && atk - ent.Atk != dAtk) return false;
+        if (maxHealth - ent.Health != dHealth) return false;
+        if (damage == ent.Damage) return true;
+        return dHealth < 0 && maxHealth - damage == Math.Min(ent.Health - ent.Damage, maxHealth);
     }
 
     // True when the batch still holds a later entry that changes this entity's stats, so the live value is not the value "now".
@@ -304,13 +350,14 @@ internal sealed class MatchEventLog
         string card = string.IsNullOrEmpty(e.Name) && live != null ? live.Card?.Id : e.Name;
         var ent = new Ent { Id = e.Id, Card = card, Controller = Tag(tags, GameTag.CONTROLLER), Zone = Tag(tags, GameTag.ZONE),
             Type = Tag(tags, GameTag.CARDTYPE), Atk = Tag(tags, GameTag.ATK), Health = Tag(tags, GameTag.HEALTH),
-            Damage = Tag(tags, GameTag.DAMAGE), Armor = Tag(tags, GameTag.ARMOR) };
+            Damage = Tag(tags, GameTag.DAMAGE), Armor = Tag(tags, GameTag.ARMOR) };   // tag stats carry no aura part (AuraAtk/AuraHealth 0)
         if (tags.TryGetValue(GameTag.TAG_SCRIPT_DATA_NUM_1, out int script1)) { ent.Script1 = script1; ent.Script1Known = true; }
         ents[e.Id] = ent;
         touched.Add(e.Id);
         if (ent.Type == 0 && game.IdEntityDic.TryGetValue(e.Id, out var typed)) ent.Type = (int)typed.Card.Type;
         // The engine's FullEntity health tag is the current health for a fresh actor; the log tracks max health + damage.
-        if (ent.Damage != 0 && ent.Type == (int)CardType.MINION) ent.Health += ent.Damage;
+        // A summon created in PLAY already carries the maximum (CarriesMaximumHealth), as a SHOW_ENTITY does.
+        if (ent.Damage != 0 && ent.Type == (int)CardType.MINION && !full.CarriesMaximumHealth()) ent.Health += ent.Damage;
         if (setup || inReset) { Count(ent.Controller, ent.Zone, 1); if (inReset) resetEntities++; return; }
         if (ent.Type == (int)CardType.ENCHANTMENT)
         {
@@ -335,7 +382,14 @@ internal sealed class MatchEventLog
         // The snapshot holds printed stats. A copy's enchantments (Specter Specialist on a buffed minion) raise them with no stat
         // tag change, so the stream never says so: read the engine, as a card entering the board does, unless the batch still says.
         if (live != null && !ChangedLater(ent.Id)) TakeLiveStats(ent, live);
+        // A Reborn copy is created in PLAY with its 1-Health return already in the FULL_ENTITY's DAMAGE, as in retail, so no
+        // DAMAGE write follows: log it as created whole, then returned, as when the DAMAGE came as its own change.
+        int reborn = facts.Reborn.Contains(ent.Id) && ent.Type == (int)CardType.MINION ? ent.Damage : 0;
+        ent.Damage -= reborn;
         EmitCreate(game, ent, Tag(tags, GameTag.CREATOR), Tag(tags, GameTag.DISPLAYED_CREATOR), (ZoneKind)ent.Zone, facts);
+        if (reborn == 0) return;
+        ent.Damage += reborn;
+        Emit(ent.Controller, "REBORN", "target=" + Ref(game, ent.Id, ent.Card) + " hp=" + ent.Health + "->" + (ent.Health - ent.Damage) + By(game, ent.Id));
     }
 
     private void EmitCreate(EngineGame game, Ent ent, int creator, int displayed, ZoneKind zone, Facts facts)
@@ -395,12 +449,38 @@ internal sealed class MatchEventLog
         // The engine may keep or clear damage and enchantments on a transform (removeEnchantments), and the stream does not say
         // which. When nothing later in this batch touches the entity, the live entity is exactly the state right now.
         if (!ChangedLater(ent.Id) && game.IdEntityDic.TryGetValue(ent.Id, out var live)) TakeLiveStats(ent, live);
-        else if (printed != null) { ent.Atk = Tag(change.Entity.Tags, GameTag.ATK); ent.Health = Tag(change.Entity.Tags, GameTag.HEALTH); ent.Damage = 0;
+        else if (printed != null) { ent.Atk = Tag(change.Entity.Tags, GameTag.ATK); ent.Health = Tag(change.Entity.Tags, GameTag.HEALTH); ent.Damage = 0; ent.AuraAtk = 0; ent.AuraHealth = 0;
             if (ent.Atk == 0 && ent.Health == 0) { ent.Atk = printed.ATK; ent.Health = printed.Health; } }
         string stats = ent.Type == (int)CardType.MINION || ent.Type == (int)CardType.WEAPON
             ? " stats=" + atk0 + "/" + hp0 + "->" + ent.Atk + "/" + (ent.Health - ent.Damage) : "";
         if (!setup && !inReset)
             Emit(ent.Controller, "TRANSFORM", "entity=#" + ent.Id + " from=" + before + " to=" + Ref(game, ent.Id, change.CardId) + stats + By(game));
+    }
+
+    private void ApplyCorrections(EngineGame game, IList<IPowerHistoryEntry> entries, int index, Facts facts)
+    {
+        if (Corrections == null || inReset) return;
+        foreach (var correction in Corrections(entries, index))
+        {
+            if (correction.Tags == null) continue;
+            // Same rule as the transport: a correction that needs a public entity reaches the client only for a minion in play or
+            // a card in the human's hand at this position. Read from the tracker, which is at this position (the transport's own
+            // replay state is not, yet: the log reads a batch before it is converted).
+            if (correction.RequiresPublicReplay && !IsPublicHere(game, correction.EntityId)) continue;
+            foreach (var tag in correction.Tags)
+                OnTag(game, new PowerHistoryTagChange { EntityId = correction.EntityId, Tag = tag.Key, Value = tag.Value }, facts);
+        }
+    }
+
+    // The client is sent a correction only for an entity that is revealed and sits in a public place at that position
+    // (NativeMatch.IsPublicAtReplay, the same ReplayVisibility rule). The log reads a batch before it is converted, so the
+    // tracker supplies the zone at this position, and an entity this batch already touched counts as revealed (its reveal is in
+    // the batch being converted). The log never feeds the NPC's fair view; this only keeps it consistent with what is sent.
+    private bool IsPublicHere(EngineGame game, int id)
+    {
+        if (IsRevealed != null && !IsRevealed(id) && !touched.Contains(id)) return false;
+        var ent = Know(game, id);
+        return ReplayVisibility.IsPublicPlace((ZoneKind)ent.Zone, ent.Controller, humanPlayer);
     }
 
     private void OnTag(EngineGame game, PowerHistoryTagChange change, Facts facts)
@@ -443,16 +523,33 @@ internal sealed class MatchEventLog
             case GameTag.DAMAGE:
                 {
                     int old = ent.Damage; ent.Damage = change.Value;
-                    if (ent.Guessed)
+                    bool guessed = ent.Guessed;
+                    if (guessed) ent.Guessed = false;
+                    if (setup || !guessed && old == change.Value) break;
+                    // Weapons and locations lose durability / charge through a DAMAGE write with no meta: not a hit, not a Health set.
+                    if (ent.Type == (int)CardType.WEAPON || ent.Type == (int)CardType.LOCATION)
                     {
-                        // Unknown "before" (the log lost its state): state only what is true.
-                        ent.Guessed = false;
-                        if (!setup) Emit(ent.Controller, "DAMAGE", "target=" + Ref(game, ent.Id, ent.Card) + " amount=? hp=?->" + (ent.Health - change.Value) + " before-unknown" + By(game, ent.Id));
+                        hitMeta.Remove(ent.Id); healMeta.Remove(ent.Id);
+                        if (!guessed) Emit(ent.Controller, "DURABILITY", "target=" + Ref(game, ent.Id, ent.Card) + " amount=" + Math.Abs(change.Value - old)
+                            + " damage=" + old + "->" + change.Value + By(game, ent.Id));
                         break;
                     }
-                    if (setup || old == change.Value) break;
-                    int hpBefore = ent.Health - old, hpAfter = ent.Health - change.Value;
-                    Emit(ent.Controller, change.Value > old ? "DAMAGE" : "HEAL", "target=" + Ref(game, ent.Id, ent.Card) + " amount=" + Math.Abs(change.Value - old)
+                    int hpBefore = pendingStat == ent ? pendingStatFromHp : ent.Health - old, hpAfter = ent.Health - change.Value;
+                    // Only the engine's own damage / heal meta marks a real hit or heal. Every other DAMAGE write (Reborn's 1-Health
+                    // return, set-Health, halving, swaps, resets, a Health cost) changes Health without damage or healing, so it is labelled apart.
+                    bool hit = hitMeta.Remove(ent.Id), healed = healMeta.Remove(ent.Id);
+                    // A late-attached entity has no trustworthy "before", so its direction is taken from the meta alone.
+                    string kind = hit && (guessed || change.Value > old) ? "DAMAGE" : healed && (guessed || change.Value < old) ? "HEAL"
+                        : facts.Reborn.Contains(ent.Id) ? "REBORN"
+                        : facts.Payments.TryGetValue(ent.Id, out var paid) && paid.Contains(hpAfter) ? "HEALTH_COST" : "HEALTH_SET";
+                    if (guessed)
+                    {
+                        // Unknown "before" (the log lost its state): state only what is true.
+                        Emit(ent.Controller, kind, "target=" + Ref(game, ent.Id, ent.Card) + " amount=? hp=?->" + hpAfter + " before-unknown" + By(game, ent.Id));
+                        break;
+                    }
+                    Emit(ent.Controller, kind, "target=" + Ref(game, ent.Id, ent.Card)
+                        + (kind == "HEALTH_SET" || kind == "REBORN" ? "" : " amount=" + Math.Abs(change.Value - old))
                         + " hp=" + hpBefore + "->" + hpAfter + By(game, ent.Id));
                     break;
                 }
@@ -466,6 +563,9 @@ internal sealed class MatchEventLog
             case GameTag.ATK:
             case GameTag.HEALTH:
                 {
+                    // A stat tag write leaves the aura part alone: what an emitter writes may include the aura (an enchantment or an
+                    // aura writes entity[Tag], which does) or not (the AttackDamage/BaseHealth setters write the base value), so the
+                    // part is refreshed only from the live entity.
                     if (setup) { if (change.Tag == GameTag.ATK) ent.Atk = change.Value; else ent.Health = change.Value; break; }
                     if (ent.Guessed) { ent.Guessed = false; if (change.Tag == GameTag.ATK) ent.Atk = change.Value; else ent.Health = change.Value; break; }
                     if (pendingStat != ent)
@@ -494,6 +594,8 @@ internal sealed class MatchEventLog
 
     private void OnMeta(EngineGame game, PowerHistoryMetaData meta)
     {
+        if ((meta.Type == MetaDataType.DAMAGE || meta.Type == MetaDataType.HEALING) && meta.Info != null)
+            if (meta.Data > 0) foreach (int id in meta.Info) (meta.Type == MetaDataType.DAMAGE ? hitMeta : healMeta).Add(id);
         if (meta.Type != MetaDataType.TARGET || meta.Info == null || frames.Count == 0 || setup) return;
         var top = frames[frames.Count - 1];
         int draws = pendingDraws;
@@ -514,6 +616,7 @@ internal sealed class MatchEventLog
             frame.Silent = true; frame.Reset = true; frames.Add(frame);
             return;
         }
+        hitMeta.Clear(); healMeta.Clear();
         string by = By(game, block.Source);
         int draws = pendingDraws;
         var src = block.Source != 0 ? Know(game, block.Source) : null;
@@ -529,7 +632,8 @@ internal sealed class MatchEventLog
                     // An automatic play picks among the legal targets with the engine's RNG (it draws even for one candidate), so
                     // the engine states how many there were: random only when more than one.
                     var note = game.PowerHistory.AutoChoiceOf(block) ?? (LegalTargets: -1, Mode: 0, ModeCardId: (string)null, ModeRandom: false);
-                    string pick = note.LegalTargets == -2 ? (block.Target != 0 ? " pick=rule random=no" : "")
+                    string pick = note.LegalTargets == -3 ? (block.Target != 0 ? " pick=chosen random=no" : "")
+                        : note.LegalTargets == -2 ? (block.Target != 0 ? " pick=rule random=no" : "")
                         : block.Target != 0 || note.LegalTargets >= 0
                         ? " pick=auto legal=" + (note.LegalTargets >= 0 ? note.LegalTargets.ToString(CultureInfo.InvariantCulture) : "?")
                             + " random=" + (note.LegalTargets < 0 ? "unknown" : note.LegalTargets > 1 ? "yes" : "no") : "";
@@ -611,7 +715,7 @@ internal sealed class MatchEventLog
             if (!ChangedLater(ent.Id) && game.IdEntityDic.TryGetValue(ent.Id, out var left)) TakeLiveStats(ent, left);
             else
             {
-                ent.Damage = 0;
+                ent.Damage = 0; ent.AuraAtk = 0; ent.AuraHealth = 0;
                 try { var printed = Cards.FromId(ent.Card); ent.Atk = printed.ATK; ent.Health = printed.Health; } catch (Exception) { }
             }
         }
@@ -621,7 +725,7 @@ internal sealed class MatchEventLog
         {
             if (!ChangedLater(ent.Id) && game.IdEntityDic.TryGetValue(ent.Id, out var entering)) TakeLiveStats(ent, entering);
             else if (ent.Atk == 0 && ent.Health == 0)
-                try { var printed = Cards.FromId(ent.Card); ent.Atk = printed.ATK; ent.Health = printed.Health; } catch (Exception) { }
+                try { ent.AuraAtk = 0; ent.AuraHealth = 0; var printed = Cards.FromId(ent.Card); ent.Atk = printed.ATK; ent.Health = printed.Health; } catch (Exception) { }
             ent.Guessed = false;
         }
         if (setup || inReset) return;
@@ -713,9 +817,15 @@ internal sealed class MatchEventLog
                 if (live is Hero) ent.Atk = atk;
                 if (atkDiffers || ent.Health - ent.Damage != hp)
                 {
-                    Emit(ent.Controller, "RESYNC", "target=" + Ref(game, id, card) + " tracked=" + ent.Atk + "/" + (ent.Health - ent.Damage) + " engine=" + atk + "/" + hp);
+                    // An aura's buff, or its end, is a stat change the client was sent (through the aura's attachment): only when
+                    // the difference is exactly the aura's change. Any other difference, a partly explained one too, is tracker drift.
+                    if (AuraExplains(ent, character, atk, maxHealth, damage))
+                        Emit(ent.Controller, "STATS", "target=" + Ref(game, id, card) + " stats=" + ent.Atk + "/" + (ent.Health - ent.Damage) + "->" + atk + "/" + hp + " by=aura");
+                    else
+                        Emit(ent.Controller, "RESYNC", "target=" + Ref(game, id, card) + " tracked=" + ent.Atk + "/" + (ent.Health - ent.Damage) + " engine=" + atk + "/" + hp);
                     TakeLiveStats(ent, live);
                 }
+                else { ent.Health = maxHealth; ent.Damage = damage; ent.AuraAtk = character.AuraEffects?.ATK ?? 0; ent.AuraHealth = character.AuraEffects?.Health ?? 0; }   // current Health and Attack match: take the live max/damage split and aura part
             }
             if (card != null && ent.Card != card) ent.Card = card;
             ent.Type = (int)live.Card.Type;
