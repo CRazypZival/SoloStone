@@ -6,7 +6,7 @@ using System.Threading;
 namespace SoloStone
 {
     public enum LauncherPhase { Starting, Ready, Working, Launching, Running, Restarting, NotInstalled, Closing }
-    public enum UpdateUi { Pending, NotConfigured, Off, Checking, UpToDate, Applying, Offered, Declined, NeedsConfirmation, Held, Failed, Skipped, Swapped }
+    public enum UpdateUi { Pending, NotConfigured, Off, Checking, UpToDate, Applying, Committing, Offered, Declined, NeedsConfirmation, Held, Failed, Skipped, Swapped }
 
     public interface ILauncherOps
     {
@@ -15,7 +15,7 @@ namespace SoloStone
         bool AfterHelper { get; } // A helper opened this launcher, so its note is news, and the update it reports on must not start again here.
         StatusReport Status();                                           // reads only, no network
         UpdateStatus Check(CancellationToken cancel);                    // the only network use
-        UpdateResult Apply(bool acceptWarning, CancellationToken cancel, string offeredVersion); // offeredVersion: install only this one
+        UpdateResult Apply(bool acceptWarning, CancellationToken cancel, string offeredVersion, Action committing);
         void Restart();                                                  // start Root\app\SoloStone.exe again and exit this process
         int Launch(bool acceptWarning, Action<string> progress);         // no network from here on
         RollbackResult Rollback();
@@ -47,12 +47,12 @@ namespace SoloStone
 
         public bool Installed => Report != null && Report.Installed;
         public VerdictKind? Kind => Installed && Report.Verdict != null ? (VerdictKind?)Report.Verdict.Kind : null;
-        public bool UpdateBusy => Update == UpdateUi.Checking || Update == UpdateUi.Applying;
+        public bool UpdateBusy => Update == UpdateUi.Checking || Update == UpdateUi.Applying || Update == UpdateUi.Committing;
         public bool Idle => Phase == LauncherPhase.Ready;
         public bool CanPlay => Idle && Installed && Kind != VerdictKind.Block && (Kind != VerdictKind.Warning || WarningConfirmed) && !UpdateBusy;
         public bool ShowWarning => Installed && Kind == VerdictKind.Warning;
         public bool CanConfirmWarning => ShowWarning && Idle;
-        public bool CanSkip => (Phase == LauncherPhase.Starting && UpdateBusy) || Update == UpdateUi.Applying;
+        public bool CanSkip => Update == UpdateUi.Checking || Update == UpdateUi.Applying;
         public bool CanOffer => Idle && Update == UpdateUi.Offered;
         public bool CanSkipVersion => CanOffer && !string.IsNullOrEmpty(OfferedVersion);
         public bool CanConfirmUpdate => Idle && Update == UpdateUi.NeedsConfirmation && PendingUpdate != null;
@@ -95,13 +95,14 @@ namespace SoloStone
             }
         }
         // The newest release is the one the player skipped: say so, offer nothing.
-        public void UpdateVersionSkipped(UpdateStatus status) {
+        public void UpdateVersionSkipped(string version) {
             Update = UpdateUi.Declined; OfferedVersion = null;
-            UpdateText = "SoloStone " + status.Latest?.Version + " is available, but you skipped it.";
+            UpdateText = "SoloStone " + version + " is available, but you skipped it.";
         }
         public void UpdateLater() { Update = UpdateUi.Declined; OfferedVersion = null; UpdateText = "No update this time. SoloStone will ask again next time."; }
         public void VersionSkipped(string version) { Notice = ""; NoticeIsProblem = false; Update = UpdateUi.Declined; OfferedVersion = null; UpdateText = "Skipped SoloStone " + version + ". SoloStone will ask again when a newer version is out."; }
         public void UpdateApplying() { Notice = ""; NoticeIsProblem = false; Update = UpdateUi.Applying; UpdateText = "Downloading and checking the update…"; }
+        public void UpdateCommitting() { Update = UpdateUi.Committing; UpdateText = "Installing the update…"; }
         public void UpdateApplied(UpdateResult result) {
             UpdateText = result.Message ?? "";
             switch (result.Outcome) {
@@ -192,7 +193,7 @@ namespace SoloStone
         public string ToJson() => System.Text.Encoding.UTF8.GetString(JsonBytes.ToBytes(this));
     }
 
-    // The launcher's start order from the seams document: resume, check, apply, then play. Everything runs off the UI thread.
+    // Resume and check at startup. Apply only after the player accepts an offer.
     public sealed class LauncherRunner
     {
         readonly LauncherModel model; readonly ILauncherOps ops; readonly Action<Action> post;
@@ -209,7 +210,7 @@ namespace SoloStone
                     else {
                     var report = ops.Status(); post(() => { model.ApplyReport(report); if (ops.AfterHelper) model.ShowStartNote(report); });
                     if (!report.Installed) { post(model.NotInstalled); return false; }
-                    restart = CheckAndApply(false, skip, true);
+                        CheckForUpdate(skip);
                     }
                 }
                 catch (Exception e) when (Messages.Expected(e)) { string message = Messages.Friendly(e); post(() => model.Failure(message)); }
@@ -222,37 +223,40 @@ namespace SoloStone
             if (restart) Restart();
             return restart;
         }
-        // Check only. A newer release is offered, not installed: the player picks Update now, Later or Skip this version.
-        bool CheckAndApply(bool acceptWarning, CancellationToken cancel, bool checkFirst, string offered = null) {
-            bool checking = checkFirst;
+        bool WasSkipped(string version) {
+            string skipped = ops.SkippedVersion();
+            return version != null && SemVer.Valid(skipped) && !SemVer.Newer(version, skipped);
+        }
+        void CheckForUpdate(CancellationToken cancel) {
+            post(model.UpdateChecking);
             try {
-                if (checkFirst) {
-                    post(model.UpdateChecking);
-                    var status = ops.Check(cancel);
-                    if (status.State == UpdateState.Available) {
-                        string latest = status.Latest?.Version, skipped = ops.SkippedVersion();
-                        if (latest != null && !string.IsNullOrEmpty(skipped) && SemVer.Valid(skipped) && !SemVer.Newer(latest, skipped)) { post(() => model.UpdateVersionSkipped(status)); return false; }
-                    }
-                    post(() => model.UpdateChecked(status));
-                    return false;
-                }
-                checking = false;
-                post(model.UpdateApplying);
-                var result = ops.Apply(acceptWarning, cancel, offered);
-                post(() => model.UpdateApplied(result));
-                return result.Outcome == UpdateOutcome.Swapped;
+                var status = ops.Check(cancel);
+                if (status.State == UpdateState.Available && WasSkipped(status.Latest?.Version))
+                    post(() => model.UpdateVersionSkipped(status.Latest.Version));
+                else post(() => model.UpdateChecked(status));
             }
-            catch (OperationCanceledException) { post(model.UpdateSkipped); return false; }
-            catch (Exception e) when (Messages.Expected(e)) { string message = Messages.Friendly(e); post(() => { if (checking) model.UpdateChecked(new UpdateStatus { State = UpdateState.Failed, Message = "Couldn't check for updates." }); else model.UpdateFailed(message); }); return false; }
+            catch (OperationCanceledException) { post(model.UpdateSkipped); }
+            catch (Exception e) when (Messages.Expected(e)) {
+                post(() => model.UpdateChecked(new UpdateStatus { State = UpdateState.Failed, Message = "Couldn't check for updates." }));
+            }
         }
         // After the player confirmed a Warning verdict on the new release.
-        public bool ConfirmUpdate(CancellationToken skip) => ApplyChosen(true, skip, model.PendingUpdate?.Version);
+        public bool ConfirmUpdate(CancellationToken skip, Action committing = null) => ApplyChosen(true, skip, model.PendingUpdate?.Version, committing);
         // After the player chose Update now. The warning path, if any, asks again on its own.
-        public bool UpdateNow(CancellationToken skip) => ApplyChosen(false, skip, model.OfferedVersion);
-        bool ApplyChosen(bool acceptWarning, CancellationToken skip, string offered) {
-            bool restart;
+        public bool UpdateNow(CancellationToken skip, Action committing = null) => ApplyChosen(false, skip, model.OfferedVersion, committing);
+        bool ApplyChosen(bool acceptWarning, CancellationToken skip, string offered, Action committing) {
+            bool restart = false;
             using (ops.Lease()) {
-                restart = CheckAndApply(acceptWarning, skip, false, offered);
+                post(model.UpdateApplying);
+                try {
+                    var result = ops.Apply(acceptWarning, skip, offered, committing);
+                    if (result.Outcome == UpdateOutcome.NewerOffered && WasSkipped(result.Version))
+                        post(() => model.UpdateVersionSkipped(result.Version));
+                    else post(() => model.UpdateApplied(result));
+                    restart = result.Outcome == UpdateOutcome.Swapped;
+                }
+                catch (OperationCanceledException) { post(model.UpdateSkipped); }
+                catch (Exception e) when (Messages.Expected(e)) { string message = Messages.Friendly(e); post(() => model.UpdateFailed(message)); }
                 if (!restart) { try { var report = ops.Status(); post(() => model.ApplyReport(report)); } catch (Exception e) when (Messages.Expected(e)) { } post(model.Ready); }
             }
             if (restart) Restart();

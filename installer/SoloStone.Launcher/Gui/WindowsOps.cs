@@ -81,7 +81,7 @@ namespace SoloStone
         public StatusReport Status()
             => StatusReport.Build(root, Engine(), TestedClient.Compiled(), UpdateConfig.Compiled(), new NoBindingManifest(), WindowsHost.IdleFailures(root));
         public UpdateStatus Check(CancellationToken cancel) => NewService().Check(cancel);
-        public UpdateResult Apply(bool acceptWarning, CancellationToken cancel, string offeredVersion) => NewService().Apply(acceptWarning, cancel, offeredVersion);
+        public UpdateResult Apply(bool acceptWarning, CancellationToken cancel, string offeredVersion, Action committing) => NewService().Apply(acceptWarning, cancel, offeredVersion, committing);
         // The old process must load nothing more once the new release is in place, so it starts the new one and leaves at once.
         public void Restart() {
             GuiHost.ReleaseInstance();

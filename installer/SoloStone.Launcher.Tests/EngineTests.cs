@@ -11,7 +11,7 @@ sealed class FakeHost : IUpdateHost
 {
     public string SaveRoot { get; set; }
     public string Busy; public Verdict Staged=new Verdict { KindName="Allow", TestedVersion="37.0.0", FoundVersion="37.0.0", Reasons=new string[0], Message="ok" };
-    public int StagedRuns; public string LastStaged;
+    public int StagedRuns; public string LastStaged; public Action DuringStagedCheck;
     public string IdleProblem() => Busy;
     // The real host starts another process and this one exits. Here the "other process" runs in place, with its own view of where it runs.
     public string Root; public bool InApp=true; public Action<string> Fault; public Func<string,string,bool> SameVolume; public UpdateResult HelperResult; public int HandOffs; public string LastHelper;
@@ -20,7 +20,7 @@ sealed class FakeHost : IUpdateHost
     void AsHelper(Action run) { HandOffs++; bool was=InApp; InApp=false; try { run(); } finally { InApp=was; } }
     public void HandOffSwap(string stagedApp,string version) { LastHelper=stagedApp; AsHelper(()=>HelperResult=Child().FinishSwap(version)); }
     public void HandOffUndo(string helperFolder) { LastHelper=helperFolder; if(!File.Exists(Path.Combine(helperFolder,"SoloStone.exe"))) throw new Exception("helper has no launcher"); AsHelper(()=>Child().FinishUndo()); }
-    public Verdict CheckStaged(string stagedApp,string root) { StagedRuns++; LastStaged=stagedApp; if(Staged==null) throw new IOException("staged launcher would not start"); return Staged; }
+    public Verdict CheckStaged(string stagedApp,string root) { StagedRuns++; LastStaged=stagedApp; DuringStagedCheck?.Invoke(); if(Staged==null) throw new IOException("staged launcher would not start"); return Staged; }
 }
 sealed class SimulatedCrash : Exception { }
 static partial class Program
@@ -656,6 +656,20 @@ static partial class Program
         PendingHealthTests(temp);
         HealthTests(temp);
         RunningExeTests(temp);
+        var fixture=NewFixture(temp);
+        var release=BuildRelease(fixture,"2.0.0");
+        var engine=fixture.Engine();
+        engine.Stage(ZipOf(fixture,"2.0.0"),release);
+        using(var cancel=new CancellationTokenSource()) {
+            fixture.Host.DuringStagedCheck=cancel.Cancel;
+            Throws<OperationCanceledException>(()=>engine.Apply(release,false,cancel.Token),"cancel while checking the staged launcher");
+            Check(fixture.Host.HandOffs==0 && !engine.JournalActive,"cancel during the staged check leaves the installation alone");
+        }
+        fixture.Host.DuringStagedCheck=null;
+        using(var cancel=new CancellationTokenSource()) {
+            Throws<OperationCanceledException>(()=>engine.Apply(release,false,cancel.Token,cancel.Cancel),"cancel queued at the handoff boundary");
+            Check(fixture.Host.HandOffs==0 && !engine.JournalActive,"late cancel wins before handing off the swap");
+        }
         RollbackTests(temp);
         ServiceTests(temp);
     }

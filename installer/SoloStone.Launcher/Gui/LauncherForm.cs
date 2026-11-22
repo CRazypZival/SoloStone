@@ -31,7 +31,7 @@ namespace SoloStone
             firewall = Ui.Button("launcher.firewall", Texts.FixFirewall), uninstall = Ui.Button("launcher.uninstall", Texts.Uninstall);
         readonly System.Windows.Forms.Timer retryTimer = new System.Windows.Forms.Timer { Interval = 2000 };
         readonly CancellationTokenSource skipUpdate = new CancellationTokenSource();
-        CancellationTokenSource applying = new CancellationTokenSource(); // one per install, so Skip update can stop a slow download
+        CancellationTokenSource applying;
         bool updating, confirmingUninstall, retrying;
         internal string UninstallerPath;
         internal bool DeleteSavesChosen;
@@ -90,18 +90,12 @@ namespace SoloStone
         }
         void Wire() {
             accept.CheckedChanged += (s, e) => { if (!updating) { model.ConfirmWarning(accept.Checked); Render(); } };
-            skip.Click += (s, e) => { skipUpdate.Cancel(); applying.Cancel(); skip.Enabled = false; };
+            skip.Click += (s, e) => { (model.Update == UpdateUi.Applying ? applying : skipUpdate).Cancel(); skip.Enabled = false; };
             installUpdate.Click += (s, e) => {
-                if (!model.CanConfirmUpdate) return;
-                model.Busy("Installing the update…"); Render();
-                applying = new CancellationTokenSource(); var token = applying.Token;
-                Background(() => runner.ConfirmUpdate(token));
+                if (model.CanConfirmUpdate) BeginApply(runner.ConfirmUpdate);
             };
             updateNow.Click += (s, e) => {
-                if (!model.CanOffer) return;
-                model.Busy("Installing the update…"); Render();
-                applying = new CancellationTokenSource(); var token = applying.Token;
-                Background(() => runner.UpdateNow(token));
+                if (model.CanOffer) BeginApply(runner.UpdateNow);
             };
             later.Click += (s, e) => { if (model.CanOffer) { runner.Later(); } };
             skipVersion.Click += (s, e) => { if (model.CanSkipVersion) { model.Busy("Saving your choice…"); Render(); Background(() => runner.SkipVersion()); } };
@@ -116,6 +110,16 @@ namespace SoloStone
         }
         void BeginStart() {
             Background(() => { runner.Start(skipUpdate.Token); });
+        }
+        void BeginApply(Func<CancellationToken, Action, bool> apply) {
+            applying?.Dispose();
+            applying = new CancellationTokenSource();
+            var token = applying.Token;
+            model.Busy("Installing the update…"); Render();
+            // Close the cancellation window on the UI thread before the helper can take over.
+            Background(() => apply(token, () => Invoke(new Action(() => {
+                if (!token.IsCancellationRequested) { model.UpdateCommitting(); Render(); }
+            }))));
         }
         void Play() {
             if (!model.CanPlay) return;
@@ -158,7 +162,7 @@ namespace SoloStone
                 update.Visible = model.UpdateText.Length != 0; update.SetText(model.UpdateText);
                 bar.Visible = model.UpdateBusy;
                 updateButtons.Visible = model.CanSkip || model.CanConfirmUpdate || model.CanOffer;
-                skip.Visible = model.UpdateBusy; skip.Enabled = model.CanSkip && (model.Update == UpdateUi.Applying ? !applying.IsCancellationRequested : !skipUpdate.IsCancellationRequested);
+                skip.Visible = model.CanSkip; skip.Enabled = model.CanSkip && !(model.Update == UpdateUi.Applying ? applying : skipUpdate).IsCancellationRequested;
                 updateNow.Visible = model.CanOffer; updateNow.Enabled = model.CanOffer;
                 later.Visible = model.CanOffer; later.Enabled = model.CanOffer;
                 skipVersion.Visible = model.CanOffer; skipVersion.Enabled = model.CanSkipVersion;
@@ -178,7 +182,7 @@ namespace SoloStone
             stack.PerformLayout();
         }
         protected override void Dispose(bool disposing) {
-            if (disposing) { skipUpdate.Dispose(); applying.Dispose(); }
+            if (disposing) { skipUpdate.Dispose(); applying?.Dispose(); }
             base.Dispose(disposing);
         }
     }

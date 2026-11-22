@@ -66,7 +66,7 @@ sealed class FakeLauncherOps : ILauncherOps
     public ResumeOutcome Resume() { Calls.Add("Resume"); if (ResumeFails != null) throw ResumeFails; return Resumed; }
     public StatusReport Status() { Calls.Add("Status"); return Report; }
     public UpdateStatus Check(CancellationToken cancel) { Calls.Add("Check"); if (CheckFails != null) throw CheckFails; cancel.ThrowIfCancellationRequested(); return Checked; }
-    public UpdateResult Apply(bool acceptWarning, CancellationToken cancel, string offeredVersion) {
+    public UpdateResult Apply(bool acceptWarning, CancellationToken cancel, string offeredVersion, Action committing) {
         Calls.Add("Apply"); AppliedAccepting = acceptWarning; AppliedOffered = offeredVersion; cancel.ThrowIfCancellationRequested();
         if (LatestNow != null && offeredVersion != null && LatestNow != offeredVersion) return new UpdateResult { Outcome = UpdateOutcome.NewerOffered, Version = LatestNow, Message = "SoloStone " + LatestNow + " is available." };
         return Applied;
@@ -380,9 +380,14 @@ static partial class Program
         Check(m.Update == UpdateUi.Skipped && m.CanPlay && m.Phase == LauncherPhase.Ready && m.Notice == "" && ops.OpenLeases == 0, "cancelling Update now ends it and Play is on");
         var applying = new LauncherModel(); applying.BeginStart(); applying.ApplyReport(Report()); applying.Ready(); applying.UpdateApplying();
         Check(applying.CanSkip && !applying.CanPlay, "while installing, Skip update is live");
+        applying.UpdateCommitting();
+        Check(applying.UpdateBusy && !applying.CanSkip && !applying.CanPlay, "at handoff, the progress bar stays but Skip update is gone");
         ops = new FakeLauncherOps { Checked = avail, LatestNow = "0.3.5" };
         m = Started(ops); runner = new LauncherRunner(m, ops, Inline);
         Check(!runner.UpdateNow(CancellationToken.None) && m.Update == UpdateUi.Offered && m.OfferedVersion == "0.3.5" && m.CanOffer && m.UpdateText.Contains("0.3.5"), "a newer release than the offered one is re-offered, not installed");
+        ops = new FakeLauncherOps { Checked = avail, Skipped = "0.2.9", LatestNow = "0.2.9" };
+        m = Started(ops); runner = new LauncherRunner(m, ops, Inline);
+        Check(m.CanOffer && !runner.UpdateNow(CancellationToken.None) && m.Update == UpdateUi.Declined && !m.CanOffer && m.CanPlay, "refreshing the offer respects a saved skip");
         m = Started(ops = new FakeLauncherOps { Checked = avail }); runner = new LauncherRunner(m, ops, Inline);
         m.Busy("Saving your choice…"); runner.SkipVersion();
         Check(m.Phase == LauncherPhase.Ready && m.Notice == "" && m.Update == UpdateUi.Declined, "Skip this version settles the busy state");
