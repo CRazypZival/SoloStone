@@ -135,6 +135,45 @@ internal static class NativeUIProjection
     internal static bool ForcesCorePlayability(bool active, string cardId) =>
         active && LocalCoreProgression.IsAvailable(cardId);
 
+    // #87: offline the client has no set-rotation timings, so it calls every set Standard. These answer instead, from the
+    // engine's Standard rule (LocalCardCatalog.IsStandard). Null leaves the client's own answer (inactive, or not ours).
+    // A card: Wild when the engine knows it as a collectible card outside Standard (Basic, Classic, Hall of Fame).
+    // Memoized: the client asks for every card in every filter pass (EntityBase.GetCardSet is hot). The meta is fixed per process.
+    private static readonly Dictionary<string, bool?> nativeWild = new Dictionary<string, bool?>(StringComparer.Ordinal);
+    internal static bool? NativeCardIsWild(bool active, string cardId)
+    {
+        if (!active || cardId == null) return null;
+        lock (nativeWild)
+        {
+            if (nativeWild.TryGetValue(cardId, out bool? known)) return known;
+            SabberStoneCore.Model.Card card;
+            try { card = SabberStoneCore.Model.Cards.FromId(cardId); } catch (KeyNotFoundException) { card = null; }
+            // Heroes (base heroes are Basic-set collectibles, skins HERO_SKINS) are never Wild cards: leave them to the client.
+            // An unreleased meta set's cards (BE) are not Wild either, just not out yet: like their set, leave them to the client.
+            bool? wild = card == null || !card.Collectible || card.Type == SabberStoneCore.Enums.CardType.HERO
+                || LocalCardCatalog.IsUnreleasedMetaSet((int)card.Set) ? (bool?)null : !LocalCardCatalog.IsStandard(card);
+            nativeWild[cardId] = wild;
+            return wild;
+        }
+    }
+    // A set: rotated unless it is an active-meta set or EVENT; INVALID (cards whose set arrives only with server timings,
+    // Core reprints among them) and an unreleased meta set (a future expansion) keep the client's answer.
+    internal const int NativeEventSet = 1941, NativeLegacySet = 1635;
+    // Only real card sets are answered: a set holding some engine collectible non-hero card, or Legacy (NativeFallbackSet);
+    // hero skins, Tavern Brawl, Battlegrounds, missions and other non-card sets keep the client's answer.
+    private static readonly Lazy<HashSet<int>> engineCardSets = new Lazy<HashSet<int>>(() => new HashSet<int>(
+        SabberStoneCore.Model.Cards.All.Where(card => card.Collectible && card.Type != SabberStoneCore.Enums.CardType.HERO)
+            .Select(card => (int)card.Set)) { NativeLegacySet });
+    internal static bool? NativeSetIsRotated(bool active, int setId)
+    {
+        if (!active || setId == 0 || LocalCardCatalog.IsUnreleasedMetaSet(setId) || !engineCardSets.Value.Contains(setId)) return null;
+        return !(setId == NativeEventSet || LocalCardCatalog.IsStandardSet(setId));
+    }
+    // The set the client shows for a card it has no set for (INVALID): Legacy for a Wild Basic/Classic card, so set
+    // filters, which work by set, treat it as Wild like the Classic (EXPERT1) cards that keep their own set. Null keeps it.
+    internal static int? NativeFallbackSet(bool active, string cardId) =>
+        NativeCardIsWild(active, cardId) == true ? NativeLegacySet : (int?)null;
+
     // This bypasses unavailable native event timing; collection ownership is checked separately.
     private static readonly Lazy<HashSet<string>> testStandardIds = new Lazy<HashSet<string>>(() =>
         new HashSet<string>(LocalDecks.TestStandardCardIds, StringComparer.Ordinal));
@@ -714,6 +753,10 @@ internal static class NativeUIProjection
     // gate must also pass, or New Deck would lead to a hero pick whose create is refused.
     internal static bool ShowNewDeckButton(bool nativeShows, int personalCount, int sessionLoanerCount) =>
         nativeShows && PersonalDeckBlocker(personalCount, sessionLoanerCount) == null;
+    // Which creation requests the local draft path serves: a plain new deck (normal source, no pasted code), or a pasted deck
+    // whose code the import already planned (the plan is what fills the draft; an unplanned paste stays unsupported).
+    internal static bool OwnsCreateSource(bool normalSource, bool pastedSource, bool hasPastedCode, bool importPlanned) =>
+        normalSource && !hasPastedCode || pastedSource && hasPastedCode && importPlanned;
     internal static bool CanCreateDraft(bool normalDeck, bool normalSource, bool supportedHero, bool standardFormat, int personalCount,
         int sessionLoanerCount) =>
         normalDeck && normalSource && supportedHero && standardFormat && CanAddPersonalDeck(personalCount, sessionLoanerCount);
@@ -786,7 +829,7 @@ internal static class NativeUIProjection
             throw new InvalidOperationException("Custom deck identity is invalid.");
         LocalCustomDeck saved = profile.GetDraft(nativeId) ?? throw new InvalidOperationException("Custom deck no longer exists.");
         if (!profile.IsDeckComplete(nativeId))
-            throw new InvalidOperationException("The saved deck is incomplete. Acquire missing cards before playing.");
+            throw new InvalidOperationException(profile.NotPlayableReason(nativeId));
         ValidateCustomStart(profile, nativeId, saved, resolved);
         resolved.WithSideboards(saved.Sideboards, true).Build();
         ValidateMatchDeckBinding(selected, resolved);
@@ -849,10 +892,10 @@ internal static class NativeUIProjection
         + ErrorDetail(detail) + ". Resolve the error and retry.";
     internal static string DeckWriteFailureMessage(string operation, long id, string detail)
     {
-        if (operation != "create" && operation != "save" && operation != "delete")
+        if (operation != "create" && operation != "save" && operation != "delete" && operation != "import")
             throw new ArgumentException("Unknown deck operation.", nameof(operation));
         return "Local deck " + operation + " failed for " + id + ": "
-            + ErrorDetail(detail) + ". Fix the deck and retry.";
+            + ErrorDetail(detail) + (operation == "import" ? ". Nothing was saved. Try the import again." : ". Fix the deck and retry.");
     }
     internal static string ReorderRefreshFailureMessage(bool committed, string detail) =>
         (committed ? "Deck order was saved" : "Deck order is unchanged")

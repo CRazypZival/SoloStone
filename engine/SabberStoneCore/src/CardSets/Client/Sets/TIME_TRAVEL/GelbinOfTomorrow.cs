@@ -17,7 +17,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
             card.Implemented = true; card.ExcludeFromLegacyRandomPools = true;
             card.Power = new Power { PowerTask = new CustomTask((g, c, s, t, stack) => {
                 foreach (var aura in c.DeckZone.OfType<Spell>().Where(a => a.IsAura)
-                    .GroupBy(a => a.Card.Id).Select(group => group.First()).ToArray())
+                    .GroupBy(a => a.Card.Identity).Select(group => group.First()).ToArray())
                     AuraSpellRules.Install(aura);
             }) };
         }
@@ -26,7 +26,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
         [StandardCard("TIME_009t2", 119920)]
         internal static void ConfigureMekkatorque(Card card) => AuraSpellRules.Declare(card, effect:
             new CustomTask((g, c, s, t, stack) => {
-                var candidates = c.BoardZone.Where(m => !m.IsDormant && !m.IsDead).ToArray();
+                var candidates = c.BoardZone.Interactable.Where(m => !m.Untouchable && !m.IsDead).ToArray();
                 if (candidates.Length == 0) return;
                 var chosen = candidates[g.Random.Next(candidates.Length)];
                 Generic.AddEnchantmentBlock(g, Cards.FromId("TIME_009t2e"), (IPlayable)s, chosen);
