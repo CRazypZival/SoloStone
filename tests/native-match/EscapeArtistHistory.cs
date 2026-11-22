@@ -31,7 +31,17 @@ internal static partial class Program
                 FlushFieldHistory(match);
                 Check(artist.Zone == owner.SetasideZone, name + ": the Escape Artist escaped, now " + artist.Zone?.Type);
                 DumpDrawHistory(name, capture, cursor);
-                var history = History(capture, cursor);
+                var history = History(capture, cursor).ToList();
+                var effects = history.Where(e => e.HasSubSpellStart
+                    && e.SubSpellStart.SpellPrefabGuid == "ReuseFX_KeywordImpact_Stealth_Super_ImpactOnly:f391dcf35565e4e4e80d15ebe8a2de8f").ToArray();
+                Check(effects.Length == 1, name + ": one escape effect");
+                var effect = effects[0].SubSpellStart;
+                Check(effect.SourceEntityId == artist.Id && effect.TargetEntityIds.SequenceEqual(new[] { artist.Id }),
+                    name + ": escape effect on the artist only");
+                int effectAt = history.IndexOf(effects[0]);
+                int hideAt = history.FindIndex(e => e.HasHideEntity && e.HideEntity.Entity == artist.Id);
+                Check(effectAt + 1 < hideAt && history[effectAt + 1].HasSubSpellEnd,
+                    name + ": escape effect finishes its scope before the artist is hidden");
                 var rows = history.Select(e => LeaveRow(e, artist.Id)).Where(r => r != null).ToList();
                 string zone5 = "ZONE=" + (int)SabberStoneCore.Enums.Zone.REMOVEDFROMGAME, hide5 = "HIDE=" + (int)SabberStoneCore.Enums.Zone.REMOVEDFROMGAME;
                 string shown = string.Join(",", rows);
