@@ -130,6 +130,7 @@ internal sealed partial class NativeTestControl
         if (current == null) return;
         if (current.transport != null) SamplePress();
         current.Tick();
+        if (current.runningBoardTrace != null) current.SampleBoardTrace();
     }
     internal static bool DiagnosticsEnabled => current?.transport != null;
     internal static void Shutdown() { current?.Stop("Plugin shutdown"); current = null; }
@@ -170,6 +171,7 @@ internal sealed partial class NativeTestControl
         try { NativeGameplayDrag.Cancel(); }
         catch (Exception error) { log.LogWarning("TEST_CONTROL drag cleanup: " + error.GetBaseException().Message); }
         transport?.Dispose(); transport = null; token = null;
+        StopBoardTrace(reason);
         nextFlagCheck = Time.realtimeSinceStartup + 1f;
         waits.Clear(); ResetSampling(); observingSend = false; controller = null; pending = null;
         foreach (var capture in captures) Reject(capture.Operation, reason);
@@ -479,6 +481,8 @@ internal sealed partial class NativeTestControl
                         request.Has("name") ? request.Text("name") : null, request.Has("source") ? request.Integer("source") : 0, request.Integer("seconds")))); return;
                     case "fx": connection.Reply(Reply(request, "settled", NativeFxTelemetry.Read(
                         request.Has("after") ? request.Integer("after") : 0, request.Has("limit") ? request.Integer("limit") : 100))); return;
+                    case "board-trace-start": connection.Reply(Reply(request, "settled", StartBoardTrace(request.Integer("frames")))); return;
+                    case "board-trace-read": connection.Reply(Reply(request, "settled", ReadBoardTrace())); return;
                     case "screenshot": HandleCapture(envelope); return;
                     case "locate": connection.Reply(Reply(request, "settled", Locate(request))); return;
                     case "card-raw-text": AssertMainThread(); connection.Reply(Reply(request, "settled", ClientBridge.RawCardTextProbe(request.Text("cardId")))); return;
@@ -498,6 +502,7 @@ internal sealed partial class NativeTestControl
                         view.State["deckGuideCards"] = NativeGuideCards.State();
                         view.State["deckRecord"] = NativeDeckRecord.State();
                         view.State["deckImport"] = DeckImportState();
+                        view.State["deckExport"] = DeckExportState();
                         var settledMatch = LocalLadder.Profile?.LastSettledMatch;
                         view.State["settledMatch"] = settledMatch == null ? null : new JsonNode {
                             { "id", settledMatch.Id }, { "result", settledMatch.Result },
@@ -1333,7 +1338,8 @@ internal sealed partial class NativeTestControl
                 { "bigCard", history != null && history.IsShowingBigCard() },
                 { "gameBusy", front.IsBusy() },
                 { "mustWaitForChoices", WaitForChoices == null ? null : (object)(bool)WaitForChoices.Invoke(front, null) },
-                { "canProcessPowerQueue", CanProcessQueue == null ? null : (object)(bool)CanProcessQueue.Invoke(front, null) } };
+                { "canProcessPowerQueue", CanProcessQueue == null ? null : (object)(bool)CanProcessQueue.Invoke(front, null) },
+                { "turnBannerHold", NativeTurnBannerHold.State() } };
         }
         catch (Exception error) { return new JsonNode { { "error", (error.InnerException ?? error).Message } }; }
     }

@@ -150,7 +150,12 @@ internal static partial class Program
         var copy = (Minion)player.BoardZone.Single(minion => minion != yeti && minion.Card.Id == "CS2_182");
         copy.PeekStats(out int atk, out int maxHealth, out int damage);
         Check(atk == 4 && maxHealth - damage == 7, "the copy carries the buff in the engine");
-        EventCheck(lines, "CREATE", "copy created with its real stats", "CS2_182#" + copy.Id, "stats=4/7");
+        // Copied enchantments are realized before board entry; their stats fold into FULL_ENTITY.
+        var created = EventLines(lines, "CREATE").Where(l => l.Contains("CS2_182#" + copy.Id)).ToArray();
+        Check(created.Length == 1 && created[0].Contains("stats=4/7"),
+            "copy logged CREATE with real 4/7 stats:\n" + string.Join("\n", lines));
+        Check(!EventLines(lines, "STATS").Any(l => l.Contains("target=CS2_182#" + copy.Id)),
+            "no spurious STATS after folded CREATE:\n" + string.Join("\n", lines));
         Check(EventLines(lines, "RESYNC").Length == 0, "no RESYNC for an enchanted copy:\n" + string.Join("\n", lines));
     }
 

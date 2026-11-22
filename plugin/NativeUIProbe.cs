@@ -273,6 +273,9 @@ internal static partial class NativeUIProbe
         harmony.Patch(Required(typeof(CollectionManagerDisplay), "Exit"),
             prefix: new HarmonyMethod(typeof(NativeUIProbe), nameof(LeaveCollectionImportState)));
         Hook(harmony, typeof(CollectionInputMgr), "PasteDeckInEditModeFromShareableDeck", nameof(BlockDeckEditPaste));
+        Hook(harmony, typeof(ShareableDeck), "ParseDataFromDeckString", nameof(FindPastedDeckCode));
+        harmony.Patch(Required(typeof(DeckOptionsMenu), "OnCopyButtonReleased"),
+            finalizer: new HarmonyMethod(typeof(NativeUIProbe), nameof(ObserveDeckCopy)));
         harmony.Patch(Required(typeof(DeckTrayDeckListContent), "ShouldDeckBoxesBeLocked"),
             prefix: new HarmonyMethod(typeof(NativeUIProbe), nameof(UnlockLocalDeckBoxSlots)));
         harmony.Patch(Required(typeof(CollectionDeckBoxVisual), "SetDeckID"),

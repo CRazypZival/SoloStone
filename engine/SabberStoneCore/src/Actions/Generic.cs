@@ -63,7 +63,19 @@ namespace SabberStoneCore.Actions
 			{
 				int baseMana = c.BaseMana;
 				int total = baseMana + amount;
-				if (total > c[GameTag.MAXRESOURCES])
+				if (fill && amount > 0)
+				{
+					// A filled gain of N raises Mana by N in total: max rises up to the cap, and the part over the cap
+					// refills spent crystals (never Overloaded ones, never temporary Mana above max).
+					int rise = Math.Min(amount, Math.Max(0, c[GameTag.MAXRESOURCES] - baseMana));
+					c.BaseMana = baseMana + rise;
+					if (rise < amount)
+					{
+						c.Game.Log(LogLevel.INFO, BlockType.PLAY, "ChangeManaCrystal", !c.Game.Logging ? "" : $"{c.Name} is capped in {c[GameTag.MAXRESOURCES]} mana crystals; the overflow refills spent crystals.");
+						c.UsedMana = Math.Max(0, c.UsedMana - (amount - rise));
+					}
+				}
+				else if (total > c[GameTag.MAXRESOURCES])
 				{
 					c.Game.Log(LogLevel.INFO, BlockType.PLAY, "ChangeManaCrystal", !c.Game.Logging ? "" : $"{c.Name} is already capped in {c[GameTag.MAXRESOURCES]} mana crystals.");
 					if (!fill)
@@ -131,7 +143,8 @@ namespace SabberStoneCore.Actions
 				using var visual = c.Game.History && entryKind != HistoryHandEntryKind.Other
 					? c.Game.PowerHistory.Visual(c.Game, entryKind == HistoryHandEntryKind.Draw
 						? Presentation.VisualPhase.Draw : Presentation.VisualPhase.Create, target: playable) : null;
-				// Retail ordinary draws SHOW HAND; automatic draws SHOW DECK before HAND and the TOPDECK trigger.
+				// Retail ordinary draws SHOW HAND; automatic draws SHOW DECK before HAND and the TOPDECK trigger. A when-drawn
+				// card that then leaves the hand gets REVEALED on this SHOW from CompleteDraw (PowerHistory.RevealDrawShow).
 				if (c.Game.History && playable != null)
 				{
 					var show = PowerHistoryBuilder.ShowEntity(playable);
@@ -280,6 +293,18 @@ namespace SabberStoneCore.Actions
 
 				return true;
 			}
+
+		/// <summary>
+		/// Puts a freshly created card at a fixed deck position (0 is the bottom) with the same spawn-to-deck presentation a
+		/// shuffle gets. Not a shuffle: no RNG, no shuffle fact and no shuffle-into-deck listeners.
+		/// </summary>
+		public static bool InsertIntoDeck(Controller c, IPlayable playable, int position, bool reveal = false)
+		{
+			if (c.DeckZone.IsFull) return false;
+			c.DeckZone.Add(playable, position);
+			if (c.Game.History) c.Game.PowerHistory.GeneratedShuffle(playable, reveal);
+			return true;
+		}
 
 		public static Func<Controller, Card, Minion, bool> TransformBlock
 			=> delegate (Controller c, Card card, Minion oldMinion)

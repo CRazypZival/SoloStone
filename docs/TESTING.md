@@ -128,10 +128,11 @@ compiled hooks against your client. That needs `references/bepinex/BepInEx.dll` 
 | `progression-extended` | The older progression fixtures, in the same program under `--extended`: full premium fixtures and class rewards, the Core schedule reconciliation, Death Knight rules, hero drafts, test loaners and NPC records. Each check runs in this suite or in `progression`, never both |
 | `progression-standard-batches` | The Standard test loaners and batch manifests against the client's card export (about 14,000 checks). `client` tier: it needs `data/carddb/<build>/cards.json.gz` and `set-overrides.json`, built from your client and never committed, and is skipped without them. It needs no client library |
 | `shop` | The native shop: catalogue, purchases, deck tiles and art maths |
-| `native-match-logic` | The native match checks that need no client: the opponent turn runner, presentation and memory, rematch, the quest bot, 36 showcase games, fair-view privacy, coin-flip control, debug scenario lane paths and files, the match event log budget, NPC pet seats and the controller admission invariant. Slices: `--npc-runner-only`, `--npc-presentation-only`, `--rematch-only`, `--quests-only`, `--showcase-only`, `--npc-pets-only`, `--coin-flip-only`, `--debug-scenario-only`, `--fair-view-only`, `--match-event-log-only`, `--controller-admission-only`; any other argument fails |
+| `native-match-logic` | The native match checks that need no client: the opponent turn runner, presentation and memory, rematch, the quest bot, 36 showcase games, fair-view privacy, coin-flip control, debug scenario lane paths and files, the match event log budget, NPC pet seats and the controller admission invariant. Slices: `--npc-runner-only`, `--npc-presentation-only`, `--rematch-only`, `--quests-only`, `--showcase-only`, `--npc-pets-only`, `--coin-flip-only`, `--debug-scenario-only`, `--fair-view-only`, `--match-event-log-only`, `--controller-admission-only`, `--hero-replacement-only`; any other argument fails |
 | `native-bindings-logic` | Plugin logic that needs no client: the crafting, matchmaking, rank, home, strings and status-routine hooks (built from extracts of the plugin sources), and the plugin source-text pins (achievement toast, reward UI and format lock code must contain, or must not contain, given text) |
 | `fx-harmony` | The effect patches applied by the real Harmony library under Mono. Needs `mono` |
 | `fire-fx-scene` | The fire effect scene helper |
+| `test-control` | Board trace request validation and per-frame sampling with stand-in game objects: both sides, slots/tags/positions, replacement, frame windows, errors and response bounds. Needs no client |
 | `dormant`, `kindred`, `reborn` | Engine rules for Dormant, Kindred and Reborn cards |
 | `engine-proof` | Card-by-card engine proofs (effects, resolution, snapshots, definitions) and the engine rule proofs (Imbue, Dormant, Rewind, History, Location, Decision, pools), the canonical hash and replay policy checks, the Shadow of Demise trial recipes, the engine half of the pinned transport replays (`tests/transport-invariants/replays`: legal-move hashes at every step and, for the 8 replays that store one, the state/RNG fingerprint, on the pinned pool snapshot; after the same per-game review as a golden, `EngineProof.dll --renew-replay` accepts labelled state/legal-move drift, or `--rerecord-replay` regenerates changed games against a baseline and expected first difference; neither runs automatically in CI. `TransportInvariants.dll --search-deathrattle-replay` searches for replacement witnesses. Rerecording leaves `findingsSha` unchanged, so the client-tier packet check is still required; see the [transport replay tools](../tests/transport-invariants/README.md#replay-tools)), and the opponent planner on a recorded turn-10 position. Without the card export built from a client, the check of each card against that export is skipped and printed, and the card's scenario still runs. See "Engine proofs and native flow checks" |
 | `standard-native` | Native Standard-format flow checks that need no client: quest definitions, playability policy, loaners, definition audit, input trace binding |
@@ -209,6 +210,16 @@ The paired list can be any of the block's own lists: one after a nested block, a
 continue the block in a later packet. R7 checks all of them. Besides moves, it also reports a card revealed in place
 (a SHOW_ENTITY of a card that stays in hand, on the board or in SECRET), because the client refreshes that card's actor
 only when it processes the list.
+
+A minion or location pairs only if that list gives the played card the slot it was dropped on: the card's next position
+row there, before any other zone change. If not, the prediction never resolves. The client puts the card back at the
+drop slot after every list and stops correcting the board, so the card stays where it was dropped for the rest of the
+game. An either-side minion dropped on your own board and placed at another slot of the enemy board stayed on your
+board (#194). `NativeMatch.AnchorPredictedDrop` gives the card the drop slot first in that list, the engine slot right
+after it; once the list is done the client moves the card there. It also adds that row to a friendly drop whose list
+reaches another row first, such as a minion that goes Dormant on play; the card still ends at the engine slot. The client model in
+`tests/transport-invariants/ClientModel.cs` holds an unpaired card at its drop slot, and the `either-side-enemy-slot-native`
+group of `native-match` checks there that every either-side play ends where the engine put it.
 
 These need no R7 case, because the client loses nothing there:
 - A transform in place (CHANGE_ENTITY): the card refreshes its own actor.
