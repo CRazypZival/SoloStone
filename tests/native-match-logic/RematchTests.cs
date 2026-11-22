@@ -31,6 +31,8 @@ internal static class RematchTests
             Refusals(mm, Path.Combine(root, "refusals.xml"));
             SeriesAndRestart(mm, Path.Combine(root, "series.xml"));
             RankedAccounting(mm, root);
+            PlacementStars(mm, root);
+            PlacementFallbackStars(root);
             WeakerNpcRefused(mm, Path.Combine(root, "weak.xml"));
             PersonalDeckEdits(mm, Path.Combine(root, "personal.xml"));
             ResultsScreen(mm, root);
@@ -39,6 +41,86 @@ internal static class RematchTests
         QueuedFromResults();
         Console.WriteLine("PASS rematch: offer from the last match, restart, series cap, ranked accounting, weaker NPC, personal deck edits, "
             + "refusals, results-screen offer and the queued picker start");
+    }
+
+    // Identical seeds and results across three fresh saves, including a switch back to Hard during placement.
+    private static void PlacementStars(LadderMatchmaker mm, string root)
+    {
+        string hardPath = Path.Combine(root, "placement-hard.xml");
+        using (var profile = new LocalProfile(hardPath))
+            profile.PersistNewProfile(new ProfileOptions { NpcDifficulty = NpcDifficultyIds.Hard });
+        string mediumPath = Path.Combine(root, "placement-medium.xml");
+        string mixedPath = Path.Combine(root, "placement-mixed.xml");
+        File.Copy(hardPath, mediumPath);
+        File.Copy(hardPath, mixedPath);
+        string[] results = { "Won", "Won", "Tied", "Lost", "Won", "Won", "Lost", "Won", "Won", "Tied", "Won", "Lost", "Won" };
+        bool differentRating = false;
+        for (int i = 0; i < results.Length; i++)
+        {
+            // Reopen on each game so receipt replay and persisted queue history both have to agree.
+            using var hard = new LocalProfile(hardPath);
+            using var medium = new LocalProfile(mediumPath);
+            using var mixed = new LocalProfile(mixedPath);
+            medium.SetNpcDifficulty(NpcDifficultyIds.Medium);
+            mixed.SetNpcDifficulty(i < 4 ? NpcDifficultyIds.Easy : i < 8 ? NpcDifficultyIds.Hard : NpcDifficultyIds.Medium);
+            var baseline = Place(hard, results[i]);
+            Check(baseline.PlacementOpponent == null && !baseline.Ladder.PlacementRatingAfter.HasValue, "Hard-only save uses original receipts");
+            foreach (var profile in new[] { medium, mixed })
+            {
+                var settled = Place(profile, results[i]);
+                Check(settled.Ladder.StarsGained == baseline.Ladder.StarsGained && settled.Ladder.StarsAfter == baseline.Ladder.StarsAfter
+                    && settled.Ladder.MultiplierAfter == baseline.Ladder.MultiplierAfter, "difficulty changed placement stars at game " + i);
+                if (settled.Ladder.PlacementBefore < LadderRules.PlacementLength)
+                    Check(settled.PlacementOpponent.NpcId == baseline.NpcId && settled.PlacementOpponent.DeckId == baseline.NpcDeckId
+                        && settled.Ladder.PlacementRatingAfter == baseline.Ladder.RatingAfter, "placement must replay the same Hard queue at game " + i);
+                else
+                    Check(settled.PlacementOpponent == null && !settled.Ladder.PlacementRatingAfter.HasValue, "settled ladder stops using reference ratings");
+                differentRating |= settled.Ladder.RatingAfter != baseline.Ladder.RatingAfter;
+            }
+        }
+        Check(differentRating, "placement stars leave actual Elo free to differ");
+
+        LocalMatchRecord Place(LocalProfile profile, string result)
+        {
+            var encounter = mm.Next(Request(profile, mm));
+            var reference = LocalRematch.PlacementOpponent(profile, mm, encounter, false);
+            profile.ArmNpcDifficulty(encounter.Difficulty);
+            var pending = profile.BeginLaunch(Deck, encounter.Deck.Id, 7, encounter.Npc.Id, encounter.Deck.Id, encounter.Rating,
+                null, null, record => profile.MarkStarted(record.Id), reference);
+            var settled = profile.Settle(pending.Id, result, 6, false);
+            Check(settled.Ladder.OpponentRating == encounter.Rating, "placement must settle actual Elo against the played NPC");
+            Check(profile.AcknowledgeRewardPresentation(pending.Id), "placement reward acknowledgement");
+            return settled;
+        }
+    }
+
+    private static void PlacementFallbackStars(string root)
+    {
+        string hardPath = Path.Combine(root, "placement-fallback-hard.xml");
+        string easyPath = Path.Combine(root, "placement-fallback-easy.xml");
+        using (var hard = new LocalProfile(hardPath))
+        using (var easy = new LocalProfile(easyPath))
+        {
+            var baseline = hard.Begin(Deck, "priest", 7, "npc.fixture", "priest", 1320);
+            hard.Settle(baseline.Id, "Won", 6, false);
+            hard.AcknowledgeRewardPresentation(baseline.Id);
+            easy.ArmNpcDifficulty(NpcDifficultyIds.Easy);
+            var first = easy.BeginLaunch(Deck, "priest", 7, "npc.fixture", "priest", 1080, null, null,
+                match => easy.MarkStarted(match.Id), new LocalPlacementOpponent { NpcId = "npc.fixture", DeckId = "priest", Rating = 1320 });
+            easy.Settle(first.Id, "Won", 6, false);
+            easy.AcknowledgeRewardPresentation(first.Id);
+        }
+        for (int game = 0; game < 2; game++)
+        {
+            using var hard = new LocalProfile(hardPath);
+            using var easy = new LocalProfile(easyPath);
+            var baseline = Play(hard, null, "priest", 0, "Won");
+            var fallback = Play(easy, null, "priest", 0, "Won");
+            Check(fallback.Ladder.StarsGained == baseline.Ladder.StarsGained
+                && fallback.Ladder.MultiplierAfter == baseline.Ladder.MultiplierAfter, "legacy fallback keeps the same placement stars");
+            Check(fallback.Ladder.RatingAfter != baseline.Ladder.RatingAfter
+                && fallback.Ladder.PlacementRatingAfter == baseline.Ladder.RatingAfter, "legacy fallback keeps actual Elo independent");
+        }
     }
 
     private static MatchRequest Request(LocalProfile profile, LadderMatchmaker mm) =>

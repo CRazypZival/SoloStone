@@ -322,7 +322,7 @@ try {
         var rolled = LocalEconomy.RewardV6("Won", 10, false, LocalEconomy.RewardRollSeed(match.Id, 2));
         var tier = GrindTiers.Find(match.GrindTier);
         Check(result.Packs.Count == 0 && p.PackInventory.Count == 0
-            && result.RewardVersion == 6 && result.DustReward == tier.Dust(rolled.Dust)
+            && result.RewardVersion == LocalEconomy.RollRewardVersion && result.DustReward == tier.Dust(rolled.Dust)
             && p.DustBalance == tier.Dust(rolled.Dust), "typed V6 rewards and stamped-tier dust");
     }
     foreach (string type in FairPackRules.PackTypes) {

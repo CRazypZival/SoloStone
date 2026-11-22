@@ -261,7 +261,8 @@ internal static class ArenaMatchChecks
         using var profile = new LocalProfile(path); Fund(profile);
         Ready(profile, "beside");
         // A Ready run does not change Ranked or Casual: both still start, pay and rate as before.
-        var ranked = profile.Begin("mage", "mage", 31);
+        var placement = new LocalPlacementOpponent { NpcId = Npc, DeckId = NpcDeck, Rating = 1350 };
+        var ranked = profile.BeginLaunch("mage", NpcDeck, 31, Npc, NpcDeck, 1300, null, null, _ => { }, placement);
         var won = profile.Settle(ranked.Id, "Won", 9, false);
         Check(won.Mode == null && won.Ladder != null && won.ArenaRunId == null && profile.RankedMatchCount == 1 && profile.ArenaRun.Wins == 0, "Ranked settles as before");
         profile.AcknowledgeRewardPresentation(won.Id);
@@ -271,7 +272,14 @@ internal static class ArenaMatchChecks
             && profile.ArenaRun.Wins == 0 && profile.RankedMatchCount == 1, "Casual settles as before");
         profile.AcknowledgeRewardPresentation(played.Id);
         // Arena history stays out of the ranked ledger even between ranked matches.
-        var arena = Start(profile, true, 33); profile.Settle(arena.Id, "Lost", 9, false); profile.AcknowledgeRewardPresentation(arena.Id);
+        var arena = Start(profile, true, 33);
+        var lost = profile.Settle(arena.Id, "Lost", 9, false, new LocalRewardFacts { ActiveTurns = 5, PlayMilliseconds = 540000 });
+        profile.AcknowledgeRewardPresentation(arena.Id);
+        Check(won.Ladder.PlacementRatingAfter.HasValue && profile.PlacementRating == won.Ladder.PlacementRatingAfter,
+            "Arena does not reset the Ranked placement rating");
+        var summary = LocalRewardPresentation.Summary(lost);
+        Check(lost.Gold == 0 && lost.DustReward == 0 && summary.Items.Count == 0
+            && summary.Body == "Arena rewards are paid when the run ends.", "Arena losses use the run reward");
         Check(profile.RankedHistory.Count == 1 && profile.CasualHistory.Count == 1 && profile.History.Count == 3, "ledgers stay separate");
         Check(LocalDeckRecord.Of(profile.History, ArenaRules.DeckKey(profile.ArenaRun.RunId)).Games == 0, "Arena decks have no deck record");
         Reload(path);

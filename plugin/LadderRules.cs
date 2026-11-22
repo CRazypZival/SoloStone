@@ -19,6 +19,7 @@ public sealed class LadderStep
     public LadderPosition Before, After;
     public LadderOutcome Outcome;
     public double OpponentRating;
+    public double? PlacementRatingAfter;
     public bool Placement, StreakBonus, StoppedAtDiamondFive, LegendReachedNow;
     public int StarsGained;
     public int[] FloorsReached;
@@ -139,7 +140,8 @@ public static class LadderRules
         return p;
     }
 
-    public static LadderStep Apply(LadderPosition before, LadderOutcome outcome, double opponentRating, LadderPace pace = null)
+    public static LadderStep Apply(LadderPosition before, LadderOutcome outcome, double opponentRating, LadderPace pace = null,
+        double? placementRating = null, double? placementOpponentRating = null)
     {
         Validate(before);
         pace = pace ?? LadderPace.Standard;
@@ -147,11 +149,12 @@ public static class LadderRules
         var after = before.Copy();
         var step = new LadderStep { Before = before.Copy(), Outcome = outcome, OpponentRating = opponentRating,
             Placement = before.PlacementGames < PlacementLength, FloorsReached = new int[0] };
+        if (step.Placement && (placementRating.HasValue || placementOpponentRating.HasValue))
+            step.PlacementRatingAfter = UpdateRating(placementRating ?? before.Rating, placementOpponentRating ?? opponentRating, outcome, PlacementK);
         // Ties change nothing: stars, streak, rating, placement count and multiplier stay (retail counts non-drawn games).
         if (outcome == LadderOutcome.Tie) { step.After = after; return step; }
-        double score = outcome == LadderOutcome.Win ? 1 : 0;
         double k = step.Placement ? PlacementK : before.LegendReached ? SettledK * pace.LegendKScale : SettledK;
-        after.Rating = Math.Round(before.Rating + k * (score - Expected(before.Rating, opponentRating)), 3);
+        after.Rating = UpdateRating(before.Rating, opponentRating, outcome, k);
         if (step.Placement) after.PlacementGames++;
 
         if (outcome == LadderOutcome.Win)
@@ -177,7 +180,7 @@ public static class LadderRules
         after.LegendReached = after.StarIndex == LegendIndex;
         // Stars use the multiplier before this game; floors crossed by it decay the next win (SoloStone choice).
         after.Multiplier = step.Placement
-            ? Multiplier(StartMultiplier(after.Rating), after.BestStarIndex, after.StarIndex)
+            ? Multiplier(StartMultiplier(step.PlacementRatingAfter ?? after.Rating), after.BestStarIndex, after.StarIndex)
             : after.StarIndex >= DiamondFiveIndex ? 1
             : Math.Max(1, before.Multiplier - (FloorsReached(after.BestStarIndex) - FloorsReached(before.BestStarIndex)));
         step.StarsGained = after.StarIndex - before.StarIndex;
@@ -186,6 +189,10 @@ public static class LadderRules
         step.After = Validate(after);
         return step;
     }
+
+    private static double UpdateRating(double rating, double opponent, LadderOutcome outcome, double k) =>
+        outcome == LadderOutcome.Tie ? rating
+            : Math.Round(rating + k * ((outcome == LadderOutcome.Win ? 1 : 0) - Expected(rating, opponent)), 3);
 
     public static string RankName(int index)
     {
