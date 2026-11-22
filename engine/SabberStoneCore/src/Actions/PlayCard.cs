@@ -281,6 +281,7 @@ namespace SabberStoneCore.Actions
 				c.Hero = hero;
                 c.HeroId = hero.Id;
                 PlayerboundHeroTags.Give(hero, playerbound);
+                CorpseRules.CarryPlayerDeathrattle(oldHero, hero);
                 HeroSwapRules.RebindAuras(c, oldHero, hero);
 
 				// - OnPlay Phase --> OnPlay Trigger (Illidan)
