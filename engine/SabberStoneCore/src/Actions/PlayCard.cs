@@ -13,7 +13,6 @@
 #endregion
 using System;
 using System.Linq;
-using SabberStoneCore.Auras;
 using SabberStoneCore.Model.Events;
 using SabberStoneCore.Model;
 using SabberStoneCore.Enums;
@@ -276,25 +275,14 @@ namespace SabberStoneCore.Actions
 				//c[GameTag.HERO_ENTITY] = hero.Id;
 				hero.Weapon = oldHero.Weapon;
 				c.SetasideZone.Add(oldHero.HeroPower);
-				hero.HeroPower = (HeroPower) Entity.FromCard(c, Cards.GetHeroPower(hero.Card[GameTag.HERO_POWER]));
-				hero.HeroPower.Power?.Trigger?.Activate(hero.HeroPower);
+				hero.HeroPower = (HeroPower) Entity.FromCard(c, Cards.GetHeroPower(hero.Card[GameTag.HERO_POWER]),
+                    new EntityData { [GameTag.CREATOR] = hero.Id });
+				HeroSwapRules.ActivateHeroPowerTrigger(hero);
 
 				c.Hero = hero;
+                c.HeroId = hero.Id;
                 if (overdrawPortal != 0) hero[(GameTag)4717] = overdrawPortal;
-                void RebindHeroAura(IAura aura)
-                {
-                    if (aura is MultiAura multiple)
-                        foreach (var child in multiple) RebindHeroAura(child);
-                    if (aura is AdaptiveEffect adaptive) adaptive.RebindHero(oldHero, hero);
-                    if (aura is Aura fixedAura && fixedAura.Type == AuraType.HERO
-                        && fixedAura.Owner.Controller == c)
-                    {
-                        fixedAura.DeApply(oldHero);
-                        fixedAura.EntityAdded(hero);
-                    }
-                }
-                foreach (var aura in game.Auras.ToArray()) RebindHeroAura(aura);
-				hero.Power?.Trigger?.Activate(hero);
+                HeroSwapRules.RebindAuras(c, oldHero, hero);
 
 				// - OnPlay Phase --> OnPlay Trigger (Illidan)
 				//   (death processing, aura updates)
@@ -566,7 +554,9 @@ namespace SabberStoneCore.Actions
 
 				if (game.History)
 				{
-					if (spell.IsSecret || spell.IsQuest)
+					// A Sigil enters SECRET like a Secret: a PLAY row would make the identity freeze emit a SHOW of the
+					// owner's own card with ZONE=HAND, which undoes the client's local drop prediction (#137).
+					if (spell.IsSecret || spell.IsQuest || SigilRules.IsSigil(spell))
 						spell[GameTag.ZONE] = (int)Zone.SECRET;
 					else
 						spell[GameTag.ZONE] = (int)Zone.PLAY;
@@ -575,7 +565,7 @@ namespace SabberStoneCore.Actions
 				}
 
 				// Native spell plays predict position 0; retaining the hand slot leaves prediction history unmatched.
-				if (!spell.IsSecret && !spell.IsQuest) spell.ZonePosition = -1;
+				if (!spell.IsSecret && !spell.IsQuest && !SigilRules.IsSigil(spell)) spell.ZonePosition = -1;
 
 				// - OnPlay Phase --> OnPlay Trigger (Illidan)
 				//   (death processing, aura updates)
