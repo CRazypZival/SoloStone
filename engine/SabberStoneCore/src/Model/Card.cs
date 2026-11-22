@@ -1083,7 +1083,20 @@ namespace SabberStoneCore.Model
         internal void UpdateBoardHistoryDisplays(IPlayable owner)
         {
             if (_boardHistoryDisplays == null || owner is Minion m && m.IsSilenced) return;
-            foreach (var display in _boardHistoryDisplays) owner[display.Tag] = Math.Max(0,display.Value(owner));
+            ApplyHistoryDisplays(owner,_boardHistoryDisplays);
+        }
+
+        // A display is presentation only. In a fair view it may need private residence the viewer lacks
+        // (HistoryFacts throws its "Private historical ..." refusal); that must not abort the simulated action, so the
+        // tag keeps its value. A real (non-projected) game still propagates every exception.
+        private static void ApplyHistoryDisplays(IPlayable owner,HistoryDisplayRecipe[] displays)
+        {
+            var history = owner.Game.HistoryFacts;
+            foreach (var display in displays)
+            {
+                try { owner[display.Tag] = Math.Max(0,display.Value(owner)); }
+                catch (NotSupportedException e) when (history.IsProjected && HistoryFacts.IsPrivateRefusal(e)) { }
+            }
         }
 
 		/// <summary>
@@ -1125,8 +1138,8 @@ namespace SabberStoneCore.Model
 		internal void UpdateHistoryDisplays(IPlayable owner)
 		{
 			if (_historyDisplays == null) return;
-			foreach (var display in _historyDisplays)
-				owner[display.Tag] = Math.Max(0, display.Value(owner));
+			if (owner.Zone?.Type == Zone.HAND && owner.Game.HistoryFacts.ProjectedAwayFrom(owner.Controller.Id)) return;
+			ApplyHistoryDisplays(owner,_historyDisplays);
 		}
 
 		public Card Clone()

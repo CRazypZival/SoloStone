@@ -36,14 +36,16 @@ namespace SabberStoneCore.Model.Zones
         }
 
         /// <summary>Capacity is checked before allocation; generated deck identities stay hidden.</summary>
-        public IPlayable AddGenerated(Card card, IEntity creator, int position = -1, bool shuffle = false)
+        public IPlayable AddGenerated(Card card, IEntity creator, int position = -1, bool shuffle = false,
+            bool reveal = false, Action<IPlayable> prepare = null)
         {
             if (IsFull) return null;
-            using var presentation = shuffle && Game.History ? Game.PowerHistory.GeneratedShuffleSource(creator) : null;
+            using var presentation = Game.History ? Game.PowerHistory.GeneratedShuffleSource(creator) : null;
             var entity = Entity.FromCard(Controller, card, new EntityData {
                 [GameTag.ZONE] = (int)Zone.DECK, [GameTag.DISPLAYED_CREATOR] = creator.Id });
-            if (shuffle) Actions.Generic.ShuffleIntoDeck(Controller, creator, entity);
-            else Add(entity, position);
+            prepare?.Invoke(entity);
+            if (shuffle) Actions.Generic.ShuffleIntoDeck(Controller, creator, entity, reveal);
+            else Actions.Generic.InsertIntoDeck(Controller, entity, position, reveal);
             return entity;
         }
 

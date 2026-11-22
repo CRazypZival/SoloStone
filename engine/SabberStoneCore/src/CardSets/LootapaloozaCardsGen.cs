@@ -1311,7 +1311,7 @@ namespace SabberStoneCore.CardSets
 			{
 				PowerTask = ComplexTask.Create(
 					new IncludeTask(EntityType.ALLMINIONS),
-					new MoveToDeck(EntityType.STACK))
+					new MoveToDeck(EntityType.STACK, opponent: true))
 			}));
 
 			// ----------------------------------------- SPELL - PRIEST
@@ -1687,6 +1687,8 @@ namespace SabberStoneCore.CardSets
 			{
 				Trigger = new Trigger(TriggerType.ATTACK)
 				{
+					// "When a minion attacks": an attacking hero (Druid's Shapeshift) has no neighbors.
+					TriggerSource = TriggerSource.OP_MINIONS,
 					Condition = SelfCondition.IsProposedDefender(CardType.HERO),
 					SingleTask = ComplexTask.Create(
 						new ConditionTask(EntityType.TARGET, SelfCondition.IsBoardCount(1)),
