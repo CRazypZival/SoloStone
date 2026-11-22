@@ -1,4 +1,4 @@
-// EnsureBackup runs when a V13/V14 save upgrades. A failed backup or commit must leave the save and any existing backup
+// EnsureBackup runs when an older save upgrades. A failed backup or commit must leave the save and any existing backup
 // untouched, and a retry against a matching backup must finish the upgrade. An existing backup of other bytes is never
 // overwritten: the current bytes are backed up beside it under a hash-named file and the upgrade goes on (#87 review).
 internal static class V14BackupFailureTests

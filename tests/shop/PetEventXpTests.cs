@@ -1,7 +1,7 @@
 using System.Xml.Serialization;
 
 // Event XP settlement (rule 2, docs/design/pet-xp.md): counters recorded on the receipt, knobs frozen in the rule string,
-// replay validation, the V14 to V15 upgrade, and the history of older rules alongside it.
+// replay validation, the V14 to current upgrade, and the history of older rules alongside it.
 internal static class PetEventXp
 {
     private static readonly XmlSerializer Serializer = new(typeof(LocalProfileData));
@@ -75,8 +75,8 @@ internal static class PetEventXp
             byte[] v15Bytes = File.ReadAllBytes(v15);
             using (var p = new LocalProfile(v15))
                 check(p.PetXp("PET_3_1") == 260 && p.History[0].PetMedium == 4 && p.History[0].PetRules == rule,
-                    "V15 to V16 preserves pet XP and its event receipt");
-            check(Read(v15).Version == 16 && v15Bytes.SequenceEqual(File.ReadAllBytes(v15 + ".v15.bak")),
+                    "V15 upgrade preserves pet XP and its event receipt");
+            check(Read(v15).Version == LocalProfile.SaveVersion && v15Bytes.SequenceEqual(File.ReadAllBytes(v15 + ".v15.bak")),
                 "V15 pet history upgrades with a byte-exact backup");
             eventHistory.Version = 14;
             string v14WithEvents = Path.Combine(root, "v14-pet-event-rejected.xml");
@@ -313,7 +313,7 @@ internal static class PetEventXp
                 check(rules.Length == 8 && rules.All(r => r.StartsWith("rule=3;")) && p.History.Count == 9, "each receipt carries its own knob values: " + rules.Length);
             }
 
-            // V14 to V15: trivial in place, byte-exact .v14.bak; V14 cannot already hold event counters.
+            // V14 to current: trivial in place, byte-exact .v14.bak; V14 cannot already hold event counters.
             string v14 = fresh("pet-v14-upgrade", 100000);
             using (var p = new LocalProfile(v14))
             {
@@ -334,7 +334,7 @@ internal static class PetEventXp
                 check(done.PetXpBefore == 100 && done.PetXpAfter == 120 && done.PetRules.StartsWith("rule=3;") && p.PetXp("PET_3_1") == 120, "a V14 pending match settles under the event rules after the upgrade");
             }
             using (var p = new LocalProfile(v14settle)) check(p.PetXp("PET_3_1") == 120 && p.History.Count == 2, "mixed rule 1 (V14) and rule 2 history reopens");
-            check(Read(v14).Version == 16 && v14Bytes.SequenceEqual(File.ReadAllBytes(v14 + ".v14.bak")), "V14 upgrade is in place with a byte-exact .v14.bak");
+            check(Read(v14).Version == LocalProfile.SaveVersion && v14Bytes.SequenceEqual(File.ReadAllBytes(v14 + ".v14.bak")), "V14 upgrade is in place with a byte-exact .v14.bak");
             var upgradedData = Read(v14); upgradedData.Version = 14;
             using (var before = new MemoryStream()) using (var after = new MemoryStream())
             {
@@ -354,6 +354,6 @@ internal static class PetEventXp
             }
         }
         finally { PetXpPolicy.Current = previous; }
-        Console.WriteLine("PASS pet event XP: rule 2 math, eligibility, bounds, replay, tamper, knobs, mixed history, V14 to V15 upgrade");
+        Console.WriteLine("PASS pet event XP: rule 2 math, eligibility, bounds, replay, tamper, knobs, mixed history, V14 to current upgrade");
     }
 }

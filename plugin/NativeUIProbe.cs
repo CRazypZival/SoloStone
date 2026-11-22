@@ -155,11 +155,7 @@ internal static partial class NativeUIProbe
     {
         if (!ReferenceEquals(selectedProfile, LocalLadder.Profile))
             throw new InvalidOperationException("Native and ladder profiles differ");
-#if STANDARD_PROOF
-        CraftingLedgerRegistry.Current = null;
-#else
-        CraftingLedgerRegistry.Current = selectedProfile == null ? null : new LocalCraftingLedger(selectedProfile);
-#endif
+        BindSave(selectedProfile);
         Reports = reports ?? Reports;
         log = logger; runId = launchId;
         NativeShop.Initialize(harmony, logger);
@@ -295,6 +291,8 @@ internal static partial class NativeUIProbe
         Hook(harmony, typeof(CollectionDeckTray), "CompleteMyDeckButtonPress", nameof(BlockPersonalDeckCompletion), Type.EmptyTypes);
         foreach (string name in new[] { "DeleteDeck", "RenameDeck" }) Hook(harmony, typeof(Network), name, nameof(ReadOnly));
         NativeCrafting.Initialize(harmony, logger, Publish);
+        try { NativeArena.Initialize(harmony, logger); }
+        catch (Exception error) { NativeArena.Disable("patching failed", error); }
         NativeCollectionStatus.Initialize(harmony, logger);
         foreach (string name in new[] { "DeleteDeck", "RenameDeck" }) Hook(harmony, typeof(OfflineDataCache), name, nameof(ReadOnly));
         NativeRewardUI.Initialize(harmony, logger);
@@ -312,17 +310,25 @@ internal static partial class NativeUIProbe
         if (selectedProfile == null || !ReferenceEquals(selectedProfile, LocalLadder.Profile))
             throw new InvalidOperationException("Native and ladder profiles differ");
         if (active || attempted || ready) throw new InvalidOperationException("Native save bootstrap already started.");
-#if STANDARD_PROOF
-        CraftingLedgerRegistry.Current = null;
-#else
-        CraftingLedgerRegistry.Current = new LocalCraftingLedger(selectedProfile);
-#endif
+        BindSave(selectedProfile);
     }
 
     internal static void ResetStartupProfile()
     {
         if (active || attempted || ready) return;
+        BindSave(null);
+    }
+
+    // The crafting ledger and the Arena service act on the bound save: both are set and cleared together, here only.
+    private static void BindSave(LocalProfile selectedProfile)
+    {
+#if STANDARD_PROOF
         CraftingLedgerRegistry.Current = null;
+        ArenaServiceRegistry.Current = null;
+#else
+        CraftingLedgerRegistry.Current = selectedProfile == null ? null : new LocalCraftingLedger(selectedProfile);
+        ArenaServiceRegistry.Current = selectedProfile == null ? null : new ArenaService(selectedProfile, () => NpcWorldRuntime.Arena != null);
+#endif
     }
 
     private static MethodInfo Required(Type type, string name, Type[] args = null) =>
@@ -374,7 +380,7 @@ internal static partial class NativeUIProbe
             if (!active) { active = true; began = Time.realtimeSinceStartup; State("WaitingServices"); }
             if (!attempted)
             {
-                var required = new[] { "NetCache", "LoginManager", "Options", "Box", "AssetLoader", "EventTimingManager", "TrialCardManager", "CardBackManager", "CosmeticCoinManager", "GameSaveDataManager" };
+                var required = new[] { "NetCache", "LoginManager", "Options", "Box", "AssetLoader", "EventTimingManager", "TrialCardManager", "CardBackManager", "CosmeticCoinManager", "GameSaveDataManager" }; // DraftManager is Arena-only: never block startup on it
                 missing = string.Join(",", required.Where(name => Service(name) == null));
                 if (missing.Length != 0)
                 {
@@ -385,6 +391,8 @@ internal static partial class NativeUIProbe
                 Bootstrap();
             }
             if (!ready) return;
+            NativeArena.Update();
+            NativeArena.WatchSceneLoad();
             if (AtHome()) NativeHomeUI.UpdateJournal(Box.Get(), message => log.LogInfo(message), NativeHiddenEntries.Active);
             if (sceneWaiting && SplashScreen.Get() == null && !SceneMgr.Get().IsTransitioning() && SceneMgr.Get().GetMode() == target)
             {
@@ -512,11 +520,13 @@ internal static partial class NativeUIProbe
             DuelsCardDenylist = new List<int>(), TavernBrawlCardDenylist = new List<int>(), ArenaCardDenylist = new List<int>(),
             VFXDenylist = new List<string>(), PetSkinsDenylist = new List<int>(), PetEventDenylist = new List<int>(),
             PetSkinsHSEnabled = true,
+            // Retail's packet default is on: Arena's header (choose your hero / card) and phase messages. The popups are marked seen (NativeArena).
+            EnableArenaPhaseMessages = true, EnableArenaPhaseMessageFTUXTracking = true,
             // Retail inferred 2 (medium confidence, docs/design/pet-xp.md). NativeMatch answers packets 68/67 and enforces the cap.
             MaxPetTreatsAllowedPerGame = NativeMatch.MaxPetTreatsPerGame
         };
         // Standard ranked and Standard Casual are playable (GameUtils.IsFormatPlayable); Wild stays visible but disabled.
-        features.Games.Tournament = true; features.Games.Casual = true; features.Games.RankedStandard = true; features.Games.RankedWild = false;
+        features.Games.Forge = true; features.Games.Tournament = true; features.Games.Casual = true; features.Games.RankedStandard = true; features.Games.RankedWild = false;
         features.Collection.Manager = true; features.Collection.Crafting = CraftingLedgerRegistry.Current != null;
         // Upgrades consume Normal copies through the same atomic crafting ledger.
         features.EnableUpgradeToGolden = CraftingLedgerRegistry.Current != null;
@@ -555,6 +565,8 @@ internal static partial class NativeUIProbe
         }
         Publish(headers);
         EnsurePreference(GameSaveKeyId.COLLECTION_MANAGER); EnsurePreference(GameSaveKeyId.PLAYER_FLAGS);
+        NativeArena.TryBootstrap();
+        SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_UNLOCKED_ARENA, 1L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_UNLOCKED_WILD, 1L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_SEEN_MASS_PACK_OPENING_TOOLTIP, Profile.SeenMassPackTooltip ? 1L : 0L));
         SaveLocal(new GameSaveDataManager.SubkeySaveRequest(GameSaveKeyId.PLAYER_FLAGS, GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_COMPLETED_APPRENTICE, 1L));
@@ -600,7 +612,7 @@ internal static partial class NativeUIProbe
             if (!active || auditingOriginal || !SceneMgr.IsInitialized() || LocalLadder.Screen == "Starting" || LocalLadder.Screen == "Playing") return false;
             var mode = SceneMgr.Get().GetMode();
             return mode == SceneMgr.Mode.LOGIN || mode == SceneMgr.Mode.COLLECTIONMANAGER
-                || mode == SceneMgr.Mode.PACKOPENING || mode == SceneMgr.Mode.TOURNAMENT;
+                || mode == SceneMgr.Mode.PACKOPENING || mode == SceneMgr.Mode.TOURNAMENT || mode == SceneMgr.Mode.DRAFT;
         }
     }
     internal static bool PreviewDefinitionContext
@@ -1528,6 +1540,7 @@ internal static partial class NativeUIProbe
         NativeHomeControl control = button == Box.ButtonType.TRADITIONAL ? NativeHomeControl.Traditional
             : button == Box.ButtonType.COLLECTION ? NativeHomeControl.Collection
             : button == Box.ButtonType.OPEN_PACKS ? NativeHomeControl.OpenPacks
+            : button == Box.ButtonType.ARENA ? NativeHomeControl.Arena
             : button == Box.ButtonType.STORE ? NativeHomeControl.Store
             : NativeHomeControl.Unsupported;
         NativeMenuTarget route = NativeMenuFlow.HomeRoute(control);
@@ -1537,6 +1550,7 @@ internal static partial class NativeUIProbe
             CollectionManager.Get().NotifyOfBoxTransitionStart();
             Navigate(SceneMgr.Mode.COLLECTIONMANAGER);
         }
+        else if (route == NativeMenuTarget.Arena) Navigate(SceneMgr.Mode.DRAFT);
         else if (route == NativeMenuTarget.Pack) Navigate(SceneMgr.Mode.PACKOPENING);
         else if (route == NativeMenuTarget.LocalShop) { } // NativeShop raised this press after opening the local shop.
         else log.LogWarning("NATIVE_MENU unsupported home control blocked: " + button);
@@ -1572,12 +1586,13 @@ internal static partial class NativeUIProbe
         if (!AtHome() || __instance == null) return;
         __instance.DisableAllButtons();
         __instance.SetBoxButtonInteractions(true, __instance.m_PlayButton, true);
+        __instance.SetBoxButtonInteractions(NativeArena.HomeEntryAvailable, __instance.m_ArenaButton, true);
         __instance.SetButtonEnabled(true, __instance.m_OpenPacksButton);
         __instance.SetButtonEnabled(true, __instance.m_CollectionButton);
         NativeHiddenEntries.Apply(__instance);
         NativeHomeUI.RefreshDrawer(__instance, Profile.UnopenedPacks, message => log.LogInfo(message));
         NativeShop.RefreshHomeStore();
-        if (report) log.LogInfo("NATIVE_MENU home enabled=TRADITIONAL,OPEN_PACKS,COLLECTION; unsupported modes disabled with backlog tooltips; journal hidden");
+        if (report) log.LogInfo("NATIVE_MENU home enabled=TRADITIONAL,ARENA,OPEN_PACKS,COLLECTION; unsupported modes disabled with backlog tooltips; journal hidden");
     }
 
     public static void Navigate(SceneMgr.Mode mode)
@@ -1585,9 +1600,16 @@ internal static partial class NativeUIProbe
         try
         {
             if (!ready || sceneWaiting || replayRunning || LocalLadder.Screen == "Playing" || LocalLadder.Screen == "Starting") return;
+            mode = NativeArena.NavigationTarget(mode);
             if (!NativeResultsUI.CanNavigate(mode == SceneMgr.Mode.HUB)) return;
-            if (mode != SceneMgr.Mode.HUB && mode != SceneMgr.Mode.PACKOPENING && mode != SceneMgr.Mode.COLLECTIONMANAGER && mode != SceneMgr.Mode.TOURNAMENT)
+            if (mode != SceneMgr.Mode.HUB && mode != SceneMgr.Mode.PACKOPENING && mode != SceneMgr.Mode.COLLECTIONMANAGER && mode != SceneMgr.Mode.TOURNAMENT && mode != SceneMgr.Mode.DRAFT)
                 throw new ArgumentException("Unsupported native UI target");
+            // Arena refused (its notice is up): from HUB stay put; from anywhere else (the post-game route) go home, never strand.
+            if (mode == SceneMgr.Mode.DRAFT && !NativeArena.PrepareScene())
+            {
+                if (SceneMgr.Get().GetMode() == SceneMgr.Mode.HUB) return;
+                mode = SceneMgr.Mode.HUB;
+            }
             if (mode == SceneMgr.Mode.PACKOPENING)
             {
                 if (Profile.PackRevealPending) RememberPendingReceipt();
@@ -1610,6 +1632,21 @@ internal static partial class NativeUIProbe
             else Processor.QueueJob(transition);
         }
         catch (Exception error) { Fail(error); }
+    }
+    // Leaves a scene that never finished loading through the client's own navigation: retail itself calls SetNextMode(HUB)
+    // mid-load when Arena turns out disabled (DraftDisplay.OnNetCacheReady, DraftManager.OnError). Null, or why it cannot.
+    internal static string LeaveStuckScene(SceneMgr.Mode stuck, SceneMgr.Mode destination)
+    {
+        if (!ready || failure.Length != 0) return "native UI is not ready";
+        if (!SceneMgr.IsInitialized()) return "SceneMgr is missing";
+        var scene = SceneMgr.Get();
+        if (scene.GetMode() != stuck) return "the scene is " + scene.GetMode();
+        if (scene.IsModeRequested(SceneMgr.Mode.FATAL_ERROR)) return "a fatal error is pending";
+        if (scene.GetNextMode() != SceneMgr.Mode.INVALID) return "the client already requested " + scene.GetNextMode();
+        target = destination; sceneWaiting = true; sceneBegan = Time.realtimeSinceStartup;
+        State("Leaving:" + stuck + "->" + destination);
+        scene.SetNextMode(destination);
+        return null;
     }
     private static IEnumerator<IAsyncJobResult> StageScene(SceneMgr.Mode mode)
     {
@@ -2090,7 +2127,7 @@ internal static partial class NativeUIProbe
             {
                 EnsurePreference(request.Key);
                 // The mass-opening tooltip's "seen" flag lives in this save; a failed write only means it shows again next start.
-                if (request.Key == GameSaveKeyId.PLAYER_FLAGS)
+                if (request.Key == GameSaveKeyId.PLAYER_FLAGS && request.Subkey == GameSaveKeySubkeyId.PLAYER_FLAGS_HAS_SEEN_MASS_PACK_OPENING_TOOLTIP)
                     try { Profile.MarkMassPackTooltipSeen(); }
                     catch (Exception error) { log.LogWarning("NATIVE_UI mass pack tooltip flag not saved: " + error.Message); }
                 SaveLocal(request);

@@ -220,6 +220,8 @@ internal static class LocalRewardPresentation
             throw new ArgumentException("A settled reward record is required.", nameof(match));
         string header = match.Result == "Won" ? "VICTORY" : match.Result == "Tied" ? "DRAW" : "DEFEAT";
         string progression = profile?.ProgressionSummary(match) ?? "";
+        if (ArenaRules.IsArena(match.Mode))
+            return new LocalRewardSummary(header, "Arena rewards are paid when the run ends." + progression, Array.Empty<LocalRewardItem>());
         if (LocalEconomy.IsRolled(match.RewardVersion)) return CurrentSummary(match, header, progression);
         var items = new List<LocalRewardItem>();
         if (match.Gold > 0) items.Add(new LocalRewardItem(LocalRewardKind.Gold, match.Gold));
