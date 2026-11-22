@@ -104,6 +104,10 @@ internal sealed partial class NativeTestControl
         internal int PressFrame = -1;
         internal int RevealAttempts, RevealFrame = -1, RevealPendingFrame = -1;
         internal bool Right;
+        // press holdMs: the mouse-up waits until then (a held button, e.g. the shop quantity stepper's repeat).
+        internal DateTime HoldUntil = DateTime.MinValue;
+        // press double: a native double click (PegUI's DOUBLECLICK on the second mouse-up), e.g. the shop's typed-count box.
+        internal bool Double;
         // "press" (left or right click), "ui-scroll", "ui-hover", "ui-unhover" or "ui-drag".
         internal string Gesture = "press";
         internal UiElement DragTarget;
@@ -130,6 +134,7 @@ internal sealed partial class NativeTestControl
         if (current == null) return;
         if (current.transport != null) SamplePress();
         current.Tick();
+        if (current.runningBoardTrace != null) current.SampleBoardTrace();
     }
     internal static bool DiagnosticsEnabled => current?.transport != null;
     internal static void Shutdown() { current?.Stop("Plugin shutdown"); current = null; }
@@ -170,6 +175,7 @@ internal sealed partial class NativeTestControl
         try { NativeGameplayDrag.Cancel(); }
         catch (Exception error) { log.LogWarning("TEST_CONTROL drag cleanup: " + error.GetBaseException().Message); }
         transport?.Dispose(); transport = null; token = null;
+        StopBoardTrace(reason);
         nextFlagCheck = Time.realtimeSinceStartup + 1f;
         waits.Clear(); ResetSampling(); observingSend = false; controller = null; pending = null;
         foreach (var capture in captures) Reject(capture.Operation, reason);
@@ -181,6 +187,9 @@ internal sealed partial class NativeTestControl
             press.Operation.Phase = press.PressFrame >= 0 ? "fault" : "rejected";
             press.Operation.Detail["error"] = reason + "; reconcile action-status before retry";
             if (press.Operation.Phase == "fault") LatchFault(reason);
+            // A held press (holdMs) must not stay down: the native mouse-up away from the element (release-all).
+            if (press.Gesture == "press" && !press.Right && press.PressFrame >= 0 && NativeUiTree.Alive(press.Target))
+                try { NativeUiTree.Cancel(press.Target); } catch (Exception) { }
             if (press.Gesture == "ui-drag") NativeUiGestures.EndDrag();
             press = null;
         }
@@ -330,6 +339,8 @@ internal sealed partial class NativeTestControl
     }
     private static bool NeedsView(ControlRequest request) => (request.Mutation && request.Command != "shop-purchase" && request.Command != "open-packs"
         && request.Command != "craft-token-grant" && request.Command != "collection-jump"
+        && request.Command != "gold-grant" && request.Command != "shop-quantity-type"
+        && request.Command != "clipboard-set" && request.Command != "collection-paste-check"
         && !(request.Command == "press" && UiRules.IsMatchEscape(request.Text("element")))) || request.Command == "state"
         || request.Command == "options" || request.Command == "choices" || request.Command == "wait-until-idle";
     private void ResetSampling()
@@ -478,9 +489,12 @@ internal sealed partial class NativeTestControl
                         request.Has("name") ? request.Text("name") : null, request.Has("source") ? request.Integer("source") : 0, request.Integer("seconds")))); return;
                     case "fx": connection.Reply(Reply(request, "settled", NativeFxTelemetry.Read(
                         request.Has("after") ? request.Integer("after") : 0, request.Has("limit") ? request.Integer("limit") : 100))); return;
+                    case "board-trace-start": connection.Reply(Reply(request, "settled", StartBoardTrace(request.Integer("frames")))); return;
+                    case "board-trace-read": connection.Reply(Reply(request, "settled", ReadBoardTrace())); return;
                     case "screenshot": HandleCapture(envelope); return;
                     case "locate": connection.Reply(Reply(request, "settled", Locate(request))); return;
                     case "card-raw-text": AssertMainThread(); connection.Reply(Reply(request, "settled", ClientBridge.RawCardTextProbe(request.Text("cardId")))); return;
+                    case "plain-cards-render": AssertMainThread(); connection.Reply(Reply(request, "settled", NativePlainCardsOption.Render())); return;
                     case "card-text": AssertMainThread(); connection.Reply(Reply(request, "settled", CardText(request))); return;
                     case "entity": connection.Reply(Reply(request, "settled", ClientBridge.TestControlEntities(request.Text("matchId"), request.EntityIds("entityIds")))); return;
                     case "ui": case "wait-ui": QueueUi(envelope); return;
@@ -491,12 +505,18 @@ internal sealed partial class NativeTestControl
                         view.State["fpsCounter"] = NativeFpsCounter.State();
                         view.State["brandLabel"] = NativeBrandLabel.State();
                         view.State["deckInference"] = NativeDeckInferenceOption.State();
+                        view.State["plainCards"] = NativePlainCardsOption.State();
+                        // Here, not in ReadView: pet animations and the controller scan change frame to frame and must stay out of the view revision.
+                        try { view.State["opponentPets"] = ClientBridge.OpponentPetsTestState(); }
+                        catch (Exception error) { view.State["opponentPets"] = new JsonNode { { "error", error.GetType().Name + " " + error.Message } }; }
                         view.State["tips"] = NativeUIProbe.TipsState();
                         view.State["language"] = NativeLanguageOption.State();
                         view.State["optionsPanels"] = NativeOptionsPanels.State();
                         view.State["deckGuide"] = NativeDeckPickerGuide.State();
                         view.State["deckGuideCards"] = NativeGuideCards.State();
                         view.State["deckRecord"] = NativeDeckRecord.State();
+                        view.State["deckImport"] = DeckImportState();
+                        view.State["deckExport"] = DeckExportState();
                         var settledMatch = LocalLadder.Profile?.LastSettledMatch;
                         view.State["settledMatch"] = settledMatch == null ? null : new JsonNode {
                             { "id", settledMatch.Id }, { "result", settledMatch.Result },
@@ -528,9 +548,10 @@ internal sealed partial class NativeTestControl
             if (request.Command == "press" || request.Command == "ui-hover" || request.Command == "ui-unhover" || request.Command == "ui-escape" || request.Command == "ui-drag" || request.Command == "ui-scroll") { HandlePress(envelope); return; }
             if (request.Command == "shop-purchase") { HandleShopPurchase(envelope); return; }
             if (request.Command == "open-packs") { HandleOpenPacks(envelope); return; }
-            if (request.Command == "craft-token-grant" || request.Command == "collection-jump") { HandleCraftingTest(envelope); return; }
+            if (request.Command == "craft-token-grant" || request.Command == "collection-jump" || request.Command == "gold-grant" || request.Command == "shop-quantity-type") { HandleCraftingTest(envelope); return; }
+            if (request.Command == "clipboard-set" || request.Command == "collection-paste-check") { HandleDeckImportTest(envelope); return; }
             if (request.Command == "squelch" || request.Command == "unsquelch" || request.Command == "emote" || request.Command == "npc-emote" || request.Command == "npc-concede"
-                || request.Command == "human-defeat" || request.Command == "premium-unlock-prepare" || request.Command == "achievement-prime" || request.Command == "turn-timer-debug" || request.Command == "spell-stall-arm")
+                || request.Command == "human-defeat" || request.Command == "premium-unlock-prepare" || request.Command == "achievement-prime" || request.Command == "turn-timer-debug" || request.Command == "spell-stall-arm" || request.Command == "cancel-target")
             { HandlePresence(envelope, view); return; }
             // Lookup before busy/stale checks: a retry must return prior status even after the board changed.
             var prior = ledger.Find(request.Id);
@@ -657,6 +678,12 @@ internal sealed partial class NativeTestControl
                     NativeSpellWatchdog.Arm(view.MatchId);
                     operation.Detail["armed"] = true;
                 }
+                else if (request.Command == "cancel-target")
+                {
+                    // One main-thread step: the mode is read and cancelled together, so no key can land after the turn ended (physical Escape can).
+                    operation.Detail["was"] = NativeGameplayDrag.CancelWaitingMode();
+                    mutations++;
+                }
                 else if (request.Command == "turn-timer-debug")
                 {
                     ClientBridge.ShortenPlayerTurnForTest(request.Integer("seconds"));
@@ -725,13 +752,22 @@ internal sealed partial class NativeTestControl
                 NpcDifficulties.Find(profile.NpcDifficulty), profile.Ladder.StarIndex), count);
         }
         else picks = QueueForecast.Ranked(ranked, LocalRematch.Request(profile, profile.RankedHistory, decks, ranked.Rules.HistoryDepth, NpcWorldRuntime.Legend), count);
+        // The pet each NPC would bring (NpcPetSeats.For on the pick's seat), whatever Options > Show Opponents' Pets says.
+        var petFamilies = NpcPetSeats.Families(LocalShop.Default);
+        string ForecastPet(MatchPick pick)
+        {
+            try { return NpcPets.Resolve(new NpcPetSeat(pick.Encounter.Npc.Id, pick.Encounter.Deck.Id, LadderRules.IndexForRating(pick.Encounter.Npc.HomeRating),
+            NpcPremiums.SeatStarIndex(mode == "casual" ? CasualRules.Mode : "Ranked", pick.Encounter.Rating, profile.Ladder.StarIndex)), petFamilies)?.CardId; }
+            catch (Exception error) { return "error: " + error.GetType().Name + " " + error.Message; } // as ClientBridge, which shows no pet then
+        }
         return new JsonNode {
             { "available", true }, { "mode", mode }, { "roster", world.All.Count(npc => npc.Notable) },
             { "regularShare", Math.Round(100.0 * picks.Count(pick => pick.Encounter.Npc.Notable) / picks.Count, 1) },
             { "regularsMet", picks.Where(pick => pick.Encounter.Npc.Notable).Select(pick => pick.Encounter.Npc.Id).Distinct().Count() },
             { "picks", TestControlProtocol.List(picks.Select(pick => (object)new JsonNode {
                 { "npcId", pick.Encounter.Npc.Id }, { "name", pick.Encounter.Npc.DisplayName }, { "regular", pick.Encounter.Npc.Notable }, { "regularDraw", pick.RegularDraw },
-                { "deck", pick.Encounter.Deck.Id }, { "rating", Math.Round(pick.Encounter.Rating, 1) }, { "relaxLevel", pick.RelaxLevel } })) }
+                { "deck", pick.Encounter.Deck.Id }, { "rating", Math.Round(pick.Encounter.Rating, 1) }, { "relaxLevel", pick.RelaxLevel },
+                { "pet", ForecastPet(pick) } })) }
         };
     }
 
@@ -1329,7 +1365,8 @@ internal sealed partial class NativeTestControl
                 { "bigCard", history != null && history.IsShowingBigCard() },
                 { "gameBusy", front.IsBusy() },
                 { "mustWaitForChoices", WaitForChoices == null ? null : (object)(bool)WaitForChoices.Invoke(front, null) },
-                { "canProcessPowerQueue", CanProcessQueue == null ? null : (object)(bool)CanProcessQueue.Invoke(front, null) } };
+                { "canProcessPowerQueue", CanProcessQueue == null ? null : (object)(bool)CanProcessQueue.Invoke(front, null) },
+                { "turnBannerHold", NativeTurnBannerHold.State() } };
         }
         catch (Exception error) { return new JsonNode { { "error", (error.InnerException ?? error).Message } }; }
     }
@@ -1345,6 +1382,7 @@ internal sealed partial class NativeTestControl
         data["rewardPresentation"] = NativeRewardUI.Diagnostics;
         data["packRevealPending"] = LocalLadder.Profile?.PackRevealPending ?? false;
         data["npcDifficulty"] = DifficultyState(snapshot);
+        data["shopAmount"] = NativeShop.AmountDiagnostics(); // Open pack page: quantity stepper and Buy price label.
         if (all) data["shopSubTabs"] = NativeShop.SubTabDiagnostics(); // Which object draws each sub-tab plate.
         if (all) data["shopRecipePrices"] = NativeShopTilePrices.Diagnostics(); // Deck tiles' recipe price plates.
         if (all) data["shopScroll"] = NativeShop.ScrollDiagnostics(); // Browser scroll height inputs.
@@ -1427,7 +1465,7 @@ internal sealed partial class NativeTestControl
         {
             // Release on a later frame, like a real mouse-up. PegUI re-hit-tests on mouse-up: if the element no longer
             // receives the click, it only gets release-all(false) and the click does not complete.
-            if (Time.frameCount <= press.PressFrame) return;
+            if (Time.frameCount <= press.PressFrame || DateTime.UtcNow < press.HoldUntil) return;
             UiElement now = snapshot.Elements.FirstOrDefault(element => element.Instance == press.Target.Instance);
             string interrupted = now == null ? "element gone after press"
                 : now.Id != press.Target.Id || now.Type != press.Target.Type || now.DeckId != press.Target.DeckId ? "element identity changed after press"
@@ -1441,6 +1479,7 @@ internal sealed partial class NativeTestControl
             {
                 // PegUI sends nothing on right mouse-up; the opened preview covering the tile is the click's effect.
                 if (press.Right) { if (NativeUiTree.Alive(press.Target)) NativeUiTree.RightRelease(press.Target); }
+                else if (interrupted == null && press.Double) NativeUiTree.DoubleRelease(press.Target);
                 else if (interrupted == null) NativeReportUI.TestRelease(() => NativeUiTree.Release(press.Target));
                 else if (NativeUiTree.Alive(press.Target)) NativeUiTree.Cancel(press.Target);
             }
@@ -1510,6 +1549,9 @@ internal sealed partial class NativeTestControl
         // The tile id was canonical at acceptance; the live element must also take PegUI's RIGHTCLICK event.
         if (press.Right && !NativeUiTree.RightClickable(target)) { RejectPress("Element does not accept right-click"); return; }
         press.Target = target; press.PressFrame = Time.frameCount;
+        if (!press.Right && request.Has("holdMs")) press.HoldUntil = DateTime.UtcNow.AddMilliseconds(request.Integer("holdMs"));
+        press.Double = !press.Right && request.Has("double") && request.Integer("double") == 1;
+        if (press.Double && !NativeUiTree.DoubleClickable(target)) { RejectPress("Element does not accept a double click"); return; }
         if (!press.Right && (id == NativePremiumRewards.DoneId || id.StartsWith(NativePremiumRewards.DoneId + ".", StringComparison.Ordinal)))
         {
             operation.Detail["premiumDismissalsBefore"] = NativeResultsUI.PremiumRewards?.DismissalCount ?? 0;
@@ -1521,11 +1563,11 @@ internal sealed partial class NativeTestControl
         operation.Detail["waitMs"] = (DateTime.UtcNow - operation.AcceptedUtc).TotalMilliseconds;
         operation.Detail.Remove("lastBlocker");
         operation.Detail["nativeInvocationStarted"] = true;
-        try { if (press.Right) NativeUiTree.RightClick(target); else NativeUiTree.Press(target); }
+        try { if (press.Right) NativeUiTree.RightClick(target); else if (press.Double) NativeUiTree.DoublePress(target); else NativeUiTree.Press(target); }
         catch (Exception error) { FailPress("Press failed: " + error.GetType().Name + ": " + error.Message); return; }
         log.LogInfo("TEST_CONTROL_PRESS " + Json.Serialize(new JsonNode {
             { "inputKind", "semantic-ui" }, { "requestId", request.Id }, { "runId", launch.RunId }, { "element", id }, { "generation", snapshot.Generation },
-            { "button", press.Right ? "right" : "left" }
+            { "button", press.Right ? "right" : "left" }, { "holdMs", request.Has("holdMs") ? (object)request.Integer("holdMs") : null }
         }));
         OperationReply(press.Owner, request, operation);
     }
@@ -1973,7 +2015,7 @@ internal sealed partial class NativeTestControl
         view.State["achievementToast"] = NativeAchievementToast.State();
         view.State["scene"] = scene?.GetMode().ToString(); view.State["screen"] = LocalLadder.Screen;
         view.ClientGameOver = front?.IsGameOver() == true;
-        view.State["responseMode"] = front?.GetResponseMode().ToString(); view.State["concedeRequested"] = front?.WasConcedeRequested() ?? false; view.State["humanOptionsId"] = view.OptionsId;
+        var gameMenu = GameMenu.Get(); view.State["gameMenuShown"] = gameMenu != null && gameMenu.GameMenuIsShown(); view.State["responseMode"] = front?.GetResponseMode().ToString(); view.State["concedeRequested"] = front?.WasConcedeRequested() ?? false; view.State["humanOptionsId"] = view.OptionsId;
         view.State["clientOptionsId"] = front?.GetOptionsPacket()?.ID ?? -1; view.State["choiceId"] = view.ChoiceId;
         view.State["clientChoiceId"] = front?.GetFriendlyEntityChoices()?.ID ?? -1;
         view.State["inputEnabled"] = input?.IsInputEnabled() ?? false;
@@ -2384,10 +2426,18 @@ internal static class TestControlShop
             products.Add(new JsonNode {
                 { "id", product.Id }, { "kind", product.Kind }, { "price", price },
                 { "owned", Owned(profile, product, price) }, { "purchasable", reason == null }, { "reason", reason },
-                { "equipped", Equipped(profile, product) }
+                { "equipped", Equipped(profile, product) },
+                // Packs only: the native tile id (shop.product.<pmt>) and the stepper's catalogue maximum.
+                { "pmt", product.Kind == "Pack" ? (object)NativeShopPurchase.PmtId(product) : null },
+                { "maxQuantity", product.Kind == "Pack" ? (object)product.MaxQuantity : null }, { "packType", product.PackType }
             });
         }
+        // Saved pack stacks, ledger sequence and newest receipt: live checks compare these before/after a purchase and restart.
+        var packs = new JsonList();
+        foreach (var pack in profile.PackInventory) packs.Add(new JsonNode { { "packType", pack.PackType }, { "count", pack.Count } });
+        var last = profile.Purchases.LastOrDefault();
         return new JsonNode { { "version", LocalShop.Default.Version }, { "gold", profile.Gold }, { "products", products },
+            { "packs", packs }, { "purchaseSequence", profile.PurchaseSequence }, { "lastPurchase", last == null ? null : Receipt(last, profile.Gold) },
             { "selectedHubTheme", profile.SelectedHubTheme }, { "selectedBoard", profile.SelectedBoard }, { "selectedPet", profile.SelectedPet },
             { "ownedPets", pets },
             { "launchHubTheme", LaunchHubTheme?.Invoke() } };
@@ -2513,7 +2563,15 @@ internal static class TestControlCrafting
                     { "nativeMissing", native?.GetSlotsIncludingSideboards().Where(slot => !slot.Owned).Sum(slot => slot.Count) } };
             })) },
             { "incompleteDecks", TestControlProtocol.List(profile.CustomDecks.Where(deck => !profile.IsDeckComplete(deck.Id))
-                .Select(deck => (object)deck.Name)) }
+                .Select(deck => (object)deck.Name)) },
+            // #87: Standard decks still holding Wild cards, with the client's own verdict (native deck rules and format hooks).
+            { "wildDecks", TestControlProtocol.List(profile.CustomDecks.Where(deck => profile.WildCards(deck.Id).Count != 0).Select(deck => {
+                var native = CollectionManager.Get()?.GetDeck(deck.Id);
+                return (object)new JsonNode { { "id", deck.Id }, { "name", deck.Name }, { "format", deck.Format },
+                    { "wild", TestControlProtocol.List(profile.WildCards(deck.Id).Select(id => (object)id)) },
+                    { "nativeWildSlots", native?.GetSlots().Where(slot => GameUtils.IsWildCard(slot.CardID)).Sum(slot => slot.Count) },
+                    { "nativeValid", native?.IsValidForRuleset } };
+            })) }
         };
     }
 }

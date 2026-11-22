@@ -13,6 +13,10 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 // One-shot debug scenario (docs/agent-workflows/steam-deck.md, `deck.py scenario`): stages the NEXT match so a live run can
 // show a specific situation (the NPC drawing Illusion first, a human with Fyrakk on turn 1, ...). The file is key=value lines:
 //   npcDeckTop=ID,ID   humanDeckTop=ID,...   (new hidden deck entities, drawn in the listed order)
+//   humanStartOfGame=ID,... npcStartOfGame=ID,... (up to three sources each, added at deck bottom; effects use MainBegin).
+//       Eligibility is checked when applied: after the deal, mulligans and humanDeckTop, not before the deal. Godfrey (JAIL_509) has no condition.
+//       Staged cards are not added to the controller's recorded starting deck (DeckCards), so starting/opening-deck conditions can differ from retail:
+//       Nozdormu reads the opponent's DeckCards; Mug'Zee reads DeckCards when it resolves.
 //   humanOpeningHand=ID,... npcOpeningHand=ID,... (replace opening slots before mulligan offers; Coin excluded)
 //   npcHand=ID,...     humanHand=ID,...      (new cards added to the hand before turn 1)
 //   npcBoard=ID,...    humanBoard=ID,...     (up to seven minions/locations before turn 1)
@@ -20,6 +24,15 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 //       Attack (0..999) and Health (1..999, max health too); locations are unaffected. Capture-only, needs the board key.
 //       The value REPLACES the base stat (set, not added): auras on that side add on top, and base-stat changes applied during the
 //       summon are overwritten.)
+//   humanHeroDamage=N   (1..29: after the board and hand are placed, the human hero takes N damage: a real wound, Health = max - N, max
+//       unchanged. Excludes heroAttack=npc with attackLethal=1 (that wounds the same hero). Human side only; capture/live-check staging for heal cards.)
+//   humanBoardDamage=N   (1..999: every minion humanBoard summoned takes N damage but keeps at least 1 Health, so none dies; locations
+//       are unaffected. Needs humanBoard; applied after humanBoardStats, so the clamp uses the staged Health.)
+//   humanHeroPower=CARDID   (any HERO_POWER card outside the Battlegrounds, Mercenaries, Tavern Brawl, tutorial and mission sets; the
+//       filter is by set only, so adventure/boss and cheat/debug powers also pass. After the boards are placed the human hero's hero
+//       power is replaced by it, through the engine's ReplaceHeroPower task, the path heroPowerUpgrade and hero cards use, so the native
+//       client sees an ordinary hero power swap. Human side only; capture/live-check staging for hero-power effects. Give mana with
+//       humanMana/humanManaRaw.)
 //   npcSummonStats=CARDID,ATK,HEALTH   (for the rest of this match every minion with that card id the NPC side summons gets those
 //       base stats, Attack 0..9999 and Health 1..9999: a game-local AfterSummon handler, never a card definition. Capture-only.)
 //   humanHandMods=CARDID,COST,ATK,HEALTH,PREMIUM,...   (groups of five; '-' = unchanged, spells use -,- for attack and health.
@@ -29,11 +42,27 @@ using EngineEntity = SabberStoneCore.Model.Entities.Entity;
 //       Knight Herald Soldier's gift does: a payment override, no enchantment. Needs humanSeat=first; every id must be in humanHand.
 //       Capture-only.)
 //   humanHandHealthWing=CARDID,...   (the same, as Onyxia's Wing's gift does: the Health cost hangs on a CATA_155e2 enchantment.)
+//   npcPlayNext=ID[@TARGET],...   (the NPC plays these cards as its first actions, one per decision, through its normal play path (same
+//       engine task, history and transport as the AI's own plays), then the AI carries on. A strict queue: the head step is tried at every
+//       main-action decision (a pending choice consumes nothing) and leaves the queue only when that play really went through, so a step
+//       that cannot be played yet (not in hand, mana, full board, no legal target) stays at the head across turns until it can, or the
+//       match ends, with one "DEBUG_SCENARIO npcPlayNext warning" per NPC turn; steps behind it wait. TARGET is hero (the human's hero),
+//       self (the NPC's hero), enemy (the human's first legal minion, left to right) or friend (the NPC's first legal minion); with none
+//       the human hero is preferred, then any legal target. Defaults: a minion goes to the leftmost slot, Choose One takes option 1.
+//       The card must be in the NPC's hand (npcHand, its deck, an opening hand). Up to 5 cards. Capture-only.
+//       Trap: when the AI itself plays the head card some other way (e.g. @enemy has no legal minion, so the step waits, and the AI casts
+//       that card elsewhere), the head can never be played again and stays blocked for the rest of the match: the steps behind it never run.)
+//   npcSkin=SKINID   (the NPC's hero skin; its BaseHero also becomes the NPC's class and hero power for this match, whatever its deck, so
+//       npcSkin=HERO_06 gives a Druid NPC (HERO_01 Warrior, 02 Shaman, 03 Rogue, 04 Paladin, 05 Hunter, 06 Druid, 07 Warlock, 08 Mage,
+//       09 Priest, 10 Demon Hunter, 11 Death Knight): the base hero ids are valid skin ids. The deck's cards stay the deck's.)
 //   humanHandClear=1   (discards the cards dealt to the human's hand, Coin kept, before humanHand places its own)
 //   humanManaRaw=CUR,MAX  npcManaRaw=CUR,MAX   (0..999: the mana counter's tags written directly after main-begin, past the engine's
 //       10 cap, for a counter gag such as 32/333. Needs humanSeat=first; excludes humanMana/npcMana; npcManaRaw CUR <= 10 (its own
 //       turn start would otherwise send a negative RESOURCES_USED). Capture-only.)
 //   npcMana=N          humanMana=N           (mana crystals on that player's FIRST turn, full)
+//   npcPet=PET_CARDID  (the NPC owns this pet form for the match, instead of the pet NpcPets gives it or none; Options > Show
+//       Opponents' Pets still decides whether it is shown. Presentation only, applied at match start.)
+//   humanCorpses=N     npcCorpses=N        (starting Corpses, 0..999; matching hero must be a Death Knight)
 //   runId=<this launch's run id>   (REQUIRED by Read: the file is bound to one launch, like enable-test-control)
 // ENGINE_SOURCE builds only (the Deck and lane builds); other builds ignore the file. A file is honoured only while test
 // control is live and its runId is this launch's; anything else is rejected (renamed .rejected-<utc>), and any file left over
@@ -59,11 +88,42 @@ public sealed class DebugScenario
     public static Outcome LastOutcome { get; private set; }
     internal static void RecordOutcome(string status, string detail, string runId) =>
         LastOutcome = new Outcome { Status = status, Detail = detail, RunId = runId };
-    private static readonly string[] Keys = { "npcDeckTop", "humanDeckTop", "humanOpeningHand", "npcOpeningHand", "npcHand", "humanHand", "npcBoard", "humanBoard", "npcBoardStats", "humanBoardStats", "npcSummonStats", "humanHandMods", "humanHandHealth", "humanHandHealthWing", "humanHandClear", "humanManaRaw", "npcManaRaw", "npcMana", "humanMana", "humanSkin", "npcSkin", "heroAttack", "heroPower", "heroPowerUpgrade", "attackSecret", "attackArmor", "attackWeapon", "attackLethal", "humanSeat", "overdraw", "runId" };
+    private static readonly string[] Keys = { "npcDeckTop", "humanDeckTop", "humanStartOfGame", "npcStartOfGame", "humanOpeningHand", "npcOpeningHand", "npcHand", "npcPlayNext", "humanHand", "npcBoard", "humanBoard", "npcBoardStats", "humanBoardStats", "humanHeroDamage", "humanBoardDamage", "humanHeroPower", "npcSummonStats", "humanHandMods", "humanHandHealth", "humanHandHealthWing", "humanHandClear", "humanManaRaw", "npcManaRaw", "npcMana", "humanMana", "humanCorpses", "npcCorpses", "humanSkin", "npcSkin", "heroAttack", "heroPower", "heroPowerUpgrade", "attackSecret", "attackArmor", "attackWeapon", "attackLethal", "humanSeat", "overdraw", "npcPet", "runId" };
 
     public IReadOnlyList<string> NpcDeckTop { get; private set; } = new string[0];
     public IReadOnlyList<string> HumanDeckTop { get; private set; } = new string[0];
+    public IReadOnlyList<string> HumanStartOfGame { get; private set; } = new string[0];
+    public IReadOnlyList<string> NpcStartOfGame { get; private set; } = new string[0];
     public IReadOnlyList<string> NpcHand { get; private set; } = new string[0];
+    // One scripted NPC play: the card and an optional target kind (see npcPlayNext in the header).
+    public sealed class NpcPlay
+    {
+        public string CardId { get; }
+        public string Target { get; }
+        public static readonly string[] Targets = { "hero", "self", "enemy", "friend" };
+        public NpcPlay(string cardId, string target) { CardId = cardId; Target = target; }
+        public override string ToString() => Target == null ? CardId : CardId + "@" + Target;
+    }
+    public IReadOnlyList<NpcPlay> NpcPlayNext { get; private set; } = new NpcPlay[0];
+    private int npcPlayIndex;
+    private static IReadOnlyList<NpcPlay> NpcPlays(Dictionary<string, string> values, Func<string, bool> known)
+    {
+        if (!values.TryGetValue("npcPlayNext", out string text)) return new NpcPlay[0];
+        var items = text.Split(',').Select(item => item.Trim()).ToArray();
+        var ids = new List<string>();
+        var plays = new List<NpcPlay>();
+        foreach (string item in items)
+        {
+            int at = item.IndexOf('@');
+            string id = at < 0 ? item : item.Substring(0, at).Trim(), target = at < 0 ? null : item.Substring(at + 1).Trim();
+            if (target != null && Array.IndexOf(NpcPlay.Targets, target) < 0)
+                throw new ArgumentException("npcPlayNext: target must be " + string.Join(", ", NpcPlay.Targets) + " (got '" + target + "').");
+            ids.Add(id); plays.Add(new NpcPlay(id, target));
+        }
+        // Same id rules as a hand card (known card, playable type, native definition); at most a hand's worth.
+        Cards(new Dictionary<string, string> { ["npcPlayNext"] = string.Join(",", ids) }, "npcPlayNext", MaxHand, known);
+        return plays;
+    }
     public IReadOnlyList<string> HumanHand { get; private set; } = new string[0];
     public IReadOnlyList<string> HumanOpeningHand { get; private set; } = new string[0];
     public IReadOnlyList<string> NpcOpeningHand { get; private set; } = new string[0];
@@ -73,6 +133,7 @@ public sealed class DebugScenario
     public string HeroAttack { get; private set; }
     public string HeroPower { get; private set; }
     public string HeroPowerUpgrade { get; private set; }
+    public string HumanHeroPower { get; private set; }   // null = not staged
     public string AttackSecret { get; private set; }
     public string AttackWeapon { get; private set; }
     public int AttackArmor { get; private set; }
@@ -131,9 +192,23 @@ public sealed class DebugScenario
     public IDictionary<int, int> StagedPremiums { get; } = new Dictionary<int, int>();
     public BoardStats NpcBoardStats { get; private set; }
     public BoardStats HumanBoardStats { get; private set; }
+    public const int MaxHeroDamage = 29, MaxBoardDamage = 999;
+    public int HumanHeroDamage { get; private set; }    // 0 = not staged
+    public int HumanBoardDamage { get; private set; }   // 0 = not staged
     public int? NpcMana { get; private set; }
     public int? HumanMana { get; private set; }
+    public int? HumanCorpses { get; private set; }
+    public int? NpcCorpses { get; private set; }
     public int? FirstPlayer { get; private set; }
+    // npcPet: the pet form the NPC owns this match (ClientBridge hands it to NativeOpponentPetsOption.Gate); null keeps its own.
+    public string NpcPet { get; private set; }
+    private static string Pet(Dictionary<string, string> values, Func<string, bool> known)
+    {
+        if (!values.TryGetValue("npcPet", out string pet)) return null;
+        if (!pet.StartsWith("PET_", StringComparison.Ordinal) || pet.IndexOf(',') >= 0 || known != null && !known(pet))
+            throw new ArgumentException("npcPet must be one pet card id (PET_...), got: " + pet);
+        return pet;
+    }
     private static int? Seat(Dictionary<string, string> values)
     {
         if (!values.TryGetValue("humanSeat", out string seat)) return null;
@@ -178,7 +253,17 @@ public sealed class DebugScenario
         var handHealthWing = HandHealth(values, "humanHandHealthWing", humanHand);
         if (handHealth.Intersect(handHealthWing).Any())
             throw new ArgumentException("humanHandHealth and humanHandHealthWing list the same card: give each card one Health cost.");
+        int heroDamage = WoundNumber(values, "humanHeroDamage", MaxHeroDamage);
+        if (heroDamage > 0 && Number(values, "attackLethal", 0, 1) == 1 && values.TryGetValue("heroAttack", out string attacker) && attacker == "npc")
+            throw new ArgumentException("humanHeroDamage and heroAttack=npc with attackLethal=1 both set the human hero's damage; give only one.");
+        int boardDamage = 0;
+        if (values.ContainsKey("humanBoardDamage"))
+        {
+            if (!values.ContainsKey("humanBoard")) throw new ArgumentException("humanBoardDamage needs humanBoard (it wounds the minions that key summons).");
+            boardDamage = WoundNumber(values, "humanBoardDamage", MaxBoardDamage);
+        }
         return new DebugScenario {
+            HumanHeroDamage = heroDamage, HumanBoardDamage = boardDamage, HumanHeroPower = HeroPowerCard(values, "humanHeroPower", known),
             BoundRunId = boundRun, FirstPlayer = Seat(values),
             Overdraw = Choice(values, "overdraw", "human", "npc", "human-godfrey", "npc-godfrey"),
             HumanSkin = Skin(values, "humanSkin", known), NpcSkin = Skin(values, "npcSkin", known),
@@ -189,8 +274,9 @@ public sealed class DebugScenario
             AttackWeapon = Choice(values, "attackWeapon", "none", "TLC_478", "CS2_106"),
             AttackArmor = Number(values, "attackArmor", 0, 30), AttackLethal = Number(values, "attackLethal", 0, 1) == 1,
             NpcDeckTop = Cards(values, "npcDeckTop", MaxDeckTop, known), HumanDeckTop = Cards(values, "humanDeckTop", MaxDeckTop, known),
+            HumanStartOfGame = Cards(values, "humanStartOfGame", 3, known), NpcStartOfGame = Cards(values, "npcStartOfGame", 3, known),
             HumanOpeningHand = Cards(values, "humanOpeningHand", 4, known), NpcOpeningHand = Cards(values, "npcOpeningHand", 4, known),
-            NpcHand = Cards(values, "npcHand", MaxHand, known), HumanHand = humanHand,
+            NpcHand = Cards(values, "npcHand", MaxHand, known), HumanHand = humanHand, NpcPlayNext = NpcPlays(values, known),
             HumanHandMods = HandMods(values, "humanHandMods", humanHand, known),
             HumanHandHealth = handHealth, HumanHandHealthWing = handHealthWing,
             HumanHandClear = Number(values, "humanHandClear", 0, 1) == 1,
@@ -198,7 +284,36 @@ public sealed class DebugScenario
             NpcBoard = Cards(values, "npcBoard", MaxBoard, known), HumanBoard = Cards(values, "humanBoard", MaxBoard, known),
             NpcBoardStats = Stats(values, "npcBoardStats", "npcBoard"), HumanBoardStats = Stats(values, "humanBoardStats", "humanBoard"),
             NpcSummonStats = SummonRule(values, "npcSummonStats", known),
-            NpcMana = Mana(values, "npcMana"), HumanMana = Mana(values, "humanMana") };
+            HumanCorpses = values.ContainsKey("humanCorpses") ? Number(values, "humanCorpses", 0, 999) : (int?)null,
+            NpcCorpses = values.ContainsKey("npcCorpses") ? Number(values, "npcCorpses", 0, 999) : (int?)null,
+            NpcMana = Mana(values, "npcMana"), HumanMana = Mana(values, "humanMana"), NpcPet = Pet(values, known) };
+    }
+
+    // A HERO_POWER card id from the card db (hero cards and base heroes are not hero powers).
+    private static string HeroPowerCard(Dictionary<string, string> values, string key, Func<string, bool> known)
+    {
+        if (!values.TryGetValue(key, out string id)) return null;
+        if (id.Length == 0 || id.Length > 64 || id.Any(c => !(char.IsLetterOrDigit(c) || c == '_' || c == '-')))
+            throw new ArgumentException(key + " has an invalid card id: '" + id + "'");
+        SabberStoneCore.Model.Card card;
+        try { card = EngineCards.FromId(id); }
+        catch (KeyNotFoundException) { card = null; }
+        if (card == null) throw new ArgumentException(key + ": unknown card id " + id);
+        if (card.Type != SabberStoneCore.Enums.CardType.HERO_POWER) throw new ArgumentException(key + ": " + id + " is a " + card.Type + ", not a hero power.");
+        // Numeric set ids from the card db export (the engine's CardSet enum lacks Tutorial and Mercenaries): MISSIONS 5, TB 18,
+        // MERCENARIES (LETTUCE) 1586, BATTLEGROUNDS 1453, TUTORIAL 1904. The export has no Mercenaries hero power; the id stays for builds that do.
+        int set = (int)card.Set;
+        if (set == 5 || set == 18 || set == 1453 || set == 1586 || set == 1904)
+            throw new ArgumentException(key + ": " + id + " is a hero power of set " + set + " (Battlegrounds, Mercenaries, Tavern Brawl, tutorial or mission), not a constructed one.");
+        if (known != null && !known(id)) throw new ArgumentException(key + ": " + id + " has no native client definition.");
+        return id;
+    }
+
+    // A whole number 1..max written without leading zeros (absent = 0).
+    private static int WoundNumber(Dictionary<string, string> values, string key, int max)
+    {
+        if (values.TryGetValue(key, out string text) && text.StartsWith("0", StringComparison.Ordinal)) throw new ArgumentException(key + ": out of range");
+        return Number(values, key, 1, max);
     }
 
     // ATTACK,HEALTH for the minions a board key summons. Digits only, so no sign, space-inside, decimal or exponent forms.
@@ -356,6 +471,10 @@ public sealed class DebugScenario
             if (key.EndsWith("Board", StringComparison.Ordinal) && type != "MINION" && type != "LOCATION")
                 throw new ArgumentException(key + ": " + id + " is not a board minion or location.");
             if (known != null && !known(id)) throw new ArgumentException(key + ": " + id + " has no native client definition.");
+#if ENGINE_SOURCE
+            if (key.EndsWith("StartOfGame", StringComparison.Ordinal) && !SabberStoneCore.Actions.StartOfGameRules.HasEffect(EngineCards.FromId(id)))
+                throw new ArgumentException(key + ": " + id + " has no Start of Game effect.");
+#endif
         }
         return ids;
     }
@@ -373,10 +492,15 @@ public sealed class DebugScenario
         var lines = new List<string>();
         void Add(string key, IReadOnlyList<string> ids) { if (ids.Count > 0) lines.Add(key + "=" + string.Join(",", ids)); }
         Add("npcDeckTop", NpcDeckTop); Add("humanDeckTop", HumanDeckTop); Add("npcHand", NpcHand); Add("humanHand", HumanHand);
+        Add("humanStartOfGame", HumanStartOfGame); Add("npcStartOfGame", NpcStartOfGame);
+        if (NpcPlayNext.Count > 0) lines.Add("npcPlayNext=" + string.Join(",", NpcPlayNext));
         Add("humanOpeningHand", HumanOpeningHand); Add("npcOpeningHand", NpcOpeningHand);
         Add("npcBoard", NpcBoard); Add("humanBoard", HumanBoard);
         if (NpcBoardStats != null) lines.Add("npcBoardStats=" + NpcBoardStats);
         if (HumanBoardStats != null) lines.Add("humanBoardStats=" + HumanBoardStats);
+        if (HumanBoardDamage > 0) lines.Add("humanBoardDamage=" + HumanBoardDamage.ToString(CultureInfo.InvariantCulture));
+        if (HumanHeroDamage > 0) lines.Add("humanHeroDamage=" + HumanHeroDamage.ToString(CultureInfo.InvariantCulture));
+        if (HumanHeroPower != null) lines.Add("humanHeroPower=" + HumanHeroPower);
         if (NpcSummonStats != null) lines.Add("npcSummonStats=" + NpcSummonStats);
         if (HumanHandMods.Count > 0) lines.Add("humanHandMods=" + string.Join(",", HumanHandMods));
         Add("humanHandHealth", HumanHandHealth); Add("humanHandHealthWing", HumanHandHealthWing);
@@ -385,6 +509,8 @@ public sealed class DebugScenario
         if (NpcManaRaw != null) lines.Add("npcManaRaw=" + NpcManaRaw);
         if (NpcMana.HasValue) lines.Add("npcMana=" + NpcMana.Value.ToString(CultureInfo.InvariantCulture));
         if (HumanMana.HasValue) lines.Add("humanMana=" + HumanMana.Value.ToString(CultureInfo.InvariantCulture));
+        if (HumanCorpses.HasValue) lines.Add("humanCorpses=" + HumanCorpses.Value.ToString(CultureInfo.InvariantCulture));
+        if (NpcCorpses.HasValue) lines.Add("npcCorpses=" + NpcCorpses.Value.ToString(CultureInfo.InvariantCulture));
         if (FirstPlayer.HasValue) lines.Add("humanSeat=" + (FirstPlayer == 1 ? "first" : "second"));
         if (Overdraw != null) lines.Add("overdraw=" + Overdraw);
         if (HumanSkin != null) lines.Add("humanSkin=" + HumanSkin);
@@ -396,6 +522,7 @@ public sealed class DebugScenario
         if (AttackWeapon != null) lines.Add("attackWeapon=" + AttackWeapon);
         if (AttackArmor != 0) lines.Add("attackArmor=" + AttackArmor);
         if (AttackLethal) lines.Add("attackLethal=1");
+        if (NpcPet != null) lines.Add("npcPet=" + NpcPet);
         return string.Join("\n", lines);
     }
     public string Describe() => Canonical().Replace("\n", " ");
@@ -495,14 +622,78 @@ public sealed class DebugScenario
             if (hand > 0 && player.HandZone.FreeSpace < hand + 1) return name + " hand has no room for " + hand + " more cards plus its draw.";
             return null;
         }
-        foreach (string id in NpcDeckTop.Concat(HumanDeckTop).Concat(NpcHand).Concat(HumanHand).Concat(HumanOpeningHand).Concat(NpcOpeningHand).Concat(NpcBoard).Concat(HumanBoard))
+        foreach (string id in NpcDeckTop.Concat(HumanDeckTop).Concat(HumanStartOfGame).Concat(NpcStartOfGame).Concat(NpcHand).Concat(HumanHand).Concat(HumanOpeningHand).Concat(NpcOpeningHand).Concat(NpcBoard).Concat(HumanBoard))
             if (EngineCards.FromId(id) == null) return "unknown card " + id;
+        if (HumanCorpses.HasValue && (!game.EnableCorpses || game.Player1.Hero.Card.Class != SabberStoneCore.Enums.CardClass.DEATHKNIGHT))
+            return "humanCorpses needs a Death Knight with Corpses enabled.";
+        if (NpcCorpses.HasValue && (!game.EnableCorpses || game.Player2.Hero.Card.Class != SabberStoneCore.Enums.CardClass.DEATHKNIGHT))
+            return "npcCorpses needs a Death Knight with Corpses enabled.";
         if (HumanOpeningHand.Count > game.Player1.HandZone.Count(c => c.Card.Id != "GAME_005") ||
             NpcOpeningHand.Count > game.Player2.HandZone.Count(c => c.Card.Id != "GAME_005")) return "Opening hand has too few replaceable slots.";
         if (HumanSkin != null && HeroSkinData.All[HumanSkin].BaseHero != game.Player1.Hero.Card.Id) return "humanSkin class mismatch";
         if (NpcSkin != null && HeroSkinData.All[NpcSkin].BaseHero != game.Player2.Hero.Card.Id) return "npcSkin class mismatch";
         if (game.Player2.BoardZone.FreeSpace < NpcBoard.Count || game.Player1.BoardZone.FreeSpace < HumanBoard.Count) return "Board has no room for scenario bodies.";
-        return Fit(game.Player2, "NPC", NpcDeckTop.Count, NpcHand.Count) ?? Fit(game.Player1, "Human", HumanDeckTop.Count, HumanHand.Count);
+        return Fit(game.Player2, "NPC", NpcDeckTop.Count + NpcStartOfGame.Count, NpcHand.Count)
+            ?? Fit(game.Player1, "Human", HumanDeckTop.Count + HumanStartOfGame.Count, HumanHand.Count);
+    }
+
+    // The NPC's next scripted play, or null (queue empty, or the NPC is not at a main-action decision: choices consume nothing).
+    // Only the head step is tried. It is NOT consumed here: NpcPlayProcessed advances the queue once that very play went through, so a
+    // cancelled or replaced decision leaves it queued. The returned task is one of `tasks` (the engine's own legal options).
+    public SabberStoneCore.Tasks.PlayerTasks.PlayerTask NextNpcPlay(EngineGame game, IList<SabberStoneCore.Tasks.PlayerTasks.PlayerTask> tasks, Action<string> log)
+    {
+        if (npcPlayIndex >= NpcPlayNext.Count || game == null) return null;
+        if (!tasks.Any(t => t.PlayerTaskType == SabberStoneCore.Tasks.PlayerTasks.PlayerTaskType.END_TURN)) return null;
+        var step = NpcPlayNext[npcPlayIndex];
+        var task = SelectNpcPlay(game, tasks, step, out string why);
+        if (task != null) { npcPlayPendingSource = task.Source.Id; npcPlayPendingTarget = task.Target?.Id ?? -1; return task; }
+        npcPlayPendingSource = -1;
+        if (npcPlayWarnedTurn != game.Turn)
+        {
+            npcPlayWarnedTurn = game.Turn;
+            try { log?.Invoke("DEBUG_SCENARIO npcPlayNext warning: " + step + " not played yet (stays queued): " + why); } catch (Exception) { }
+        }
+        return null;
+    }
+    private int npcPlayWarnedTurn = -1, npcPlayPendingSource = -1, npcPlayPendingTarget = -1;
+
+    // Called after the NPC processed a task: when it is the play NextNpcPlay offered, that step is done.
+    public void NpcPlayProcessed(SabberStoneCore.Tasks.PlayerTasks.PlayerTask task, Action<string> log)
+    {
+        if (npcPlayPendingSource < 0 || npcPlayIndex >= NpcPlayNext.Count || task == null
+            || task.PlayerTaskType != SabberStoneCore.Tasks.PlayerTasks.PlayerTaskType.PLAY_CARD
+            || task.Source?.Id != npcPlayPendingSource || (task.Target?.Id ?? -1) != npcPlayPendingTarget) return;
+        var step = NpcPlayNext[npcPlayIndex++];
+        npcPlayPendingSource = -1;
+        try { log?.Invoke("DEBUG_SCENARIO npcPlayNext played " + step); } catch (Exception) { }
+    }
+
+    internal static SabberStoneCore.Tasks.PlayerTasks.PlayerTask SelectNpcPlay(EngineGame game, IList<SabberStoneCore.Tasks.PlayerTasks.PlayerTask> tasks, NpcPlay step, out string why)
+    {
+        var plays = tasks.Where(t => t.PlayerTaskType == SabberStoneCore.Tasks.PlayerTasks.PlayerTaskType.PLAY_CARD && t.Source?.Card.Id == step.CardId).ToList();
+        if (plays.Count == 0)
+        {
+            bool inHand = game.Player2.HandZone.Any(c => c.Card.Id == step.CardId);
+            why = inHand ? "no legal play now (mana, full board or no legal target)" : "the card is not in the NPC's hand";
+            return null;
+        }
+        why = null;
+        if (step.Target == null)
+            return plays.OrderBy(t => t.Target != null && t.Target.Id == game.Player1.Hero.Id ? 0 : t.Target != null ? 1 : 2).First();
+        SabberStoneCore.Tasks.PlayerTasks.PlayerTask targeted = null;
+        if (step.Target == "hero" || step.Target == "self")
+        {
+            int id = step.Target == "hero" ? game.Player1.Hero.Id : game.Player2.Hero.Id;
+            targeted = plays.FirstOrDefault(t => t.Target != null && t.Target.Id == id);
+        }
+        else
+            foreach (var minion in step.Target == "enemy" ? game.Player1.BoardZone : game.Player2.BoardZone)
+            {
+                targeted = plays.FirstOrDefault(t => t.Target != null && t.Target.Id == minion.Id);
+                if (targeted != null) break;
+            }
+        if (targeted == null) why = "no legal play at target " + step.Target;
+        return targeted;
     }
 
     // After the normal deal, before either offer is sent/answered. Transform real dealt entities, never the Coin.
@@ -543,6 +734,14 @@ public sealed class DebugScenario
         string problem = Validate(game);
         if (problem != null) throw new InvalidOperationException(problem);
         var applied = new List<string>();
+        void Corpses(EngineController player, int? amount, string name)
+        {
+            if (!amount.HasValue) return;
+            SabberStoneCore.Actions.CorpseRules.Gain(player, amount.Value);
+            applied.Add(name + "=" + amount.Value.ToString(CultureInfo.InvariantCulture));
+        }
+        // Seed before staged summons can add Corpse gain modifiers.
+        Corpses(game.Player1, HumanCorpses, "humanCorpses"); Corpses(game.Player2, NpcCorpses, "npcCorpses");
         // Last in the zone = next drawn, so the listed order is added in reverse.
         void Top(EngineController player, IReadOnlyList<string> ids, string name)
         {
@@ -550,7 +749,17 @@ public sealed class DebugScenario
             for (int i = ids.Count - 1; i >= 0; i--) EngineEntity.FromCard(player, EngineCards.FromId(ids[i]), zone: player.DeckZone);
             applied.Add(name + "=" + string.Join(",", ids) + " (deck " + player.DeckZone.Count + ")");
         }
+        void StartOfGame(EngineController player, IReadOnlyList<string> ids, string name)
+        {
+            foreach (string id in ids)
+            {
+                var source = EngineEntity.FromCard(player, EngineCards.FromId(id), zone: player.DeckZone, zonePos: 0);
+                bool fires = SabberStoneCore.Actions.StartOfGameRules.Stage(source);
+                applied.Add(name + "=" + id + (fires ? " (fires)" : " (not eligible)"));
+            }
+        }
         var humanPlaced = new List<SabberStoneCore.Model.Entities.IPlayable>();
+        var humanBodies = new List<SabberStoneCore.Model.Entities.Minion>();
         void Hand(EngineController player, IReadOnlyList<string> ids, string name)
         {
             if (ids.Count == 0) return;
@@ -572,6 +781,7 @@ public sealed class DebugScenario
                 if (body is SabberStoneCore.Model.Entities.Minion minion)
                 {
                     SabberStoneCore.Actions.Generic.SummonBlock(game, minion, -1, null);
+                    if (player == game.Player1) humanBodies.Add(minion);
                     // Same tag-write path as heroAttack's hero ATK: the Character setters set the printed value and max
                     // health (no damage) and record a TagChange, which the native transport sends in the same history packet
                     // as the summon, before main-begin. In play already, so it is an ordinary public stat change for both seats.
@@ -600,6 +810,7 @@ public sealed class DebugScenario
             applied.Add("humanHandClear=" + dealt.Length);
         }
         Top(game.Player2, NpcDeckTop, "npcDeckTop"); Top(game.Player1, HumanDeckTop, "humanDeckTop");
+        StartOfGame(game.Player1, HumanStartOfGame, "humanStartOfGame"); StartOfGame(game.Player2, NpcStartOfGame, "npcStartOfGame");
         Hand(game.Player2, NpcHand, "npcHand"); Hand(game.Player1, HumanHand, "humanHand");
         foreach (var mod in HumanHandMods)
         {
@@ -639,6 +850,18 @@ public sealed class DebugScenario
             applied.Add("overdraw=" + Overdraw);
         }
         Board(game.Player2, NpcBoard, "npcBoard", NpcBoardStats); Board(game.Player1, HumanBoard, "humanBoard", HumanBoardStats);
+        if (HumanBoardDamage > 0)
+        {
+            // After the stats: a real wound (Damage tag; max Health unchanged), clamped so the minion keeps 1 Health.
+            int wounded = 0;
+            foreach (var body in humanBodies)
+            {
+                if (body.Zone != game.Player1.BoardZone) continue;
+                body.Damage = Math.Min(HumanBoardDamage, body.BaseHealth - 1);
+                if (body.Damage > 0) wounded++;
+            }
+            applied.Add("humanBoardDamage=" + HumanBoardDamage + " (" + wounded + " minions wounded, min 1 Health)");
+        }
         if (NpcSummonStats != null)
         {
             // Registered AFTER the staged boards, so it only affects later summons (never re-stats the boards above).
@@ -657,6 +880,14 @@ public sealed class DebugScenario
             applied.Add("npcSummonStats=" + rule);
         }
         Mana(game.Player2, NpcMana, "npcMana"); Mana(game.Player1, HumanMana, "humanMana");
+        if (HumanHeroPower != null)
+        {
+            // Same task and history path as heroPowerUpgrade below (ReplaceHeroPower: the old power goes to SETASIDE, the new one
+            // becomes the hero's), so an upgrade staged for the human acts on the replaced power.
+            new SabberStoneCore.Tasks.SimpleTasks.ReplaceHeroPower(EngineCards.FromId(HumanHeroPower))
+                .Process(game, game.Player1, game.Player1.Hero, null);
+            applied.Add("humanHeroPower=" + HumanHeroPower + " (hero power " + game.Player1.Hero.HeroPower.Card.Id + ")");
+        }
         foreach (var player in new[] { game.Player1, game.Player2 })
         {
             string seat = player == game.Player1 ? "human" : "npc";
@@ -692,6 +923,12 @@ public sealed class DebugScenario
             }
             applied.Add("heroAttack=" + HeroAttack + "; weapon=" + (AttackWeapon ?? "none")
                 + "; secret=" + (AttackSecret ?? "none") + "; armor=" + AttackArmor + "; lethal=" + AttackLethal);
+        }
+        if (HumanHeroDamage > 0)
+        {
+            // Same tag-write path as attackLethal (a recorded DAMAGE change, max Health untouched).
+            game.Player1.Hero.Damage = Math.Min(HumanHeroDamage, game.Player1.Hero.BaseHealth - 1);
+            applied.Add("humanHeroDamage=" + HumanHeroDamage + " (hero Health " + game.Player1.Hero.Health + ")");
         }
         if (HumanSkin != null) applied.Add("humanSkin=" + HumanSkin);
         if (NpcSkin != null) applied.Add("npcSkin=" + NpcSkin);

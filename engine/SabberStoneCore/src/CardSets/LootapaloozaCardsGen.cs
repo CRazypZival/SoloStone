@@ -197,7 +197,7 @@ namespace SabberStoneCore.CardSets
 			// [LOOT_392] Twig of the World Tree - COST:4 [ATK:1/HP:0]
 			// - Set: lootapalooza, Rarity: legendary
 			// --------------------------------------------------------
-			// Text: <b>Deathrattle:</b> Gain 10 Mana Crystals.
+			// Text: <b>Deathrattle:</b> Refresh your Mana Crystals.
 			// --------------------------------------------------------
 			// GameTag:
 			// - ELITE = 1
@@ -206,8 +206,8 @@ namespace SabberStoneCore.CardSets
 			// --------------------------------------------------------
 			cards.Add("LOOT_392", new CardDef(new Power
 			{
-				DeathrattleTask = new ManaCrystalFullTask(10)
-			}));
+				DeathrattleTask = new SetControllerGameTagTask(GameTag.RESOURCES_USED, 0)
+			}) { Configure = card => card.Text = "<b>Deathrattle:</b> Refresh your Mana Crystals." }); // current retail text; the card file keeps the 38377 base text
 
 		}
 
@@ -1311,7 +1311,7 @@ namespace SabberStoneCore.CardSets
 			{
 				PowerTask = ComplexTask.Create(
 					new IncludeTask(EntityType.ALLMINIONS),
-					new MoveToDeck(EntityType.STACK))
+					new MoveToDeck(EntityType.STACK, opponent: true))
 			}));
 
 			// ----------------------------------------- SPELL - PRIEST
@@ -1687,6 +1687,8 @@ namespace SabberStoneCore.CardSets
 			{
 				Trigger = new Trigger(TriggerType.ATTACK)
 				{
+					// "When a minion attacks": an attacking hero (Druid's Shapeshift) has no neighbors.
+					TriggerSource = TriggerSource.OP_MINIONS,
 					Condition = SelfCondition.IsProposedDefender(CardType.HERO),
 					SingleTask = ComplexTask.Create(
 						new ConditionTask(EntityType.TARGET, SelfCondition.IsBoardCount(1)),
