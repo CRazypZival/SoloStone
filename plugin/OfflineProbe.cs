@@ -265,6 +265,7 @@ public sealed class OfflineProbe : BaseUnityPlugin
         NativeFpsCounter.Initialize(Logger, Config);
         NativeDeckInferenceOption.Initialize(Logger, Config);
         NativePlainCardsOption.Initialize(Logger, Config);
+        NativeOpponentPetsOption.Initialize(Logger, Config);
         NativeLanguageOption.Initialize(Logger, Config);
         // SoloStone Options: the Options plank and the panels holding the controls above.
         NativeOptionsPanels.Initialize(harmony, Logger);

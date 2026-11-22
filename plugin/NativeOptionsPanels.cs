@@ -384,6 +384,8 @@ internal static class NativeOptionsPanels
                 NativeDeckInferenceOption.Attach, NativeDeckInferenceOption.Sync);
             AddCheck(panel, check, 0, "plainCards", PlainCardsSettings.Id, PlainCardsSettings.ObjectName, PlainCardsSettings.Label,
                 NativePlainCardsOption.Attach, NativePlainCardsOption.Sync);
+            AddCheck(panel, check, 0, "opponentPets", NativeOpponentPetsOption.Id, NativeOpponentPetsOption.ObjectName, NativeOpponentPetsOption.Label,
+                NativeOpponentPetsOption.Attach, NativeOpponentPetsOption.Sync);
             if (NativeOptionsPace.Available)
                 AddPlank(panel, reset, 1, "pace", NativeOptionsPaceText.Id, NativeOptionsPaceText.ObjectName, NativeOptionsPace.Attach, NativeOptionsPace.Sync, NativeOptionsPace.Wanted);
             if (NativeLanguageOption.Available)
