@@ -121,6 +121,51 @@ internal static class V16ClassicMigrationTests
         Directory.Delete(path + ".tmp");
         using (var retry = new LocalProfile(path)) check(retry.WildCards(Mixed).SequenceEqual(new[] { "CS2_182" }), "the retry migrates");
         check(Read(path).Version == 16 && original.SequenceEqual(File.ReadAllBytes(path + ".v15.bak")), "the retry kept the backup");
-        Console.WriteLine("PASS V16 Classic migration: reprints granted and swapped, Wild cards flagged, byte-exact backup, idempotent, failures safe");
+        BeatrixReprintCollision(check, root);
+        Console.WriteLine("PASS V16 Classic migration: reprints granted and swapped, Beatrix conflict cleared, Wild cards flagged, byte-exact backup, idempotent, failures safe");
+    }
+
+    private static void BeatrixReprintCollision(Action<bool, string> check, string root)
+    {
+        const string beatrix = "JAIL_397", classic = "NEW1_023", core = "CORE_NEW1_023";
+        string path = Path.Combine(root, "v15-beatrix", "profile.xml");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        long classicInMain, classicInSideboard, distinctPick;
+        using (var profile = new LocalProfile(path))
+        {
+            long SaveDraft(string name, string[] main, string pick)
+            {
+                var draft = profile.CreateDraft(name, "HERO_04");
+                profile.SaveDraft(draft.Id, draft.Name, draft.Hero, main, draft.SortOrder,
+                    new[] { new LocalSideboard { Source = beatrix, Cards = new List<string> { pick } } });
+                return draft.Id;
+            }
+            classicInMain = SaveDraft("Classic in main", new[] { beatrix, classic }, core);
+            classicInSideboard = SaveDraft("Classic in sideboard", new[] { beatrix, core }, classic);
+            distinctPick = SaveDraft("Distinct pick", new[] { beatrix }, classic);
+        }
+        var before = Read(path);
+        before.Version = 15;
+        foreach (var deck in before.CustomDecks) deck.Format = null;
+        before.Collection.Add(new LocalCardCount { Id = classic, Count = 1, Acquired = 1 });
+        Write(path, before);
+        byte[] original = File.ReadAllBytes(path);
+
+        using (var upgraded = new LocalProfile(path))
+        {
+            foreach (long id in new[] { classicInMain, classicInSideboard })
+            {
+                var deck = upgraded.GetDraft(id);
+                check(deck.Cards.SequenceEqual(new[] { beatrix, core }) && deck.Sideboards.Count == 0,
+                    "Beatrix's conflicting slot is cleared and the main deck retains Core Faerie Dragon");
+                check(!upgraded.IsDeckComplete(id), "the draft with the empty Beatrix slot cannot be played");
+            }
+            check(upgraded.GetDraft(distinctPick).Sideboards.Single().Cards.SequenceEqual(new[] { core }),
+                "a non-conflicting Beatrix pick still migrates to its Core reprint");
+            check(upgraded.OwnedCount(classic) == 1 && upgraded.OwnedCount(core) > 0,
+                "the player keeps both Faerie Dragon printings in the collection");
+        }
+        check(Read(path).Version == 16 && original.SequenceEqual(File.ReadAllBytes(path + ".v15.bak")),
+            "the Beatrix save upgrades to V16 and keeps a byte-exact V15 backup");
     }
 }

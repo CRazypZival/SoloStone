@@ -2101,10 +2101,11 @@ public sealed partial class LocalProfile : IDisposable
         return lines;
     }
 
-    // V13-V15 -> V16 (#87), on the loaded data before validation and the backed-up commit. Nothing is deleted:
+    // V13-V15 -> V16 (#87), on the loaded data before validation and the backed-up commit:
     // 1. every owned Classic card with a Core reprint grants that Core card (CoreGrants is monotonic), up to its copies;
     // 2. every saved deck (main and sideboards) moves those cards to the reprint, keeping each slot's premium (the
-    //    premium repair that follows every load drops a version the player does not own);
+    //    premium repair that follows every load drops a version the player does not own). If Beatrix's pick now duplicates
+    //    a main-deck card, clear her slot so the deck can load and the player can pick a replacement;
     // 3. every deck is stamped Standard. A deck that still holds Wild cards loads as it is and is refused at queue time.
     // Collection rows stay, so pending pack reveals, craft receipts and mastery keep validating against them.
     internal static IReadOnlyList<string> MigrateClassicToV16(LocalProfileData profile)
@@ -2114,10 +2115,18 @@ public sealed partial class LocalProfile : IDisposable
         foreach (var deck in profile.CustomDecks ?? new List<LocalCustomDeck>())
         {
             if (deck == null) continue;
+            var beatrix = deck.Sideboards?.FirstOrDefault(board => board?.Source == "JAIL_397");
+            var beatrixPick = beatrix?.CardEntries?.Count == 1 ? beatrix.CardEntries[0] : null;
+            bool hadDistinctBeatrixPick = beatrixPick?.Id != null && deck.Cards?.Contains(beatrixPick.Id) == false;
             int moved = 0;
             foreach (var entry in (deck.CardEntries ?? new List<LocalDeckCard>())
                 .Concat((deck.Sideboards ?? new List<LocalSideboard>()).SelectMany(board => board?.CardEntries ?? new List<LocalDeckCard>())))
                 if (entry != null && entry.Id != null && reprints.TryGetValue(entry.Id, out string core)) { entry.Id = core; moved++; }
+            if (hadDistinctBeatrixPick && deck.Cards.Contains(beatrixPick.Id))
+            {
+                deck.Sideboards.Remove(beatrix);
+                lines.Add("CLASSIC_DECK_MIGRATION_BEATRIX_SLOT_CLEARED id=" + deck.Id + " card=" + beatrixPick.Id);
+            }
             deck.Format = StandardFormat;
             var wild = LocalCardCatalog.NonStandardIds((deck.CardEntries ?? new List<LocalDeckCard>()).Select(entry => entry?.Id)
                 .Concat((deck.Sideboards ?? new List<LocalSideboard>()).SelectMany(board => (board?.CardEntries ?? new List<LocalDeckCard>()).Select(entry => entry?.Id)))
