@@ -97,7 +97,31 @@ internal static partial class Program
                 CheckDeckMoveRows(capture, cursor, victim.Id, name);
                 CheckPlayAdmission(capture, name);
             }
+            CorruptedDreamFullDeck(bot);
         }
         Console.WriteLine("PASS leaving the board for the deck: Llane, Entomb, Corrupted Dream, Typhoon send retail's order on both seats");
+    }
+
+    private static void CorruptedDreamFullDeck(bool bot)
+    {
+        string name = "corrupted-dream-full-deck-" + (bot ? "opponent" : "owner");
+        var (match, capture, caster) = LeaveBoardStart(bot);
+        var owner = caster.Opponent;
+        var victim = LeaveBoardSummon(match, owner, "EX1_096"); // Loot Hoarder's Deathrattle draws a card.
+        while (!owner.DeckZone.IsFull)
+            SabberStoneCore.Model.Entities.Entity.FromCard(owner, Cards.FromId("CS2_231"), zone: owner.DeckZone);
+        var spell = Generic.DrawCard(caster, Cards.FromId("EDR_846t2"));
+        int handCount = owner.HandZone.Count;
+        FlushFieldHistory(match);
+        int cursor = capture.Packets.Count;
+        InvokeProcess(match, caster.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD
+            && t.Source?.Id == spell.Id && t.Target?.Id == victim.Id));
+        FlushFieldHistory(match);
+        Check(victim.Zone == owner.GraveyardZone && owner.GraveyardZone.Contains(victim), name + ": target moved to its graveyard");
+        Check(owner.HandZone.Count == handCount && owner.DeckZone.IsFull, name + ": no Deathrattle draw");
+        Check(!History(capture, cursor).Any(e => e.HasHideEntity && e.HideEntity.Entity == victim.Id
+            && e.HideEntity.Zone == (int)SabberStoneCore.Enums.Zone.DECK), name + ": no deck HIDE on overflow");
+        CheckPlayAdmission(capture, name);
+        Console.WriteLine("PASS " + name);
     }
 }
