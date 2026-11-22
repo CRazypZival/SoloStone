@@ -756,8 +756,15 @@ internal sealed partial class NativeTestControl
         var petFamilies = NpcPetSeats.Families(LocalShop.Default);
         string ForecastPet(MatchPick pick)
         {
-            try { return NpcPets.Resolve(new NpcPetSeat(pick.Encounter.Npc.Id, pick.Encounter.Deck.Id, LadderRules.IndexForRating(pick.Encounter.Npc.HomeRating),
-            NpcPremiums.SeatStarIndex(mode == "casual" ? CasualRules.Mode : "Ranked", pick.Encounter.Rating, profile.Ladder.StarIndex)), petFamilies)?.CardId; }
+            try
+            {
+                var encounter = pick.Encounter;
+                var ladder = profile.Ladder;
+                double shownRating = encounter.Level.DisplayRating(encounter.Rating, ladder.StarIndex, ladder.Rating);
+                int star = NpcPremiums.SeatStarIndex(mode == "casual" ? CasualRules.Mode : "Ranked", shownRating, ladder.StarIndex);
+                return NpcPets.Resolve(new NpcPetSeat(encounter.Npc.Id, encounter.Deck.Id,
+                    LadderRules.IndexForRating(encounter.Npc.HomeRating), star), petFamilies)?.CardId;
+            }
             catch (Exception error) { return "error: " + error.GetType().Name + " " + error.Message; } // as ClientBridge, which shows no pet then
         }
         return new JsonNode {

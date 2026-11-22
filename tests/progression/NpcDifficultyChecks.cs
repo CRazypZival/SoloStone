@@ -87,6 +87,18 @@ internal static class NpcDifficultyChecks
             Check(profile.NpcDifficulty == "hard" && profile.History.Count(m => m.NpcDifficulty == "easy") == 1, "level and stamps reopen");
         }
 
+        // The current main branch upgrades real V15 saves before applying the new difficulty setting.
+        string migrate = Path.Combine(dir, "v15-easy.xml");
+        var v15 = Read(chosen);
+        v15.Version = 15;
+        v15.NpcDifficulty = NpcDifficultyIds.Easy;
+        Write(migrate, v15);
+        using (var profile = new LocalProfile(migrate))
+        {
+            Check(Read(migrate).Version == 16 && profile.NpcDifficulty == NpcDifficultyIds.Easy, "V15 upgrade preserves save difficulty");
+            Check(profile.History.Any(match => match.NpcDifficulty == NpcDifficultyIds.Easy), "V15 upgrade preserves match difficulty");
+        }
+
         // Unknown or locked values in a save are refused, never silently changed.
         foreach (string bad in new[] { "extreme", "nightmare" })
         {

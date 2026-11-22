@@ -14,17 +14,37 @@ internal static class LocalRematch
 
     // The matchmaker request for the player's next ladder match: ladder state and match history only (seam S7).
     internal static MatchRequest Request(LocalProfile profile, IReadOnlyList<LocalMatchRecord> matches, NpcDeckLibrary decks,
-        int depth, NpcLegendField legend)
+        int depth, NpcLegendField legend, double? placementRating = null)
     {
         var ladder = profile.Ladder;
         int? legendNumber = ladder.LegendReached && legend != null ? legend.LegendNumber(ladder.Rating, matches.Count) : (int?)null;
         // The save's NPC difficulty shapes every ladder pick and rematch (NpcDifficulty.cs); Hard is today's matchmaker.
-        return new MatchRequest(profile.NpcProfileSeed, matches.Count, ladder.StarIndex, ladder.Rating, legendNumber,
-            matches.Skip(Math.Max(0, matches.Count - depth)).Select(match => Past(match, decks)), NpcDifficulties.Find(profile.NpcDifficulty));
+        return new MatchRequest(profile.NpcProfileSeed, matches.Count, ladder.StarIndex, placementRating ?? ladder.Rating, legendNumber,
+            matches.Skip(Math.Max(0, matches.Count - depth)).Select(match => Past(match, decks, placementRating.HasValue)),
+            placementRating.HasValue ? null : NpcDifficulties.Find(profile.NpcDifficulty));
     }
 
-    internal static PastEncounter Past(LocalMatchRecord match, NpcDeckLibrary decks) => new PastEncounter(
-        match.NpcId ?? "deck:" + match.Opponent, match.Opponent, decks?.Find(match.Opponent)?.Tags.Archetype, match.Result);
+    internal static PastEncounter Past(LocalMatchRecord match, NpcDeckLibrary decks, bool placement = false)
+    {
+        var reference = placement ? match.PlacementOpponent : null;
+        string deckId = reference?.DeckId ?? match.Opponent;
+        return new PastEncounter(reference?.NpcId ?? match.NpcId ?? "deck:" + deckId, deckId, decks?.Find(deckId)?.Tags.Archetype, match.Result);
+    }
+
+    // Use a parallel Hard draw for placement stars. Its rating and queue history advance independently of matchmaking.
+    // A save that has only played Hard keeps using the original draw for both.
+    internal static LocalPlacementOpponent PlacementOpponent(LocalProfile profile, LadderMatchmaker matchmaker, NpcEncounter encounter, bool rematch)
+    {
+        var ladder = profile.Ladder;
+        if (matchmaker == null || encounter == null || ladder.PlacementGames >= LadderRules.PlacementLength) return null;
+        double? rating = profile.PlacementRating;
+        if (!rating.HasValue && encounter.Difficulty == null) return null;
+        var request = Request(profile, profile.RankedHistory, matchmaker.World.Catalogs.Decks,
+            Math.Max(matchmaker.Rules.HistoryDepth, LadderMatchmaker.MaxRematchSeries), matchmaker.Legend, rating ?? ladder.Rating);
+        var last = rematch ? request.History.LastOrDefault() : null;
+        var reference = (last == null ? null : matchmaker.Rematch(request, last.NpcId, last.DeckId, out _)) ?? matchmaker.Next(request);
+        return new LocalPlacementOpponent { NpcId = reference.Npc.Id, DeckId = reference.Deck.Id, Rating = reference.Rating };
+    }
 
     // The last match's NPC and deck again, for the deck the player used in it. Null with a refusal when there is no offer.
     internal static NpcEncounter Encounter(LocalProfile profile, LadderMatchmaker matchmaker, string selected, out string refusal)

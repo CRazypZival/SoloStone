@@ -44,7 +44,17 @@ public sealed class LocalTierReward {
 public sealed class LocalMilestoneCatchUp {
     public string Id; public List<LocalTierReward> TierRewards = new List<LocalTierReward>(); public bool Acknowledged;
 }
+// The opponent an unshifted ranked queue would have drawn during placement.
+public sealed class LocalPlacementOpponent
+{
+    public string NpcId;
+    public string DeckId;
+    public double Rating;
+}
+
 public sealed class LocalLadderReceipt {
+    public double? PlacementRatingAfter;
+    public bool ShouldSerializePlacementRatingAfter() => PlacementRatingAfter.HasValue;
     public int StarsBefore; public int StarsAfter; public int MultiplierBefore; public int MultiplierAfter;
     public int StreakBefore; public int StreakAfter; public double? RatingBefore; public double? RatingAfter;
     public int StarsGained; public List<string> FloorsReached = new List<string>(); public bool LegendReached; public int LadderRuleVersion;

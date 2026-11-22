@@ -40,9 +40,10 @@ public sealed partial class LocalProfile
     // mode: null = Ranked, CasualRules.Mode = Standard Casual (#37). A Casual match without a world encounter still
     // records its mode, so it never touches the ladder.
     internal LocalMatchRecord BeginLaunch(string deck, string opponent, int seed, NpcEncounter encounter,
-        LocalAchievementPendingContext achievementContext, string mode, System.Action<LocalMatchRecord> launch)
+        LocalAchievementPendingContext achievementContext, string mode, System.Action<LocalMatchRecord> launch,
+        LocalPlacementOpponent placementOpponent = null)
     {
         ArmNpcDifficulty(encounter?.Difficulty);
-        return BeginLaunch(deck, opponent, seed, encounter?.Npc?.Id, encounter?.Deck?.Id, encounter?.Rating, achievementContext, mode, launch);
+        return BeginLaunch(deck, opponent, seed, encounter?.Npc?.Id, encounter?.Deck?.Id, encounter?.Rating, achievementContext, mode, launch, placementOpponent);
     }
 }

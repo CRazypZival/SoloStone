@@ -101,6 +101,7 @@ public sealed class LocalMatchRecord
     // matches and older saves stay byte-identical (no version bump).
     public string NpcDifficulty;
     public bool ShouldSerializeNpcDifficulty() => NpcDifficulty != null;
+    public LocalPlacementOpponent PlacementOpponent;
     // XmlSerializer writes xsi:nil for a null Nullable<T>; *Specified omits the element so older saves stay byte-identical.
     [XmlIgnore] public bool NpcRatingSpecified { get => NpcRating.HasValue; set { } }
     [XmlIgnore] public bool NpcConcededSpecified { get => NpcConceded.HasValue; set { } }
@@ -728,7 +729,7 @@ public sealed partial class LocalProfile : IDisposable
     internal void DisarmDebugScenario() { armedDebugScenario = false; armedFirstPlayer = null; }
 
     private LocalMatchRecord Begin(string deck, string opponent, int seed, string npcId, string npcDeckId, double? npcRating,
-        bool unstarted, LocalAchievementPendingContext achievementContext, string mode)
+        bool unstarted, LocalAchievementPendingContext achievementContext, string mode, LocalPlacementOpponent placementOpponent = null)
     {
         // One-shot: the armed test pacing applies to this Begin only, whether or not it succeeds.
         int? pacing = armedPetPacing; armedPetPacing = null;
@@ -755,6 +756,7 @@ public sealed partial class LocalProfile : IDisposable
             Id = Guid.NewGuid().ToString(), Deck = deck, DeckHero = ResolveDeckHero(deck, data), Opponent = opponent, Seed = seed, FirstPlayer = firstPlayer,
             StartedUtc = DateTime.UtcNow.ToString("o"), RewardVersion = LocalEconomy.RollRewardVersion, GrindTier = GrindTier.Id, RewardFacts = DefaultFacts(), Unstarted = unstarted, DebugScenario = debugScenario,
             NpcId = npcId, NpcDeckId = npcDeckId, NpcRating = npcRating, NpcDifficulty = npcDifficulty, Mode = mode,
+            PlacementOpponent = Copy(placementOpponent),
             Pet = chosenPet, PetXpBefore = chosenPet != null && data.OwnedPets.Contains(LocalShop.Default.PetFamily(chosenPet))
                 ? (int?)PetXp(LocalShop.Default.PetFamily(chosenPet)) : null
         };
@@ -793,10 +795,11 @@ public sealed partial class LocalProfile : IDisposable
         => BeginLaunch(deck, opponent, seed, npcId, npcDeckId, npcRating, achievementContext, null, launch);
 
     internal LocalMatchRecord BeginLaunch(string deck, string opponent, int seed, string npcId, string npcDeckId, double? npcRating,
-        LocalAchievementPendingContext achievementContext, string mode, Action<LocalMatchRecord> launch)
+        LocalAchievementPendingContext achievementContext, string mode, Action<LocalMatchRecord> launch,
+        LocalPlacementOpponent placementOpponent = null)
     {
         if (launch == null) throw new ArgumentNullException(nameof(launch));
-        LocalMatchRecord record = Begin(deck, opponent, seed, npcId, npcDeckId, npcRating, true, achievementContext, mode);
+        LocalMatchRecord record = Begin(deck, opponent, seed, npcId, npcDeckId, npcRating, true, achievementContext, mode, placementOpponent);
         try { launch(record); }
         catch (Exception failure)
         {
@@ -2323,6 +2326,10 @@ public sealed partial class LocalProfile : IDisposable
             || (match.NpcDifficulty != null && (match.NpcId == null || match.NpcDifficulty == NpcDifficultyIds.Hard
                 || !NpcDifficultyIds.IsSelectable(match.NpcDifficulty))))
             throw new InvalidOperationException("Invalid NPC encounter record.");
+        var placement = match.PlacementOpponent;
+        if (placement != null && (placement.NpcId == null || placement.DeckId == null || !ValidNpcFields(placement.NpcId, placement.DeckId, placement.Rating)
+            || match.NpcId == null || match.DebugScenario || CasualRules.IsCasual(match.Mode)))
+            throw new InvalidOperationException("Invalid placement opponent.");
         if (match.RivalGold != 0 && (match.RivalGold != LocalNpcRecord.RivalSettleGold || pending || match.Result != "Won"
             || string.IsNullOrEmpty(match.NpcId)))
             throw new InvalidOperationException("Invalid rivalry reward.");
@@ -2634,7 +2641,7 @@ public sealed partial class LocalProfile : IDisposable
         Pet = match.Pet, PetXpBefore = match.PetXpBefore, PetXpAfter = match.PetXpAfter, PetRules = match.PetRules,
         PetSmall = match.PetSmall, PetMedium = match.PetMedium, PetLarge = match.PetLarge, PetPacingPercent = match.PetPacingPercent,
         NpcId = match.NpcId, NpcDeckId = match.NpcDeckId, NpcRating = match.NpcRating, NpcConceded = match.NpcConceded,
-        NpcDifficulty = match.NpcDifficulty, RivalGold = match.RivalGold,
+        NpcDifficulty = match.NpcDifficulty, PlacementOpponent = Copy(match.PlacementOpponent), RivalGold = match.RivalGold,
         AchievementContext = Copy(match.AchievementContext), AchievementEvidenceFingerprint = match.AchievementEvidenceFingerprint,
         AchievementGrants = match.AchievementGrants?.Select(Copy).ToList(), Mode = match.Mode,
         Casual = match.Casual == null ? null : new LocalCasualReceipt { RatingBefore = match.Casual.RatingBefore,

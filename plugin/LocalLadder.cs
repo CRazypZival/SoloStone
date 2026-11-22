@@ -238,6 +238,8 @@ internal static class LocalLadder
             LocalAchievementPendingContext achievementContext = encounter != null && playtest == null && scenario == null && NativeMatch.SupportsAchievementEvidence
                 ? profile.AchievementContextFor(resolved, personal, encounter.Npc.Id, encounter.Rating,
                     (casual ? CasualAchievementBand(encounter.Rating) : NpcWorld.BandForStarIndex(profile.Ladder.StarIndex)).ToString(), premiumEntries, personal ? profile.GetDraft(long.Parse(selected.Substring(7))).Sideboards : null) : null;
+            var placementOpponent = !casual && playtest == null && scenario == null
+                ? LocalRematch.PlacementOpponent(profile, NpcWorldRuntime.Matchmaker as LadderMatchmaker, encounter, rematch) : null;
             // A launch that throws after Begin clears its unstarted Pending atomically: no ladder change, no trapped save.
             // Test-control lanes only: a one-shot pet XP pacing percent frozen into this match's pending record (PetPacingKnob).
             if (PetPacingKnob.Take(PetPacingKnob.Path, NativeTestControl.DiagnosticsEnabled, PetPacingKnob.RunId, message => Debug.LogWarning(message)) is int pacing)
@@ -261,7 +263,7 @@ internal static class LocalLadder
                 error = null;
                 collectionUi.ClearError();
                 screen = "Starting";
-            });
+            }, placementOpponent);
             } finally { profile.DisarmDebugScenario(); }
         }
         catch (Exception failure)
