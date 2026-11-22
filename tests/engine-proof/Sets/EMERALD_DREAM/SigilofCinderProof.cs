@@ -13,7 +13,7 @@ internal static class SigilofCinderProof
     internal static void Run() => StandardSetsProof.Case("FIR_902", (g, p, id) => {
         p.Opponent.Hero.Armor = 100;
         var power = Summon(p, "CS2_052");
-        Play(g, p, id);
+        SigilOfTheSeasProof.PlayChecked(g, p, id);
         Kill(g, power);
         Core2026Proof.Check(p.Opponent.Hero.Armor == 100, "no immediate damage");
         End(g); Core2026Proof.Check(p.Opponent.Hero.Armor == 100, "opponent start does not trigger");
