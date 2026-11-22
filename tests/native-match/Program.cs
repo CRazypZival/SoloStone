@@ -164,6 +164,7 @@ internal static partial class Program
         if (args.Contains("--npc-pets-only")) { NpcPets_(); return; }
         if (args.Contains("--pet-likes-only")) { PetLikesAndTreats(); return; }
         PlayerTurnTimerTests();
+        LossRewardParticipationNative();
         RewindPresentationTags();
         CoinFlipTests();
         DebugScenarioTests();
@@ -1918,9 +1919,8 @@ internal static partial class Program
             Check(match.Game.State == State.COMPLETE, "pairing did not finish " + human.Id + "/" + bot.Id);
             Check(errors.Count == 0, "Search exceptions in " + human.Id + "/" + bot.Id + ": " + string.Join(";",errors));
             string outcome = match.Game.Player1.PlayState == PlayState.WON ? "Won" : match.Game.Player1.PlayState == PlayState.LOST ? "Lost" : "Tied";
-            // V6: a completed loss/draw pays a rounded third of the same win roll.
-            expectedGold += profile.GrindTier.Gold(LocalEconomy.RewardV6(outcome, match.Game.Turn, false,
-                LocalEconomy.RewardRollSeed(pending.Id, pending.Seed)).Gold);
+            expectedGold += LocalEconomy.RewardV7(outcome, match.Game.Turn, false, new LocalRewardFacts(),
+                LocalEconomy.RewardRollSeed(pending.Id, pending.Seed), profile.GrindTier).Gold;
             if (outcome == "Won") wins++;
             var priorLadder = expectedLadder ?? profile.Ladder;
             expectedLadder = LadderRules.Apply(priorLadder, LadderRules.Outcome(outcome), priorLadder.Rating).After;

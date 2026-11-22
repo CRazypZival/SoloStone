@@ -82,17 +82,18 @@ internal static class LocalLadder
             terminalOutcome = outcome.Result;
             terminalTurns = outcome.Turns;
             conceded = outcome.Conceded;
-            LocalRewardFacts facts = match.RewardFacts;
+            var facts = match.RewardFacts;
+            if (active.RewardVersion != LocalEconomy.ParticipationRewardVersion)
+            {
+                facts.ActiveTurns = 0;
+                facts.PlayMilliseconds = 0;
+            }
             // The match is over: no treat or like can still change the counters.
             terminalPetXp = LocalProfile.ClampPetXp(match.PetXpCounts, active.Pet, out bool petXpClamped);
             if (petXpClamped)
                 try { diagnostic?.Invoke("WARNING LOCAL_PET_XP_CLAMPED match=" + active.Id + " small=" + match.PetXpCounts.Small
                     + " medium=" + match.PetXpCounts.Medium + " large=" + match.PetXpCounts.Large + " (pet XP never blocks settlement)"); } catch { }
-            terminalFacts = new LocalRewardFacts {
-                DistinctCardsPlayed = facts.DistinctCardsPlayed,
-                EnemyMinionsDefeated = facts.EnemyMinionsDefeated,
-                MinimumHealth = facts.MinimumHealth
-            };
+            terminalFacts = facts;
         }
         if (active.DebugScenario)
         {

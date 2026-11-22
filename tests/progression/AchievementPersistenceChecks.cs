@@ -63,8 +63,8 @@ internal static class AchievementPersistenceChecks
             profile.AcknowledgeRewardPresentation(settled.Id);
             var loss = profile.Begin("mage", "priest", 78);
             var lossRoll = LocalEconomy.RewardV6("Lost", 8, false, LocalEconomy.RewardRollSeed(loss.Id, loss.Seed));
-            var lost = profile.Settle(loss.Id, "Lost", 8, false);
-            Check(lost.Gold == profile.GrindTier.Gold(lossRoll.Gold) && lost.DustReward == profile.GrindTier.Dust(lossRoll.Dust), "V5 loss roll");
+            var lost = profile.Settle(loss.Id, "Lost", 8, false, new LocalRewardFacts { ActiveTurns = 5, PlayMilliseconds = 540000 });
+            Check(lost.Gold == profile.GrindTier.Gold(lossRoll.Gold) && lost.DustReward == profile.GrindTier.Dust(lossRoll.Dust), "full loss roll");
             profile.AcknowledgeRewardPresentation(loss.Id);
         }
 

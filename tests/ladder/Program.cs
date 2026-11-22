@@ -69,13 +69,9 @@ static string MatchSignature(LocalMatchRecord match) => string.Join("|", new obj
     match.RewardFacts?.DistinctCardsPlayed, match.RewardFacts?.EnemyMinionsDefeated,
     match.RewardFacts?.MinimumHealth
 });
-// The current (V6, rolled) reward of a match: facts no longer matter, a loss or draw pays a third, the grind tier scales it.
-static LocalReward Rolled(LocalMatchRecord match, string result, int turns = 12)
-{
-    var reward = LocalEconomy.RewardV6(result, turns, false, LocalEconomy.RewardRollSeed(match.Id, match.Seed));
-    var tier = GrindTiers.Find(match.GrindTier);
-    return new LocalReward { Gold = tier.Gold(reward.Gold), BonusGold = reward.BonusGold, PackReward = reward.PackReward, Dust = tier.Dust(reward.Dust) };
-}
+static LocalReward Rolled(LocalMatchRecord match, string result, int turns = 12) =>
+    LocalEconomy.RewardV7(result, turns, false, match.RewardFacts, LocalEconomy.RewardRollSeed(match.Id, match.Seed),
+        GrindTiers.Find(match.GrindTier));
 // A fresh current profile at path holding the given gold (saves on disk are plain XML).
 static void GoldProfile(string path, int gold)
 {
@@ -181,8 +177,8 @@ try
     {
         Check(store.Gold == freshGold && store.Stars == LadderRules.Fresh().Multiplier && store.History.Count == 1, "restart persistence");
         var pending = store.Begin("warrior", "mage", 124);
-        var loss = store.Settle(pending.Id, "Lost", 10, false);
-        var lossReward = Rolled(pending, "Lost", 10);
+        var loss = store.Settle(pending.Id, "Lost", 10, false, new LocalRewardFacts { ActiveTurns = 5, PlayMilliseconds = 540000 });
+        var lossReward = Rolled(loss, "Lost", 10);
         Check(loss.Gold == lossReward.Gold && loss.DustReward == lossReward.Dust && loss.Gold > 0 && !loss.PackReward
             && store.Gold == freshGold + loss.Gold && loss.ClassXpAfter > loss.ClassXpBefore, "a loss pays the rolled third and XP");
         freshGold = store.Gold;
@@ -284,7 +280,7 @@ try
     {
         var pending = store.Begin("mage", "priest", 813);
         rewardReceiptGold = store.Settle(pending.Id, "Lost", 4, false,
-            new LocalRewardFacts { DistinctCardsPlayed = 6, EnemyMinionsDefeated = 0, MinimumHealth = 30 }).Gold;
+            new LocalRewardFacts { DistinctCardsPlayed = 6, ActiveTurns = 4, PlayMilliseconds = 360000 }).Gold;
         rewardReceiptId = pending.Id;
     }
     byte[] pendingRewardBytes = File.ReadAllBytes(pendingRewardRestartPath);
@@ -337,21 +333,21 @@ try
     using (var store = new LocalProfile(rewardsPath))
     {
         var match = store.Begin("mage", "priest", 1);
-        var facts = new LocalRewardFacts { DistinctCardsPlayed = 6, EnemyMinionsDefeated = 4, MinimumHealth = 30 };
+        var facts = new LocalRewardFacts { DistinctCardsPlayed = 6, EnemyMinionsDefeated = 4, ActiveTurns = 4, PlayMilliseconds = 360000 };
         Reject(() => store.Settle(match.Id, "Lost", int.MaxValue, false, facts), "unbounded turn count");
         var reward = store.Settle(match.Id, "Lost", 4, false, facts);
         facts.DistinctCardsPlayed = 0;
-        var lossExpected = Rolled(match, "Lost", 4);
+        var lossExpected = Rolled(reward, "Lost", 4);
         Check(reward.Gold == lossExpected.Gold && reward.DustReward == lossExpected.Dust && reward.Gold > 0 && reward.BonusGold == 0 && !reward.PackReward,
-            "a loss pays only the rolled third");
+            "a loss pays a share of the full loss reward");
         Check(store.Settle(match.Id, "Lost", 4, false,
-            new LocalRewardFacts { DistinctCardsPlayed = 6, EnemyMinionsDefeated = 4, MinimumHealth = 30 }).Gold == reward.Gold,
+            new LocalRewardFacts { DistinctCardsPlayed = 6, EnemyMinionsDefeated = 4, ActiveTurns = 4, PlayMilliseconds = 360000 }).Gold == reward.Gold,
             "identical factual retry");
         Reject(() => store.Settle(match.Id, "Lost", 4, false,
-            new LocalRewardFacts { DistinctCardsPlayed = 5, EnemyMinionsDefeated = 4, MinimumHealth = 30 }), "conflicting reward facts");
+            new LocalRewardFacts { DistinctCardsPlayed = 5, EnemyMinionsDefeated = 4, ActiveTurns = 4, PlayMilliseconds = 360000 }), "conflicting reward facts");
         store.AcknowledgeRewardPresentation(match.Id);
 
-        // Rolled (V6) rewards ignore the facts: neither the enemy-minion nor the great-win facts add bonus gold or a pack.
+        // Rolled wins ignore the legacy reward facts: neither the enemy-minion nor the great-win facts add bonus gold or a pack.
         match = store.Begin("mage", "priest", 2);
         var minionFacts = new LocalRewardFacts { DistinctCardsPlayed = 0, EnemyMinionsDefeated = 5, MinimumHealth = 30 };
         reward = store.Settle(match.Id, "Won", 4, false, minionFacts);
