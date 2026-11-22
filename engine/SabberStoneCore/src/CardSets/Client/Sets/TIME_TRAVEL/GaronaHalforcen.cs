@@ -25,7 +25,8 @@ namespace SabberStoneCore.CardSets.Client.Sets
                 var llane=c.Opponent.HandZone.FirstOrDefault(p=>p.Card.Id=="TIME_875t");
                 if(llane==null) return;
                 c.Opponent.GraveyardZone.Add(c.Opponent.HandZone.Remove(llane));
-                c.Opponent.Hero.Health=Math.Max(0,c.Opponent.Hero.Health/2);
+                // Halve remaining Health: add Damage, never touch max Health, armor or damage triggers.
+                var hero=c.Opponent.Hero; hero.Damage+=hero.Health-hero.Health/2;
             }) };
         }
         [StandardCard("TIME_875t",119815)]
@@ -43,7 +44,7 @@ namespace SabberStoneCore.CardSets.Client.Sets
                 var llane=(Minion)s;
                 if(llane.Zone!=c.BoardZone) return;
                 c.BoardZone.Remove(llane); llane.Reset();
-                Generic.ShuffleIntoDeck(c,s,llane);
+                Generic.ShuffleFromBoardIntoDeck(c,s,llane);
             }) };
         }
         [StandardCard("TIME_875t1",119816)]
