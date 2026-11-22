@@ -24,6 +24,7 @@ internal static class ReprintIdentityProof
             ("RandomSecretPickSkipsOtherPrinting", Unpinned_RandomSecretPickSkipsOtherPrinting),
             ("HighlanderAcrossPrintings", Unpinned_HighlanderAcrossPrintings),
             ("DiscoverNeverOffersTwoPrintings", Unpinned_DiscoverNeverOffersTwoPrintings),
+            ("TriClassDiscoverExhaustedBucket", Unpinned_TriClassDiscoverExhaustedBucket),
             ("SourceExclusion", Unpinned_SourceExclusion),
             ("PlayedHistoryAcrossPrintings", Unpinned_PlayedHistoryAcrossPrintings),
             ("LiteralNamesListEveryPrinting", Unpinned_LiteralNamesListEveryPrinting),
@@ -164,6 +165,21 @@ internal static class ReprintIdentityProof
             var offers = OfflineCardPools.SampleDistinct(g, filter, p.HeroClass, 0);
             Verify(offers.Select(c => c.Identity).Distinct().Count() == offers.Length, "sampled offers are different cards: " + string.Join(",", offers.Select(c => c.Id)));
         }
+    }
+
+    private static void Unpinned_TriClassDiscoverExhaustedBucket()
+    {
+        var first = new[] { Cards.FromId("CORE_EX1_289") };
+        var second = new[] { Cards.FromId("EX1_289") };
+        var third = new[] { Cards.FromId("EX1_287"), Cards.FromId("EX1_295") };
+
+        // Bound the proof so a regression fails instead of hanging the suite.
+        Card[] Offers(Card[] lastBucket) => Task.Run(() => DiscoverTask.GetChoices(new[] { first, second, lastBucket }, 3, new Util.DeepCloneableRandom(1)))
+            .WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+        Verify(Offers(third).SequenceEqual(first.Concat(third)), "an exhausted bucket fills from the remaining distinct cards");
+
+        var shortThird = third.Take(1).ToArray();
+        Verify(Offers(shortThird).SequenceEqual(first.Concat(shortThird)), "an exhausted bucket returns fewer offers when only two identities remain");
     }
 
     // Unpinned_: "never roll the source" also leaves out the source's other printing, for random pools and offline candidate pools.

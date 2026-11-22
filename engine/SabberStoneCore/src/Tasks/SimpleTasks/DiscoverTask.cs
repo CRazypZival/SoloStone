@@ -786,18 +786,20 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 					result = new Card[3];
 					for (int i = 0; i < result.Length; i++)
 					{
+						Card[] bucket = cardsToDiscover[i];
+						if (bucket.All(card => result.Contains(card, sameCard)))
+						{
+							// Reprints can exhaust a bucket even when the combined pool still has enough cards.
+							var remaining = cardsToDiscover.SelectMany(set => set).Except(result, sameCard).ToArray();
+							var fallback = GetChoices(new[] { remaining }, result.Length - i, rnd, byIdentity);
+							return result.Take(i).Concat(fallback).ToArray();
+						}
+
 						Card pick;
-						bool contains;
 						do
 						{
-							// Reset per attempt: a card listed in two of the three class sets (a gang card) used to
-							// make this loop spin forever once it had been drawn twice.
-							contains = false;
-							pick = cardsToDiscover[i][rnd.Next(cardsToDiscover[i].Length)];
-							for (int j = 0; j < i; j++)
-								if (sameCard.Equals(result[j], pick))
-									contains = true;
-						} while (contains);
+							pick = bucket[rnd.Next(bucket.Length)];
+						} while (result.Contains(pick, sameCard));
 
 						result[i] = pick;
 					}
