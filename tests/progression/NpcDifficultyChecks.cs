@@ -87,17 +87,17 @@ internal static class NpcDifficultyChecks
             Check(profile.NpcDifficulty == "hard" && profile.History.Count(m => m.NpcDifficulty == "easy") == 1, "level and stamps reopen");
         }
 
-        foreach (int version in new[] { 15, 16 })
+        foreach (int oldVersion in new[] { 15, 16 })
         {
-            string migrate = Path.Combine(dir, $"v{version}-easy.xml");
+            string migrate = Path.Combine(dir, $"v{oldVersion}-easy.xml");
             var older = Read(chosen);
-            older.Version = version;
+            older.Version = oldVersion;
             older.NpcDifficulty = NpcDifficultyIds.Easy;
             Write(migrate, older);
             using var profile = new LocalProfile(migrate);
             Check(Read(migrate).Version == LocalProfile.SaveVersion && profile.NpcDifficulty == NpcDifficultyIds.Easy,
-                $"V{version} upgrade preserves save difficulty");
-            Check(profile.History.Any(match => match.NpcDifficulty == NpcDifficultyIds.Easy), $"V{version} upgrade preserves match difficulty");
+                $"V{oldVersion} upgrade preserves save difficulty");
+            Check(profile.History.Any(match => match.NpcDifficulty == NpcDifficultyIds.Easy), $"V{oldVersion} upgrade preserves match difficulty");
         }
 
         // Unknown or locked values in a save are refused, never silently changed.
