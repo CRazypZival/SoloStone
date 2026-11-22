@@ -36,14 +36,16 @@ namespace SabberStoneCore.Model.Zones
         }
 
         /// <summary>Capacity is checked before allocation; generated deck identities stay hidden.</summary>
-        public IPlayable AddGenerated(Card card, IEntity creator, int position = -1, bool shuffle = false)
+        public IPlayable AddGenerated(Card card, IEntity creator, int position = -1, bool shuffle = false,
+            bool reveal = false, Action<IPlayable> prepare = null)
         {
             if (IsFull) return null;
-            using var presentation = shuffle && Game.History ? Game.PowerHistory.GeneratedShuffleSource(creator) : null;
+            using var presentation = Game.History ? Game.PowerHistory.GeneratedShuffleSource(creator) : null;
             var entity = Entity.FromCard(Controller, card, new EntityData {
                 [GameTag.ZONE] = (int)Zone.DECK, [GameTag.DISPLAYED_CREATOR] = creator.Id });
-            if (shuffle) Actions.Generic.ShuffleIntoDeck(Controller, creator, entity);
-            else Add(entity, position);
+            prepare?.Invoke(entity);
+            if (shuffle) Actions.Generic.ShuffleIntoDeck(Controller, creator, entity, reveal);
+            else Actions.Generic.InsertIntoDeck(Controller, entity, position, reveal);
             return entity;
         }
 
@@ -110,7 +112,7 @@ namespace SabberStoneCore.Model.Zones
 
 		public void Fill(IReadOnlyCollection<string> excludeIds = null)
 		{
-			IReadOnlyList<Card> cards = Game.FormatType == FormatType.FT_STANDARD ? Controller.Standard : Controller.Wild;
+			IReadOnlyList<Card> cards = Cards.RandomPool(Game, PoolDestination.Deck).ClassAndNeutral(Controller.HeroClass);
 			int cardsToAdd = StartingCards - _count;
 
 			Game.Log(LogLevel.INFO, BlockType.PLAY, "Deck", !Game.Logging ? "" :
@@ -126,7 +128,7 @@ namespace SabberStoneCore.Model.Zones
 					continue;
 
 				// don't add cards that have already reached max occurence in deck.
-				if (this.Count(c => c.Card == card) >= card.MaxAllowedInDeck)
+				if (this.Count(c => c.Card.IsSameCardAs(card)) >= card.MaxAllowedInDeck)
 					continue;
 
 				Controller.DeckCards.Add(card);

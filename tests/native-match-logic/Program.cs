@@ -40,6 +40,7 @@ internal static partial class Program
             ["--fair-view-only"] = FairViewChecks,
             ["--match-event-log-only"] = MatchEventLogChecks,
             ["--controller-admission-only"] = ControllerAdmissionControls,
+            ["--hero-replacement-only"] = HeroReplaceHistoryProof.Run,
         };
         var unknown = args.Where(arg => !slices.ContainsKey(arg)).ToArray();
         if (unknown.Length != 0) throw new ArgumentException("Unknown argument: " + string.Join(" ", unknown));
@@ -52,9 +53,13 @@ internal static partial class Program
     {
         DebugScenarioLanePaths();
         AcceptsHeroCardScenario();
+        DebugScenarioHumanHeroPower();
+        DebugScenarioWounds();
+        DebugScenarioCorpses();
+        DebugScenarioCorpsesQuest();
         DebugScenarioFile();
         DebugScenarioNeverSettles();
-        Console.WriteLine("PASS debug scenario lane paths, hero card scenario, scenario file and never-settles");
+        Console.WriteLine("PASS debug scenario lane paths, hero cards, hero powers, wounds, Corpses, scenario file and never-settles");
     }
 
     private static void FairViewChecks()
@@ -70,6 +75,7 @@ internal static partial class Program
         EventBudgetSeparate();
         EventsCannotCloseJournal();
         Console.WriteLine("PASS match event log: separate event budget, events cannot close the journal");
+        MatchEventLogAuraChecks();
     }
 
     private static void Check(bool condition, string message)
