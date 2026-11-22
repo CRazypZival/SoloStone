@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using SabberStoneCore.Actions;
 using SabberStoneCore.Model;
 using SabberStoneCore.Enums;
 using SabberStoneCore.Tasks.PlayerTasks;
@@ -163,6 +164,17 @@ internal static partial class Program
                 else if (turn == 4)
                     InvokeProcess(match, human.Options().OfType<MinionAttackTask>()
                         .First(task => task.ActionTarget?.Id == game.Player2.Hero.Id));
+                else if (turn == 5)
+                {
+                    var card = Generic.DrawCard(human, Cards.FromId("TIME_038"));
+                    card.Cost = 0;
+                    FlushHistory(match);
+                    InvokeProcess(match, human.Options().OfType<PlayCardTask>().First(task => task.Source?.Id == card.Id));
+                    Check(game.Rewind != null, "the only player move this turn offers a Rewind");
+                    InvokeProcess(match, ChooseTask.Pick(human, game.Rewind.RewindEntityId));
+                    Check(!game.HistoryFacts.Query.PlayerActions().Any(action => action.Turn == game.Turn && action.ControllerId == human.Id),
+                        "the Rewind discards the action fact so the committed attempt must count separately");
+                }
                 else if (turn != 2)
                     InvokeProcess(match, human.Options().OfType<PlayCardTask>().First());
                 if (turn == 1)
