@@ -68,6 +68,20 @@ internal static class PetEventXp
                 check(p.PetXp("PET_3_1") == 40 + 20 + 20 + 180, "the nine-event ceiling is 18 ticks = 180 XP at 20 per event (preset B)");
             }
             using (var p = new LocalProfile(path)) check(p.PetXp("PET_3_1") == 260 && p.History.Count == 8, "event history reopens and revalidates");
+            var eventHistory = Read(path);
+            eventHistory.Version = 15;
+            string v15 = Path.Combine(root, "v15-pet-event-upgrade.xml");
+            Write(v15, eventHistory);
+            byte[] v15Bytes = File.ReadAllBytes(v15);
+            using (var p = new LocalProfile(v15))
+                check(p.PetXp("PET_3_1") == 260 && p.History[0].PetMedium == 4 && p.History[0].PetRules == rule,
+                    "V15 to V16 preserves pet XP and its event receipt");
+            check(Read(v15).Version == 16 && v15Bytes.SequenceEqual(File.ReadAllBytes(v15 + ".v15.bak")),
+                "V15 pet history upgrades with a byte-exact backup");
+            eventHistory.Version = 14;
+            string v14WithEvents = Path.Combine(root, "v14-pet-event-rejected.xml");
+            Write(v14WithEvents, eventHistory);
+            reject(() => { using var p = new LocalProfile(v14WithEvents); }, "V14 still rejects pet event counters");
             // Tampered receipts are rejected on load.
             foreach (var tamper in new (string, Action<LocalProfileData>)[] {
                 ("raised counter", d => d.Matches[0].PetMedium++), ("missing counter", d => d.Matches[0].PetSmall = null),

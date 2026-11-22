@@ -634,7 +634,7 @@ public sealed partial class LocalProfile : IDisposable
                 bool upgrade = fromVersion < CurrentVersion;
                 if (upgrade && (loaded.Matches == null || loaded.Matches.Any(match => match == null)))
                     throw new InvalidOperationException("V" + fromVersion + " profile has an invalid match list.");
-                if (upgrade && (loaded.Matches.Concat(loaded.Pending == null ? Enumerable.Empty<LocalMatchRecord>() : new[] { loaded.Pending })
+                if (fromVersion < 15 && (loaded.Matches.Concat(loaded.Pending == null ? Enumerable.Empty<LocalMatchRecord>() : new[] { loaded.Pending })
                         .Any(match => match.PetSmall.HasValue || match.PetMedium.HasValue || match.PetLarge.HasValue || match.PetPacingPercent.HasValue
                             || match.PetRules != null && (match.PetRules.StartsWith("rule=2;", StringComparison.Ordinal) || match.PetRules.StartsWith("rule=3;", StringComparison.Ordinal)))))
                     throw new InvalidOperationException("V" + fromVersion + " cannot contain pet event counters.");
