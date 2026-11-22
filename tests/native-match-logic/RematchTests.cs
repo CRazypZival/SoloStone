@@ -32,6 +32,7 @@ internal static class RematchTests
             SeriesAndRestart(mm, Path.Combine(root, "series.xml"));
             RankedAccounting(mm, root);
             PlacementStars(mm, root);
+            PlacementFallbackStars(root);
             WeakerNpcRefused(mm, Path.Combine(root, "weak.xml"));
             PersonalDeckEdits(mm, Path.Combine(root, "personal.xml"));
             ResultsScreen(mm, root);
@@ -90,6 +91,35 @@ internal static class RematchTests
             Check(settled.Ladder.OpponentRating == encounter.Rating, "placement must settle actual Elo against the played NPC");
             Check(profile.AcknowledgeRewardPresentation(pending.Id), "placement reward acknowledgement");
             return settled;
+        }
+    }
+
+    private static void PlacementFallbackStars(string root)
+    {
+        string hardPath = Path.Combine(root, "placement-fallback-hard.xml");
+        string easyPath = Path.Combine(root, "placement-fallback-easy.xml");
+        using (var hard = new LocalProfile(hardPath))
+        using (var easy = new LocalProfile(easyPath))
+        {
+            var baseline = hard.Begin(Deck, "priest", 7, "npc.fixture", "priest", 1320);
+            hard.Settle(baseline.Id, "Won", 6, false);
+            hard.AcknowledgeRewardPresentation(baseline.Id);
+            easy.ArmNpcDifficulty(NpcDifficultyIds.Easy);
+            var first = easy.BeginLaunch(Deck, "priest", 7, "npc.fixture", "priest", 1080, null, null,
+                match => easy.MarkStarted(match.Id), new LocalPlacementOpponent { NpcId = "npc.fixture", DeckId = "priest", Rating = 1320 });
+            easy.Settle(first.Id, "Won", 6, false);
+            easy.AcknowledgeRewardPresentation(first.Id);
+        }
+        for (int game = 0; game < 2; game++)
+        {
+            using var hard = new LocalProfile(hardPath);
+            using var easy = new LocalProfile(easyPath);
+            var baseline = Play(hard, null, "priest", 0, "Won");
+            var fallback = Play(easy, null, "priest", 0, "Won");
+            Check(fallback.Ladder.StarsGained == baseline.Ladder.StarsGained
+                && fallback.Ladder.MultiplierAfter == baseline.Ladder.MultiplierAfter, "legacy fallback keeps the same placement stars");
+            Check(fallback.Ladder.RatingAfter != baseline.Ladder.RatingAfter
+                && fallback.Ladder.PlacementRatingAfter == baseline.Ladder.RatingAfter, "legacy fallback keeps actual Elo independent");
         }
     }
 

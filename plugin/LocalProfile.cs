@@ -2327,9 +2327,14 @@ public sealed partial class LocalProfile : IDisposable
                 || !NpcDifficultyIds.IsSelectable(match.NpcDifficulty))))
             throw new InvalidOperationException("Invalid NPC encounter record.");
         var placement = match.PlacementOpponent;
-        if (placement != null && (placement.NpcId == null || placement.DeckId == null || !ValidNpcFields(placement.NpcId, placement.DeckId, placement.Rating)
-            || match.NpcId == null || match.DebugScenario || CasualRules.IsCasual(match.Mode)))
-            throw new InvalidOperationException("Invalid placement opponent.");
+        if (placement != null)
+        {
+            bool unrated = placement.NpcId == null && placement.DeckId == null && !pending && match.NpcRating == null;
+            bool world = placement.NpcId != null && placement.DeckId != null && match.NpcId != null;
+            if ((!unrated && !world) || !ValidNpcFields(placement.NpcId, placement.DeckId, placement.Rating)
+                || match.DebugScenario || CasualRules.IsCasual(match.Mode))
+                throw new InvalidOperationException("Invalid placement opponent.");
+        }
         if (match.RivalGold != 0 && (match.RivalGold != LocalNpcRecord.RivalSettleGold || pending || match.Result != "Won"
             || string.IsNullOrEmpty(match.NpcId)))
             throw new InvalidOperationException("Invalid rivalry reward.");

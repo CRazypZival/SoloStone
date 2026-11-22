@@ -44,7 +44,7 @@ public sealed class LocalTierReward {
 public sealed class LocalMilestoneCatchUp {
     public string Id; public List<LocalTierReward> TierRewards = new List<LocalTierReward>(); public bool Acknowledged;
 }
-// The opponent an unshifted ranked queue would have drawn during placement.
+// The opponent an unshifted queue would draw during placement. An unrated fallback has no identity.
 public sealed class LocalPlacementOpponent
 {
     public string NpcId;

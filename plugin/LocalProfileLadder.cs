@@ -128,8 +128,12 @@ public sealed partial class LocalProfile
     private LocalLadderReceipt SettleLadder(LocalProfileData next, LocalMatchRecord match, string result, double? opponentRating)
     {
         var before = EffectiveLadder(next);
+        double? placementRating = PreviousPlacementRating(next, before);
+        // A legacy opponent has no rating. Each Elo calculation treats it as equally rated to the player.
+        if (opponentRating == null && placementRating.HasValue && match.PlacementOpponent == null)
+            match.PlacementOpponent = new LocalPlacementOpponent { Rating = placementRating.Value };
         var step = LadderRules.Apply(before, LadderRules.Outcome(result), opponentRating ?? before.Rating, GrindTiers.Find(match.GrindTier).Ladder,
-            PreviousPlacementRating(next, before), match.PlacementOpponent?.Rating);
+            placementRating, match.PlacementOpponent?.Rating);
         var after = step.After;
         var state = next.LadderState ?? new LocalLadderState();
         state.StarIndex = after.StarIndex; state.BestStarIndex = after.BestStarIndex; state.Multiplier = after.Multiplier;
@@ -222,10 +226,13 @@ public sealed partial class LocalProfile
                 || double.IsNaN(r.OpponentRating.Value) || double.IsInfinity(r.OpponentRating.Value)
                 || !Same(expected, ReceiptPosition(r, before: true), i == legacy && marker?.MatchCount != i ? RatingTolerance : 0))
                 throw new InvalidOperationException("Invalid ladder receipt.");
-            if (match.PlacementOpponent != null && expected.PlacementGames >= LadderRules.PlacementLength)
+            var placement = match.PlacementOpponent;
+            if (placement != null && expected.PlacementGames >= LadderRules.PlacementLength)
                 throw new InvalidOperationException("Placement opponent outside placement.");
+            if (placement != null && placement.NpcId == null && (placement.Rating != placementRating || r.OpponentRating != r.RatingBefore))
+                throw new InvalidOperationException("Invalid unrated placement opponent.");
             var replay = LadderRules.Apply(ReceiptPosition(r, before: true), LadderRules.Outcome(match.Result), r.OpponentRating.Value,
-                GrindTiers.Find(match.GrindTier).Ladder, placementRating, match.PlacementOpponent?.Rating);
+                GrindTiers.Find(match.GrindTier).Ladder, placementRating, placement?.Rating);
             if (replay.PlacementRatingAfter.HasValue != r.PlacementRatingAfter.HasValue
                 || r.PlacementRatingAfter.HasValue && !(Math.Abs(replay.PlacementRatingAfter.Value - r.PlacementRatingAfter.Value) <= RatingTolerance))
                 throw new InvalidOperationException("Invalid placement rating.");
