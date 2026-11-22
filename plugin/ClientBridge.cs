@@ -491,7 +491,8 @@ internal static class ClientBridge
 #if ENGINE_SOURCE
                 ownedPet = scenario?.NpcPet; // debug scenario npcPet: the NPC owns this pet this match
 #endif
-                if (ownedPet == null) ownedPet = NpcPetSeats.For(record, LocalShop.Default, LocalLadder.Profile?.Ladder.StarIndex ?? 0)?.CardId;
+                if (ownedPet == null) ownedPet = NpcPetSeats.For(record, LocalShop.Default, LocalLadder.Profile?.Ladder.StarIndex ?? 0,
+                    LocalLadder.Profile?.Ladder.Rating ?? 0)?.CardId;
                 match.OpponentPetCard = NativeOpponentPetsOption.Gate(ownedPet);
             }
             catch (Exception error) { match.OpponentPetCard = NativeOpponentPetsOption.Gate(null); log.LogWarning("NPC pet unavailable: " + error.Message); }
@@ -499,7 +500,8 @@ internal static class ClientBridge
             // Casual has no medal, so the player's ladder rank (NpcPremiums.SeatStarIndex).
             if (!string.IsNullOrEmpty(record.NpcId) && record.NpcRating is double npcRating)
                 match.OpponentPremiumSeat = new NpcPremiumSeat(record.NpcId, record.NpcDeckId ?? record.Opponent,
-                    NpcPremiums.SeatStarIndex(record.Mode, npcRating, LocalLadder.Profile?.Ladder.StarIndex ?? 0),
+                    NpcPremiums.SeatStarIndex(record.Mode, NpcPetSeats.ShownRating(record, npcRating, LocalLadder.Profile?.Ladder.StarIndex ?? 0,
+                        LocalLadder.Profile?.Ladder.Rating ?? 0), LocalLadder.Profile?.Ladder.StarIndex ?? 0),
                     NpcWorldRuntime.World?.Find(record.NpcId)?.PersonalityId);
             if (playtest != null)
             {
@@ -633,7 +635,9 @@ internal static class ClientBridge
             return new Dictionary<string, object> {
                 { "npcId", active.Npc?.Id }, { "deckId", active.Deck.Id }, { "skill", active.Skill?.Id },
                 { "skillTier", active.Skill?.Tier }, { "personality", active.Personality?.Id },
-                { "rating", active.Rating }, { "reason", active.Reason }, { "replyPrior", NativeDeckInferenceOption.ThisMatch } };
+                { "rating", active.Rating }, { "reason", active.Reason }, { "replyPrior", NativeDeckInferenceOption.ThisMatch },
+                { "difficulty", active.Difficulty ?? NpcDifficultyIds.Hard }, { "difficultyPosition", active.DifficultyPosition },
+                { "coreDeck", NpcDifficultyShaper.IsCoreDeck(active.Deck) }, { "planNodes", active.Profile?.Budget.PlanNodes } };
         }
         catch (Exception) { return null; }
     }

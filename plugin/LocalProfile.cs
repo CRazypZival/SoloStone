@@ -97,6 +97,11 @@ public sealed class LocalMatchRecord
     public string NpcDeckId;
     public double? NpcRating;   // the encounter's rating; Settle falls back to it when the caller passes none
     public bool? NpcConceded;   // the NPC conceded (player Won); null = not recorded
+    // NPC difficulty the match was played on (NpcDifficultyIds): written only for Easy/Medium world encounters, so Hard
+    // matches and older saves stay byte-identical (no version bump).
+    public string NpcDifficulty;
+    public bool ShouldSerializeNpcDifficulty() => NpcDifficulty != null;
+    public LocalPlacementOpponent PlacementOpponent;
     // XmlSerializer writes xsi:nil for a null Nullable<T>; *Specified omits the element so older saves stay byte-identical.
     [XmlIgnore] public bool NpcRatingSpecified { get => NpcRating.HasValue; set { } }
     [XmlIgnore] public bool NpcConcededSpecified { get => NpcConceded.HasValue; set { } }
@@ -227,6 +232,10 @@ public sealed class LocalProfileData
 {
     public string GrindTier;
     public bool ShouldSerializeGrindTier() => GrindTier != null;
+    // NPC difficulty of this save (NpcDifficultyIds; owner 2026-11-15). Absent = Hard: every save made before the setting
+    // keeps today's NPCs. Optional element, written only once set (no version bump). Applies from the next match.
+    public string NpcDifficulty;
+    public bool ShouldSerializeNpcDifficulty() => NpcDifficulty != null;
     public int Version;
     public List<LocalMasteryGrant> MasteryGrants = new List<LocalMasteryGrant>();
     public bool ShouldSerializeMasteryGrants() => MasteryGrants.Count > 0;
@@ -462,6 +471,19 @@ public sealed partial class LocalProfile : IDisposable
     public GrindTier GrindTier => GrindTiers.Find(data.GrindTier);
     // The file this instance holds the lock on: what "the open save" means to the catalog (ProfileCatalog.IsOpenSave).
     internal string FilePath => path;
+
+    // The save's NPC difficulty id; absent in the save = Hard (NpcDifficultyIds.Default).
+    public string NpcDifficulty => NpcDifficultyIds.Resolve(data.NpcDifficulty);
+
+    // Options > NPC Difficulty and the save page: any selectable level, any time; the next match uses it (a pending or running
+    // match keeps the level it began with). Extreme is locked.
+    public bool SetNpcDifficulty(string id)
+    {
+        if (!NpcDifficultyIds.IsSelectable(id)) throw new ArgumentException("NPC difficulty not selectable: " + id);
+        if (NpcDifficulty == id) return false;   // picking Hard on an old save (no field) leaves its bytes alone
+        var next = Snapshot(); next.NpcDifficulty = id; Commit(next);
+        return true;
+    }
 
     public bool SetGrindTier(string id)
     {
@@ -701,15 +723,21 @@ public sealed partial class LocalProfile : IDisposable
     }
     private bool armedDebugScenario;
     internal void ArmDebugScenario() { armedDebugScenario = true; }
+    // One-shot: the NEXT Begin stamps this NPC difficulty on its world encounter (LocalProfileNpcWorld sets it from the encounter).
+    private string armedNpcDifficulty;
+    internal void ArmNpcDifficulty(string id) { armedNpcDifficulty = id; }
     internal void DisarmDebugScenario() { armedDebugScenario = false; armedFirstPlayer = null; }
 
     private LocalMatchRecord Begin(string deck, string opponent, int seed, string npcId, string npcDeckId, double? npcRating,
-        bool unstarted, LocalAchievementPendingContext achievementContext, string mode)
+        bool unstarted, LocalAchievementPendingContext achievementContext, string mode, LocalPlacementOpponent placementOpponent = null)
     {
         // One-shot: the armed test pacing applies to this Begin only, whether or not it succeeds.
         int? pacing = armedPetPacing; armedPetPacing = null;
         bool debugScenario = armedDebugScenario; armedDebugScenario = false;
         int firstPlayer = armedFirstPlayer ?? StableSeed.MatchFirstPlayer(seed); armedFirstPlayer = null;
+        string npcDifficulty = armedNpcDifficulty; armedNpcDifficulty = null;
+        if (npcDifficulty == NpcDifficultyIds.Hard || npcId == null) npcDifficulty = null;
+        if (npcDifficulty != null && !NpcDifficultyIds.IsSelectable(npcDifficulty)) throw new ArgumentException("Invalid NPC difficulty.");
         if (!ValidNpcFields(npcId, npcDeckId, npcRating)) throw new ArgumentException("Invalid NPC encounter.");
         if (mode != null && !CasualRules.IsCasual(mode)) throw new ArgumentException("Unknown match mode.");
         if (data.Pending != null) throw new InvalidOperationException("A local match is already pending.");
@@ -727,7 +755,8 @@ public sealed partial class LocalProfile : IDisposable
         next.Pending = new LocalMatchRecord {
             Id = Guid.NewGuid().ToString(), Deck = deck, DeckHero = ResolveDeckHero(deck, data), Opponent = opponent, Seed = seed, FirstPlayer = firstPlayer,
             StartedUtc = DateTime.UtcNow.ToString("o"), RewardVersion = LocalEconomy.RollRewardVersion, GrindTier = GrindTier.Id, RewardFacts = DefaultFacts(), Unstarted = unstarted, DebugScenario = debugScenario,
-            NpcId = npcId, NpcDeckId = npcDeckId, NpcRating = npcRating, Mode = mode,
+            NpcId = npcId, NpcDeckId = npcDeckId, NpcRating = npcRating, NpcDifficulty = npcDifficulty, Mode = mode,
+            PlacementOpponent = Copy(placementOpponent),
             Pet = chosenPet, PetXpBefore = chosenPet != null && data.OwnedPets.Contains(LocalShop.Default.PetFamily(chosenPet))
                 ? (int?)PetXp(LocalShop.Default.PetFamily(chosenPet)) : null
         };
@@ -766,10 +795,11 @@ public sealed partial class LocalProfile : IDisposable
         => BeginLaunch(deck, opponent, seed, npcId, npcDeckId, npcRating, achievementContext, null, launch);
 
     internal LocalMatchRecord BeginLaunch(string deck, string opponent, int seed, string npcId, string npcDeckId, double? npcRating,
-        LocalAchievementPendingContext achievementContext, string mode, Action<LocalMatchRecord> launch)
+        LocalAchievementPendingContext achievementContext, string mode, Action<LocalMatchRecord> launch,
+        LocalPlacementOpponent placementOpponent = null)
     {
         if (launch == null) throw new ArgumentNullException(nameof(launch));
-        LocalMatchRecord record = Begin(deck, opponent, seed, npcId, npcDeckId, npcRating, true, achievementContext, mode);
+        LocalMatchRecord record = Begin(deck, opponent, seed, npcId, npcDeckId, npcRating, true, achievementContext, mode, placementOpponent);
         try { launch(record); }
         catch (Exception failure)
         {
@@ -1856,7 +1886,7 @@ public sealed partial class LocalProfile : IDisposable
         } };
 
     private LocalProfileData Snapshot() => new LocalProfileData {
-        Version = CurrentVersion, GrindTier = data.GrindTier,
+        Version = CurrentVersion, GrindTier = data.GrindTier, NpcDifficulty = data.NpcDifficulty,
         MasteryGrants = data.MasteryGrants.Select(LocalCardMastery.Clone).ToList(),
         ClassRewardGrants = data.ClassRewardGrants.Select(Copy).ToList(),
         PortraitGrants = data.PortraitGrants.Select(Copy).ToList(),
@@ -2049,6 +2079,8 @@ public sealed partial class LocalProfile : IDisposable
     private static void ValidateV14(LocalProfileData profile, bool allCosmetics = false, double legendRating = 0, bool allDecks = false)
     {
         GrindTiers.Find(profile?.GrindTier);
+        if (profile?.NpcDifficulty != null && !NpcDifficultyIds.IsSelectable(profile.NpcDifficulty))
+            throw new InvalidOperationException("Invalid NPC difficulty.");
         ValidateV8(profile, allCosmetics, legendRating, allDecks);
         ValidateAchievements(profile);
         if (profile.HiddenLoaners == null || profile.HiddenLoaners.Any(key => !IsStarterLoanerShape(key))
@@ -2290,8 +2322,19 @@ public sealed partial class LocalProfile : IDisposable
                 || !Regex.IsMatch(match.CosmeticCoinCardId, "^[A-Za-z0-9_]{1,64}$")))
             throw new InvalidOperationException("Invalid match coin snapshot.");
         if (!ValidNpcFields(match.NpcId, match.NpcDeckId, match.NpcRating)
-            || (match.NpcConceded == true && (pending || match.Result != "Won" || match.Conceded)) || (pending && match.NpcConceded != null))
+            || (match.NpcConceded == true && (pending || match.Result != "Won" || match.Conceded)) || (pending && match.NpcConceded != null)
+            || (match.NpcDifficulty != null && (match.NpcId == null || match.NpcDifficulty == NpcDifficultyIds.Hard
+                || !NpcDifficultyIds.IsSelectable(match.NpcDifficulty))))
             throw new InvalidOperationException("Invalid NPC encounter record.");
+        var placement = match.PlacementOpponent;
+        if (placement != null)
+        {
+            bool unrated = placement.NpcId == null && placement.DeckId == null && !pending && match.NpcRating == null;
+            bool world = placement.NpcId != null && placement.DeckId != null && match.NpcId != null;
+            if ((!unrated && !world) || !ValidNpcFields(placement.NpcId, placement.DeckId, placement.Rating)
+                || match.DebugScenario || CasualRules.IsCasual(match.Mode))
+                throw new InvalidOperationException("Invalid placement opponent.");
+        }
         if (match.RivalGold != 0 && (match.RivalGold != LocalNpcRecord.RivalSettleGold || pending || match.Result != "Won"
             || string.IsNullOrEmpty(match.NpcId)))
             throw new InvalidOperationException("Invalid rivalry reward.");
@@ -2610,7 +2653,7 @@ public sealed partial class LocalProfile : IDisposable
         Pet = match.Pet, PetXpBefore = match.PetXpBefore, PetXpAfter = match.PetXpAfter, PetRules = match.PetRules,
         PetSmall = match.PetSmall, PetMedium = match.PetMedium, PetLarge = match.PetLarge, PetPacingPercent = match.PetPacingPercent,
         NpcId = match.NpcId, NpcDeckId = match.NpcDeckId, NpcRating = match.NpcRating, NpcConceded = match.NpcConceded,
-        RivalGold = match.RivalGold,
+        NpcDifficulty = match.NpcDifficulty, PlacementOpponent = Copy(match.PlacementOpponent), RivalGold = match.RivalGold,
         AchievementContext = Copy(match.AchievementContext), AchievementEvidenceFingerprint = match.AchievementEvidenceFingerprint,
         AchievementGrants = match.AchievementGrants?.Select(Copy).ToList(), Mode = match.Mode,
         Casual = match.Casual == null ? null : new LocalCasualReceipt { RatingBefore = match.Casual.RatingBefore,
