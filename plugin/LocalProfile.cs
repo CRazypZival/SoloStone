@@ -2315,7 +2315,7 @@ public sealed partial class LocalProfile : IDisposable
         // Rolled rewards exist only in profiles supporting them; V1/V2 keep their exact historical checks.
         bool rolled = LocalEconomy.IsRolled(match.RewardVersion) && profileVersion >= RollRewardProfileVersion;
         if (profileVersion == CurrentVersion && !rolled)
-            throw new InvalidOperationException("Current profiles require V4, V5 or V6 match rewards.");
+            throw new InvalidOperationException("Current profiles require a rolled match reward.");
         if (match.RewardVersion != 1 && match.RewardVersion != 2 && !rolled)
             throw new InvalidOperationException("Invalid reward version.");
         LocalEconomy.ValidateFacts(match.RewardFacts);
@@ -2328,6 +2328,8 @@ public sealed partial class LocalProfile : IDisposable
             return;
         }
         ValidateTerminal(match);
+        if (match.RewardFacts.ActiveTurns > match.Turns)
+            throw new InvalidOperationException("Invalid number of active reward turns.");
         if (match.RewardVersion == 1)
         {
             if (match.Gold != AwardV1(match.Result, match.Turns, match.Conceded) || match.BonusGold != 0 || match.PackReward
@@ -2362,10 +2364,12 @@ public sealed partial class LocalProfile : IDisposable
     {
         if (!LocalEconomy.IsRolled(match.RewardVersion)) return LocalEconomy.Reward(result, turns, conceded, facts);
         int rollSeed = LocalEconomy.RewardRollSeed(match.Id, match.Seed);
+        var tier = GrindTiers.Find(match.GrindTier);
+        if (match.RewardVersion == LocalEconomy.ParticipationRewardVersion)
+            return LocalEconomy.RewardV7(result, turns, conceded, facts, rollSeed, tier);
         var reward = match.RewardVersion == 4 ? LocalEconomy.RewardV4(result, turns, conceded, rollSeed)
             : match.RewardVersion == 5 ? LocalEconomy.RewardV5(result, turns, conceded, rollSeed)
             : LocalEconomy.RewardV6(result, turns, conceded, rollSeed);
-        var tier = GrindTiers.Find(match.GrindTier);
         return new LocalReward { Gold = tier.Gold(reward.Gold), BonusGold = reward.BonusGold, PackReward = reward.PackReward, Dust = tier.Dust(reward.Dust) };
     }
 
@@ -2522,12 +2526,15 @@ public sealed partial class LocalProfile : IDisposable
     private static bool Same(LocalRewardFacts left, LocalRewardFacts right) => left != null && right != null
         && left.DistinctCardsPlayed == right.DistinctCardsPlayed
         && left.EnemyMinionsDefeated == right.EnemyMinionsDefeated
-        && left.MinimumHealth == right.MinimumHealth;
+        && left.MinimumHealth == right.MinimumHealth
+        && left.ActiveTurns == right.ActiveTurns && left.PlayMilliseconds == right.PlayMilliseconds;
 
     private static LocalRewardFacts Copy(LocalRewardFacts facts) => facts == null ? null : new LocalRewardFacts {
         DistinctCardsPlayed = facts.DistinctCardsPlayed,
         EnemyMinionsDefeated = facts.EnemyMinionsDefeated,
-        MinimumHealth = facts.MinimumHealth
+        MinimumHealth = facts.MinimumHealth,
+        ActiveTurns = facts.ActiveTurns,
+        PlayMilliseconds = facts.PlayMilliseconds
     };
 
     private static LocalCraftReceipt Copy(LocalCraftReceipt receipt) => receipt == null ? null : new LocalCraftReceipt {

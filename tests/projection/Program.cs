@@ -1301,6 +1301,13 @@ var shortLoss = LocalRewardPresentation.Summary(new LocalMatchRecord {
 });
 Check(shortLoss.Items.Count == 0 && LocalRewardPresentation.NoItemsText(shortLoss).Contains("before four turns"),
     "V5 short loss retains no-reward card");
+var emptyConcede = LocalRewardPresentation.Summary(new LocalMatchRecord {
+    Id = "empty-concede", Result = "Lost", Conceded = true, Turns = 8, RewardVersion = LocalEconomy.ParticipationRewardVersion,
+    RewardFacts = new LocalRewardFacts { ActiveTurns = 1, PlayMilliseconds = 540000 }
+});
+Check(emptyConcede.Items.Count == 0
+    && LocalRewardPresentation.NoItemsText(emptyConcede) == "Make a move on at least two turns to earn a loss reward.",
+    "V7 no-reward concede explains the participation requirement on the compact card");
 var cosmeticAchievementLoss = LocalRewardPresentation.Summary(new LocalMatchRecord {
     Id = "cosmetic-achievement-loss", Result = "Lost", Conceded = true, Turns = 8, RewardVersion = LocalEconomy.RollRewardVersion,
     RewardFacts = new LocalRewardFacts(), AchievementGrants = new List<LocalAchievementGrantReceipt> {

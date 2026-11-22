@@ -390,6 +390,12 @@ public sealed class NativeMatch
     private readonly HashSet<int> defeatedEnemyMinions = new HashSet<int>();
     private readonly Dictionary<int, int> rewardControllers = new Dictionary<int, int>();
     private int minimumHealth = 30;
+    private long? rewardPlayStartedAt;
+    private int rewardPlayMilliseconds;
+#if ENGINE_SOURCE
+    private HashSet<int> rewardRewindTurns;
+#endif
+    internal Func<long> RewardClock { get; set; } = () => MonotonicMilliseconds;
     private readonly int seed, startingStars;
     private int planningTurn = -1, decisionIndex;
     private readonly System.Diagnostics.Stopwatch turnClock = new System.Diagnostics.Stopwatch();
@@ -602,8 +608,26 @@ public sealed class NativeMatch
     public LocalRewardFacts RewardFacts => new LocalRewardFacts {
         DistinctCardsPlayed = playedCardIds.Count,
         EnemyMinionsDefeated = defeatedEnemyMinions.Count,
-        MinimumHealth = minimumHealth
+        MinimumHealth = minimumHealth,
+        ActiveTurns = ActiveLossRewardTurns(),
+        PlayMilliseconds = rewardPlayMilliseconds
     };
+
+    private int ActiveLossRewardTurns()
+    {
+#if ENGINE_SOURCE
+        if (Game?.State == State.COMPLETE && Game.Player1.PlayState == PlayState.LOST)
+        {
+            int human = Game.Player1.Id;
+            return Game.HistoryFacts.Query.PlayerActions()
+                .Where(action => action.ControllerId == human && action.ActiveControllerId == human)
+                .Select(action => action.Turn).Union(rewardRewindTurns ?? Enumerable.Empty<int>())
+                .Take(LocalEconomy.FullLossActiveTurns).Count();
+        }
+#endif
+        return 0;
+    }
+
     internal static bool SupportsAchievementEvidence => LocalAchievementCollector.SupportsAuthoritativeFacts;
 
     internal LocalAchievementMatchEvidence AchievementEvidence(LocalAchievementPendingContext pending)
@@ -985,6 +1009,7 @@ public sealed class NativeMatch
 #if ENGINE_SOURCE
             ApplyDebugScenario();
 #endif
+            rewardPlayStartedAt = RewardClock();
             Game.MainBegin();
 #if ENGINE_SOURCE
             try
@@ -1738,7 +1763,8 @@ public sealed class NativeMatch
             AnswerDecision(decision.Id, decision.ControllerId, choice.Choices);
             return;
         }
-        if (RewindRules.WouldBegin(Game, task))
+        bool rewindAttempt = RewindRules.WouldBegin(Game, task);
+        if (rewindAttempt)
         {
             var rewindSource = Game.IdEntityDic[SourceId(task)];
             rewindPrivacy = privacyTargets.ToDictionary(pair => pair.Key, pair => new HashSet<int>(pair.Value));
@@ -1808,6 +1834,12 @@ public sealed class NativeMatch
         {
             CopyTransportBridge.Exit();
         }
+#if ENGINE_SOURCE
+        // Rewind can erase the attempt's action fact. Count its committed play block, including a Hero Power.
+        if (rewindAttempt && task.Controller == Game.Player1 && Game.PowerHistory.Last.OfType<PowerHistoryBlockStart>()
+            .Any(block => block.Source == publicSource && NativePetReactions.IsCardPlay(block)))
+            (rewardRewindTurns ??= new HashSet<int>()).Add(publicTurn);
+#endif
         if (task is ConcedeTask)
         {
             humanOptions = null;
@@ -1854,6 +1886,8 @@ public sealed class NativeMatch
 
     private void RecordedAction(string implicitKind = null)
     {
+        if (!resultRecorded && Game.State == State.COMPLETE && Game.Player1.PlayState == PlayState.LOST && rewardPlayStartedAt.HasValue)
+            rewardPlayMilliseconds = (int)Math.Max(0, Math.Min(LocalEconomy.FullLossMilliseconds, RewardClock() - rewardPlayStartedAt.Value));
         publicEventIndex++;
         matchRecorder.PostAction(Game, implicitKind);
         if (Game.State != State.COMPLETE) return;
