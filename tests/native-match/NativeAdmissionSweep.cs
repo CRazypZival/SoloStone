@@ -30,8 +30,33 @@ internal static partial class Program
     {
         StandardBatchLoanerTransport(admissionOnly: true, admissionCard: onlyCard);
         AutomaticAdmissionFixtures(onlyCard);
+        if (onlyCard == null || onlyCard == "EX1_323") LegacyHeroAdmission();
         FinishAdmissionSweep();
         if (onlyCard == null) ChaosStrikeHistory();
+    }
+
+    private static void LegacyHeroAdmission()
+    {
+        foreach (bool npc in new[] { false, true })
+        {
+            var (match, capture) = AnimationMatch(botTurn: npc, deck: NpcCatalog.All[0].DeckId);
+            var owner = match.Game.CurrentPlayer;
+            var card = SabberStoneCore.Actions.Generic.DrawCard(owner, SabberStoneCore.Model.Cards.FromId("EX1_323"));
+            FlushFieldHistory(match);
+            if (npc)
+            {
+                var task = owner.Options().First(option => option.PlayerTaskType == SabberStoneCore.Tasks.PlayerTasks.PlayerTaskType.PLAY_CARD && option.Source?.Id == card.Id);
+                match.ActNpc(new GoldenDecision(BotAction.From(task), 0, 1, 1, "Exhausted", null, null));
+            }
+            else
+            {
+                typeof(NativeMatch).GetMethod("SendHumanOptions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(match, null);
+                var options = capture.Last<AllOptions>(14);
+                match.SendOption(options.Id, options.Options.FindIndex(option => option.MainOption?.Id == card.Id && option.MainOption.PowerKeyword == 0), 0, -1, 1);
+            }
+            Check(owner.Hero.Card.Id == "EX1_323h", "legacy Jaraxxus admission replaces hero");
+            AdmitFixture("hero-replacement", "EX1_323", owner.PlayerId, capture.HistorySnapshots(), match.Game);
+        }
     }
 
     private static void AutomaticAdmissionFixtures(string onlyCard = null)

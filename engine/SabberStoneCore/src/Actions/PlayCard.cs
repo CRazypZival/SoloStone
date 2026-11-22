@@ -13,7 +13,6 @@
 #endregion
 using System;
 using System.Linq;
-using SabberStoneCore.Auras;
 using SabberStoneCore.Model.Events;
 using SabberStoneCore.Model;
 using SabberStoneCore.Enums;
@@ -257,8 +256,7 @@ namespace SabberStoneCore.Actions
 
 
 				Hero oldHero = c.Hero;
-                int overdrawPortal = oldHero[(GameTag)4717];
-                if (overdrawPortal != 0) oldHero[(GameTag)4717] = 0;
+                int[] playerbound = PlayerboundHeroTags.Take(oldHero);
                 if (hero.Card.Class == CardClass.NEUTRAL || hero.Card.Class == CardClass.INVALID) hero[GameTag.CLASS] = (int)c.HeroClass;
 				hero[GameTag.ZONE] = (int)Zone.PLAY;
 				// Native hero plays predict position 0, as spell plays do; retaining the hand slot leaves prediction history unmatched.
@@ -278,26 +276,13 @@ namespace SabberStoneCore.Actions
 				c.SetasideZone.Add(oldHero.HeroPower);
 				hero.HeroPower = (HeroPower) Entity.FromCard(c, Cards.GetHeroPower(hero.Card[GameTag.HERO_POWER]),
                     new EntityData { [GameTag.CREATOR] = hero.Id });
-				hero.HeroPower.Power?.Trigger?.Activate(hero.HeroPower);
+				HeroSwapRules.ActivateHeroPowerTrigger(hero);
 
 				c.Hero = hero;
                 c.HeroId = hero.Id;
-                if (overdrawPortal != 0) hero[(GameTag)4717] = overdrawPortal;
+                PlayerboundHeroTags.Give(hero, playerbound);
                 CorpseRules.CarryPlayerDeathrattle(oldHero, hero);
-                void RebindHeroAura(IAura aura)
-                {
-                    if (aura is MultiAura multiple)
-                        foreach (var child in multiple) RebindHeroAura(child);
-                    if (aura is AdaptiveEffect adaptive) adaptive.RebindHero(oldHero, hero);
-                    if (aura is Aura fixedAura && fixedAura.Type == AuraType.HERO
-                        && fixedAura.Owner.Controller == c)
-                    {
-                        fixedAura.DeApply(oldHero);
-                        fixedAura.EntityAdded(hero);
-                    }
-                }
-                foreach (var aura in game.Auras.ToArray()) RebindHeroAura(aura);
-				hero.Power?.Trigger?.Activate(hero);
+                HeroSwapRules.RebindAuras(c, oldHero, hero);
 
 				// - OnPlay Phase --> OnPlay Trigger (Illidan)
 				//   (death processing, aura updates)
