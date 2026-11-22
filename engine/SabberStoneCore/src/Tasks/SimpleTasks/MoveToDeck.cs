@@ -50,10 +50,14 @@ namespace SabberStoneCore.Tasks.SimpleTasks
 				}
 
 				game.Log(LogLevel.INFO, BlockType.PLAY, "MoveToDeck",
-					!game.Logging ? "" : $"{controller.Name} is taking control of {p} and shuffled into his deck.");
+					!game.Logging ? "" : $"{c.Name} takes control of {p} and shuffles it into their deck.");
 
-				if (fromPlay) Generic.ShuffleFromBoardIntoDeck(c, source, p);
-				else Generic.ShuffleIntoDeck(c, source, p);
+				// Working assumption (departs from wiki Advanced rulebook Z1, which kills a board minion that cannot enter
+				// a full deck where it stands, with its Deathrattle): the card goes to the deck owner's graveyard without
+				// dying (no death event, no Deathrattle), as Typhoon does. It must never be left without a zone.
+				bool shuffled = fromPlay ? Generic.ShuffleFromBoardIntoDeck(c, source, p) : Generic.ShuffleIntoDeck(c, source, p);
+				if (!shuffled)
+					c.GraveyardZone.Add(p);
 			}
 			return TaskState.COMPLETE;
 		}

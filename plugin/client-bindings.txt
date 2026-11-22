@@ -287,6 +287,7 @@ F	Assembly-CSharp	ChoiceCardMgr+ChoiceState	m_waitingToStart	System.Boolean
 F	Assembly-CSharp	CollectionDeck	BrawlLibraryItemId	System.Int32
 F	Assembly-CSharp	CollectionDeck	CardBackID	System.Nullable`1<System.Int32>
 F	Assembly-CSharp	CollectionDeck	CosmeticCoinID	System.Nullable`1<System.Int32>
+F	Assembly-CSharp	CollectionDeck	DefaultMaxDeckNameCharacters	System.Int32
 F	Assembly-CSharp	CollectionDeck	HeroOverridden	System.Boolean
 F	Assembly-CSharp	CollectionDeck	ID	System.Int64
 F	Assembly-CSharp	CollectionDeck	Locked	System.Boolean
@@ -931,6 +932,7 @@ M	Assembly-CSharp	CollectionDeck	GetDisplayHeroCardID	*
 M	Assembly-CSharp	CollectionDeck	GetOrCreateSideboard	SideboardDeck(System.String,TAG_PREMIUM)
 M	Assembly-CSharp	CollectionDeck	GetRuleset	DeckRuleset(System.Nullable`1<PegasusShared.FormatType>)
 M	Assembly-CSharp	CollectionDeck	GetRuneOrder	PegasusShared.RuneType[]()
+M	Assembly-CSharp	CollectionDeck	GetShareableDeck	ShareableDeck()
 M	Assembly-CSharp	CollectionDeck	GetSlots	System.Collections.Generic.List`1<CollectionDeckSlot>()
 M	Assembly-CSharp	CollectionDeck	GetSlotsIncludingSideboards	System.Collections.Generic.IEnumerable`1<CollectionDeckSlot>()
 M	Assembly-CSharp	CollectionDeck	HasClass	System.Boolean(TAG_CLASS)
@@ -1091,6 +1093,7 @@ M	Assembly-CSharp	DeckHelper	HasChoicesToOffer	(CollectionDeck)
 M	Assembly-CSharp	DeckHelper	HasChoicesToOffer	*
 M	Assembly-CSharp	DeckHelper	Hide	System.Void(System.Boolean)
 M	Assembly-CSharp	DeckHelper	Show	System.Void(CollectionDeckSlot,System.Boolean,DeckHelper+DelCompleteCallback)
+M	Assembly-CSharp	DeckOptionsMenu	OnCopyButtonReleased	*
 M	Assembly-CSharp	DeckOptionsMenu	OnDeleteButtonConfirmationResponse	(AlertPopup+Response,System.Object)
 M	Assembly-CSharp	DeckOptionsMenu	OnDeleteButtonConfirmationResponse	*
 M	Assembly-CSharp	DeckOptionsMenu	ShowConvertButton	()
@@ -1226,6 +1229,8 @@ M	Assembly-CSharp	Entity	IsControlledByOpposingSidePlayer	System.Boolean()
 M	Assembly-CSharp	Entity	IsLoadingAssets	System.Boolean()
 M	Assembly-CSharp	EntityBase	GetATK	System.Int32()
 M	Assembly-CSharp	EntityBase	GetCardId	System.String()
+M	Assembly-CSharp	EntityBase	GetCardSet	()
+M	Assembly-CSharp	EntityBase	GetCardSet	*
 M	Assembly-CSharp	EntityBase	GetCardSet	TAG_CARD_SET()
 M	Assembly-CSharp	EntityBase	GetCardType	TAG_CARDTYPE()
 M	Assembly-CSharp	EntityBase	GetClass	TAG_CLASS()
@@ -1242,6 +1247,7 @@ M	Assembly-CSharp	EntityBase	HasReferencedTag	(GAME_TAG)
 M	Assembly-CSharp	EntityBase	HasReferencedTag	*
 M	Assembly-CSharp	EntityBase	HasTag	System.Boolean(GAME_TAG)
 M	Assembly-CSharp	EntityBase	IsHero	System.Boolean()
+M	Assembly-CSharp	EntityBase	IsSecret	System.Boolean()
 M	Assembly-CSharp	EntityDef	GetFlavorText	System.String()
 M	Assembly-CSharp	EntityDef	GetReferencedTag	(System.Int32)
 M	Assembly-CSharp	EntityDef	GetReferencedTag	*
@@ -1333,9 +1339,11 @@ M	Assembly-CSharp	GameState	IsEntityInputEnabled	System.Boolean(Entity)
 M	Assembly-CSharp	GameState	IsFriendlySidePlayerTurn	System.Boolean()
 M	Assembly-CSharp	GameState	IsGameCreating	System.Boolean()
 M	Assembly-CSharp	GameState	IsGameOver	System.Boolean()
+M	Assembly-CSharp	GameState	IsGameOverNowOrPending	System.Boolean()
 M	Assembly-CSharp	GameState	IsGameReseting	System.Boolean()
 M	Assembly-CSharp	GameState	IsInChoiceMode	System.Boolean()
 M	Assembly-CSharp	GameState	IsInSubOptionMode	System.Boolean()
+M	Assembly-CSharp	GameState	IsLocalSidePlayerTurn	System.Boolean()
 M	Assembly-CSharp	GameState	IsMulliganBusy	System.Boolean()
 M	Assembly-CSharp	GameState	IsMulliganManagerActive	System.Boolean()
 M	Assembly-CSharp	GameState	IsMulliganPhase	System.Boolean()
@@ -1343,6 +1351,7 @@ M	Assembly-CSharp	GameState	IsResponsePacketBlocked	System.Boolean()
 M	Assembly-CSharp	GameState	MustWaitForChoices	System.Boolean()
 M	Assembly-CSharp	GameState	SetBusy	System.Void(System.Boolean)
 M	Assembly-CSharp	GameState	WasConcedeRequested	System.Boolean()
+M	Assembly-CSharp	GameState	WasRestartRequested	System.Boolean()
 M	Assembly-CSharp	GameStrings	Format	System.String(System.String,System.Object[])
 M	Assembly-CSharp	GameStrings	Get	System.String(System.String)
 M	Assembly-CSharp	GameUtils	GetAllCollectibleCardIds	*
@@ -1363,11 +1372,22 @@ M	Assembly-CSharp	GameUtils	IsCardCollectible	*
 M	Assembly-CSharp	GameUtils	IsCardGameplayEventActive	(EntityDef)
 M	Assembly-CSharp	GameUtils	IsCardGameplayEventActive	(System.String)
 M	Assembly-CSharp	GameUtils	IsCardGameplayEventActive	*
+M	Assembly-CSharp	GameUtils	IsCardRotated	(EntityDef,System.DateTime)
+M	Assembly-CSharp	GameUtils	IsCardRotated	*
+M	Assembly-CSharp	GameUtils	IsCardValidForFormat	(PegasusShared.FormatType,EntityDef)
+M	Assembly-CSharp	GameUtils	IsCardValidForFormat	*
 M	Assembly-CSharp	GameUtils	IsFakePackOpeningEnabled	*
 M	Assembly-CSharp	GameUtils	IsGameTypeRanked	()
 M	Assembly-CSharp	GameUtils	IsLegacySet	System.Boolean(TAG_CARD_SET)
 M	Assembly-CSharp	GameUtils	IsMatchmadeGameType	System.Boolean(PegasusShared.GameType,System.Nullable`1<System.Int32>)
+M	Assembly-CSharp	GameUtils	IsSetRotated	(TAG_CARD_SET,System.DateTime)
+M	Assembly-CSharp	GameUtils	IsSetRotated	*
 M	Assembly-CSharp	GameUtils	IsSetRotated	System.Boolean(TAG_CARD_SET)
+M	Assembly-CSharp	GameUtils	IsStandardCard	(EntityDef)
+M	Assembly-CSharp	GameUtils	IsStandardCard	*
+M	Assembly-CSharp	GameUtils	IsWildCard	(EntityDef)
+M	Assembly-CSharp	GameUtils	IsWildCard	*
+M	Assembly-CSharp	GameUtils	IsWildCard	System.Boolean(EntityDef)
 M	Assembly-CSharp	GameUtils	ReplayTraditionalTutorial	*
 M	Assembly-CSharp	GameUtils	TranslateCardIdToDbId	System.Int32(System.String,System.Boolean)
 M	Assembly-CSharp	GameUtils	TranslateDbIdToCardId	System.String(System.Int32,System.Boolean)
@@ -1635,6 +1655,7 @@ M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendBlizzardCheckoutPurch
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendBlizzardCheckoutPurchaseCompletedSuccess	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendBlizzardCheckoutPurchaseStart	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendCosmeticsRenderingFallback	*
+M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendDeckCopied	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendFlowPerformance	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendFlowPerformanceShop	*
 M	Assembly-CSharp	HearthstoneTelemetry.TelemetryClient	SendLoadProducts	*
@@ -2123,6 +2144,7 @@ M	Assembly-CSharp	PowerTaskList	GetId	System.Int32()
 M	Assembly-CSharp	PowerTaskList	GetSourceEntity	Entity(System.Boolean)
 M	Assembly-CSharp	PowerTaskList	GetTaskList	System.Collections.Generic.List`1<PowerTask>()
 M	Assembly-CSharp	PowerTaskList	IsComplete	System.Boolean()
+M	Assembly-CSharp	PowerTaskList	IsStartOfBlock	System.Boolean()
 M	Assembly-CSharp	PowerTaskList	OnTaskCompleted	*
 M	Assembly-CSharp	PrefabInstanceLoadTracker	InstantiatePrefab	*
 M	Assembly-CSharp	ProductCatalog	Job_PopulateData	*
@@ -2204,6 +2226,8 @@ M	Assembly-CSharp	SceneMgr	SetNextMode	System.Void(SceneMgr+Mode,SceneMgr+Transi
 M	Assembly-CSharp	SceneMgr	get_LoadingScreen	LoadingScreen()
 M	Assembly-CSharp	ScreenEffectsHandle	StopEffect	System.Void(System.Action)
 M	Assembly-CSharp	SellableDeckProductPage	GetFirstVariantToDisplay	*
+M	Assembly-CSharp	ShareableDeck	ParseDataFromDeckString	*
+M	Assembly-CSharp	ShareableDeck	Serialize	System.String(System.Boolean)
 M	Assembly-CSharp	ShareableDeck	get_DeckContents	PegasusUtil.DeckContents()
 M	Assembly-CSharp	ShareableDeck	get_DeckName	System.String()
 M	Assembly-CSharp	ShareableDeck	get_HeroCardDbId	System.Int32()
@@ -2346,6 +2370,10 @@ M	Assembly-CSharp	TriggerSpellController	ActivateActorTriggerSpell	(System.Int32
 M	Assembly-CSharp	TriggerSpellController	ActivateTriggerSpell	(System.Int32)
 M	Assembly-CSharp	TriggerSpellController	InitEffect	(Card)
 M	Assembly-CSharp	TriggerSpellController	InitTriggerSpell	(CardEffect,Card)
+M	Assembly-CSharp	TurnStartManager	Get	TurnStartManager()
+M	Assembly-CSharp	TurnStartManager	IsListeningForTurnEvents	System.Boolean()
+M	Assembly-CSharp	TurnStartManager	IsTurnStartIndicatorShowing	System.Boolean()
+M	Assembly-CSharp	TurnStartManager	NotifyOfTriggerVisual	System.Void()
 M	Assembly-CSharp	TutorialDeathKnightDeckBuilding	HasSeenTutorial	(GameSaveKeySubkeyId)
 M	Assembly-CSharp	TutorialDeathKnightDeckBuilding	HasSeenTutorial	*
 M	Assembly-CSharp	TutorialDeathKnightDeckBuilding	SetTutorialSeen	(GameSaveKeySubkeyId)
@@ -2674,6 +2702,7 @@ M	UnityEngine.IMGUIModule	UnityEngine.GUIStyle	set_fontSize	System.Void(System.I
 M	UnityEngine.IMGUIModule	UnityEngine.GUIStyle	set_padding	System.Void(UnityEngine.RectOffset)
 M	UnityEngine.IMGUIModule	UnityEngine.GUIStyle	set_wordWrap	System.Void(System.Boolean)
 M	UnityEngine.IMGUIModule	UnityEngine.GUIStyleState	set_textColor	System.Void(UnityEngine.Color)
+M	UnityEngine.IMGUIModule	UnityEngine.GUIUtility	get_systemCopyBuffer	System.String()
 M	UnityEngine.IMGUIModule	UnityEngine.GUIUtility	set_systemCopyBuffer	System.Void(System.String)
 M	UnityEngine.InputLegacyModule	UnityEngine.Input	get_anyKey	System.Boolean()
 M	UnityEngine.InputLegacyModule	UnityEngine.Input	get_mousePosition	UnityEngine.Vector3()
@@ -2807,6 +2836,7 @@ M	blizzard.bgsclient	PegasusGame.PowerHistorySubSpellStart	set_TargetEntityIds	S
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	get_Entity	System.Int32()
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	get_Tag	System.Int32()
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	get_Value	System.Int32()
+M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	set_ChangeDef	System.Void(System.Boolean)
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	set_Entity	System.Void(System.Int32)
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	set_Tag	System.Void(System.Int32)
 M	blizzard.bgsclient	PegasusGame.PowerHistoryTagChange	set_Value	System.Void(System.Int32)
@@ -3393,6 +3423,7 @@ T	Assembly-CSharp	TranslatedMedalInfo
 T	Assembly-CSharp	TraySection		
 T	Assembly-CSharp	TrialCardManager		
 T	Assembly-CSharp	TriggerSpellController		
+T	Assembly-CSharp	TurnStartManager		
 T	Assembly-CSharp	TutorialDeathKnightDeckBuilding		
 T	Assembly-CSharp	TutorialEntity		
 T	Assembly-CSharp	UIBButton		
