@@ -78,10 +78,14 @@ internal static partial class Program
         // Clamp: more damage than Health leaves 1 Health, nothing dies.
         var game2 = PlainEngineGame();
         DebugScenario.Parse("humanBoard=CS2_182,EDR_031\nhumanBoardStats=4,5\nhumanBoardDamage=999").Apply(game2);
-        Check(game2.Player1.BoardZone.OfType<Minion>().All(m => m.Health == 1 && m.Damage == 4 && m.Zone.Type == EngineZone.PLAY), "board damage clamps to 1 Health");
+        var survivors = game2.Player1.BoardZone.OfType<Minion>().ToArray();
+        Check(survivors.Length == 2 && survivors.All(m => m.Health == 1 && m.Damage == 4 && m.Zone.Type == EngineZone.PLAY),
+            "both minions survive the clamp at 1 Health");
         var game3 = PlainEngineGame();
         string one = DebugScenario.Parse("humanBoard=CS2_182,EDR_031\nhumanBoardStats=4,1\nhumanBoardDamage=5").Apply(game3);
-        Check(one.Contains("(0 minions wounded") && game3.Player1.BoardZone.OfType<Minion>().All(m => m.Damage == 0 && m.Health == 1), "1-Health bodies are not wounded and not counted: " + one);
+        var alreadyAtOne = game3.Player1.BoardZone.OfType<Minion>().ToArray();
+        Check(one.Contains("(0 minions wounded") && alreadyAtOne.Length == 2 && alreadyAtOne.All(m => m.Damage == 0 && m.Health == 1),
+            "1-Health bodies are not wounded and not counted: " + one);
     }
 
     private static SabberStoneCore.Model.Game PlainEngineGame()
