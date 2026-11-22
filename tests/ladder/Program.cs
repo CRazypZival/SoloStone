@@ -52,8 +52,7 @@ static void WriteProfile(string path, LocalProfileData profile)
     using var stream = File.Create(path);
     new XmlSerializer(typeof(LocalProfileData)).Serialize(stream, profile);
 }
-// Classic cards are Wild and a new profile no longer owns them (#87). The legacy compatibility editor (LocalCollectionUI)
-// still seeds from the Classic loaner lists, so its fixtures give the profile the old Classic starter collection first.
+// Give legacy editor fixtures the old Classic collection so they can exercise loading an owned Classic loaner.
 static void SeedClassicStarter(string path)
 {
     using (var seed = new LocalProfile(path)) seed.CreateDraft("Seed", "HERO_08");
