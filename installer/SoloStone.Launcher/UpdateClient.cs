@@ -110,7 +110,10 @@ namespace SoloStone
             for(int hops=0;;hops++) {
                 cancel.ThrowIfCancellationRequested();
                 if(!Allowed(url)) throw new InvalidOperationException("Update download tried to use a host SoloStone does not trust.");
-                var reply=http.Get(url,max,sink,cancel);
+                HttpReply reply;
+                try { reply=http.Get(url,max,sink,cancel); }
+                catch(WebException) { cancel.ThrowIfCancellationRequested(); throw; }
+                cancel.ThrowIfCancellationRequested();
                 if(reply.Status==200) return reply;
                 if(reply.Status!=301 && reply.Status!=302 && reply.Status!=303 && reply.Status!=307 && reply.Status!=308)
                     throw new InvalidOperationException("Update server answered "+reply.Status+".");

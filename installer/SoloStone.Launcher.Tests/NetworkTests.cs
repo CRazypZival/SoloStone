@@ -104,6 +104,13 @@ static partial class Program
         Refuses(()=>client.FetchText("absent",100,none),"404 refuses");
         var cancelled=new CancellationTokenSource(); cancelled.Cancel();
         Throws<OperationCanceledException>(()=>client.FetchText("f.json",100,cancelled.Token),"cancel respected");
+        using(var duringRequest=new CancellationTokenSource()) {
+            http.Routes[RawBase+"cancel.json"]=()=>{
+                duringRequest.Cancel();
+                throw new System.Net.WebException("request aborted",System.Net.WebExceptionStatus.RequestCanceled);
+            };
+            Throws<OperationCanceledException>(()=>client.FetchText("cancel.json",100,duringRequest.Token),"aborting a live request reports cancellation");
+        }
         // Download.
         string folder=Path.Combine(temp,"dl"); Directory.CreateDirectory(folder); string zip=Path.Combine(folder,"asset.zip");
         byte[] asset=Utf8("zip bytes");
