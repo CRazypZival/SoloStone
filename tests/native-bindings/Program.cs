@@ -136,7 +136,7 @@ foreach (var contract in new[] {
     ("PresenceMgr", "SetPrevStatus", Array.Empty<string>(), "Boolean")
 }) MethodSignature(gameMetadata, contract.Item1, contract.Item2, contract.Item3, contract.Item4, signatures);
 Console.WriteLine("PASS Arena native message, boot and return contracts");
-// The DRAFT boot watch (plugin/NativeArenaLoad.cs) reads every wait of the scene-loaded coroutines by field name.
+// The DRAFT boot watch (plugin/arena/NativeArenaLoad.cs) reads every wait of the scene-loaded coroutines by field name.
 foreach (var (typeName, fieldName, fieldType) in new[] {
     ("DraftDisplay", "m_confirmButton", "NormalButton"), ("DraftDisplay", "m_heroPower", "Actor"),
     ("DraftDisplay", "m_currentMode", "DraftMode"), ("DraftDisplay", "m_netCacheReady", "Boolean"),

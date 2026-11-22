@@ -1,4 +1,4 @@
-// Isolated client boundaries for the production Arena transport (plugin/NativeArena.cs, extracted by extract_arena.py).
+// Isolated client boundaries for the production Arena transport (plugin/arena/NativeArena.cs, extracted by extract_arena.py).
 // Shared by native-bindings-logic (stub service) and progression (real ArenaService over a temp LocalProfile).
 namespace NativeArenaBoundary
 {
@@ -8,7 +8,7 @@ using PegasusUtil;
 internal static partial class NativeArena
 {
     private static void UpdatePresentation() { }
-    // Production derives this from the pending/last settled match record (plugin/NativeArenaMatch.cs).
+    // Production derives this from the pending/last settled match record (plugin/arena/NativeArenaMatch.cs).
     internal static bool ArenaMatchOwned;
     private static bool OwnsArenaMatch() => ArenaMatchOwned;
     private static void Check(bool ok, string message) { if (!ok) throw new Exception("Arena: " + message); }

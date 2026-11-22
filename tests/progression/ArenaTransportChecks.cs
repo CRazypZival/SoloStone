@@ -3,7 +3,7 @@ namespace NativeArenaBoundary
 using PegasusShared;
 using PegasusUtil;
 
-// The production Arena transport (plugin/NativeArena.cs, extracted) driven over the REAL ArenaService and a temp LocalProfile.
+// The production Arena transport (plugin/arena/NativeArena.cs, extracted) driven over the REAL ArenaService and a temp LocalProfile.
 // The stub-service run lives in native-bindings-logic; this one proves the contract numbering and the money/state rules end to end.
 internal static partial class NativeArena
 {
