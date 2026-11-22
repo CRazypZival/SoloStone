@@ -150,7 +150,7 @@ public sealed class NativeMatch
         (GameTag)1637, // FRENZY: EntityBase.HasFrenzy enables frenzy presentation.
         (GameTag)1719, // TRANSFORMED_FROM_CARD_VISUAL_TYPE: HistoryManager selects transform history visuals.
         (GameTag)1720, // TRADEABLE: EntityBase.IsTradeable enables deck-drop Trade and icon.
-        SabberStoneCore.Actions.QuestRules.QuestlineTag, // QUESTLINE: EntityBase.IsQuestline selects questline UI.
+        (GameTag)1725, // QUESTLINE: EntityBase.IsQuestline selects questline UI.
         (GameTag)1743, // DECK_ACTION_COST: Card.HasEnoughManaToDeckAction gates deck-drop mana.
         (GameTag)1749, // SIGIL: EntityBase.IsSigil and ActorNames select sigil presentation.
         (GameTag)1816, // SHOW_DISCOVER_FROM_DECK: ChoiceCardMgr selects deck Discover presentation.
@@ -3233,6 +3233,7 @@ public sealed class NativeMatch
         int tradeSource = 0;
         bool tradeHidden = false;
 #endif
+#if ENGINE_SOURCE
         // A quest's completion block (TRIGGER with the QUEST or QUESTLINE keyword) is where the client builds its
         // quest-complete animation; it needs the reward the quest names, so the opponent's reward is named inside
         // that block and hidden again at its end.
@@ -3246,8 +3247,10 @@ public sealed class NativeMatch
         }
         int blockDepth = 0, questBlockDepth = 0, questSource = 0, questRewardDbfId = 0;
         var questRewards = new List<int>();
+#endif
         for (int index = 0; index < entries.Count; index++)
         {
+#if ENGINE_SOURCE
             if (entries[index] is PowerHistoryBlockEnd)
             {
                 if (questBlockDepth > 0 && blockDepth == questBlockDepth)
@@ -3270,7 +3273,6 @@ public sealed class NativeMatch
                         ? quest.Card[GameTag.QUEST_REWARD_DATABASE_ID] : 0;
                 }
             }
-#if ENGINE_SOURCE
             identityPosition = index;
 #endif
             AppendCopyCompletions(packet, entries, index);
@@ -3451,6 +3453,7 @@ public sealed class NativeMatch
 #else
             PowerHistoryData native = ToNativeHistory(entry);
 #endif
+#if ENGINE_SOURCE
             if (questBlockDepth > 0 && native != null && (native.HasFullEntity || native.HasShowEntity)
                 && (entry is PowerHistoryFullEntity || entry is PowerHistoryShowEntity))
             {
@@ -3471,6 +3474,7 @@ public sealed class NativeMatch
                     if (!questRewards.Contains(snapshot.Id)) questRewards.Add(snapshot.Id);
                 }
             }
+#endif
             // Keep the pre-PLAY reveal; an identical frozen exit must not reload native identity twice.
             if (IsPublicExitReveal(entries, index))
             {
@@ -5803,7 +5807,13 @@ public sealed class NativeMatch
         {
             if (!entityPremiums.ContainsKey(full.Entity.Id) && CarriesPremium(full.Entity, out string createdId))
                 DeriveCreatedPremium(full.Entity.Id, createdId);
-            return new PowerHistoryData { FullEntity = ToNativeHistoryEntity(full.Entity, currentHealthSnapshot: !full.CarriesMaximumHealth()) };
+#if ENGINE_SOURCE
+            bool currentHealth = !full.CarriesMaximumHealth();
+#else
+            // The legacy engine always stores current Health in FULL_ENTITY.
+            const bool currentHealth = true;
+#endif
+            return new PowerHistoryData { FullEntity = ToNativeHistoryEntity(full.Entity, currentHealthSnapshot: currentHealth) };
         }
         if (entry is PowerHistoryShowEntity show)
             return new PowerHistoryData
