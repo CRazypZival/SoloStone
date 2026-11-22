@@ -61,6 +61,8 @@ if (args.Length == 0)
     TurnTimerOptionChecks.Run();
     FpsCounterOptionChecks.Run();
     DeckInferenceOptionChecks.Run();
+    PlainCardsOptionChecks.Run();
+    OpponentPetsOptionChecks.Run();
     MasteryChecks.Run();
     CurrentV14ProgressionChecks.Run();
     // The gate runs only this no-argument path; keep the save-catalog/cheat checks in it.
@@ -225,7 +227,7 @@ if (args.SequenceEqual(new[] { "--extended" }))
                 Check(profile.ClassXp["HERO_08"] == sample.Item3, "loss/concede/tie XP");
             }
             var draft = profile.CreateDraft("Personal priest", "HERO_09");
-            profile.SaveDraft(draft.Id, draft.Name, draft.Hero, LocalDecks.Get("priest").CardIds, 0);
+            profile.SaveDraft(draft.Id, draft.Name, draft.Hero, StandardDeckFixture.Deck(profile, "HERO_09"), 0);
             var custom = profile.Begin("custom:" + draft.Id, "mage", 1);
             profile.SaveDraft(draft.Id, "Now warrior", "HERO_01", Array.Empty<string>(), 0);
             profile.Settle(custom.Id, "Won", 12, false);
@@ -312,7 +314,7 @@ if (args.SequenceEqual(new[] { "--extended" }))
                 Reject(() => profile.SaveDraft(draft.Id, draft.Name, draft.Hero, new[] { legendary, legendary }, 0), "legendary copy cap");
                 string other = LocalCoreProgression.Unlocks.First(card => card.Hero == "HERO_04").Id;
                 Reject(() => profile.SaveDraft(draft.Id, draft.Name, draft.Hero, new[] { other }, 0), "off-class Core");
-                var deck = LocalDecks.Get("mage").CardIds
+                var deck = StandardDeckFixture.Deck(profile, "HERO_08")
                     .Where(id => LocalCardCatalog.CopyGroup(id) != locked.CopyGroup).Take(28).ToList();
                 deck.AddRange(new[] { locked.Id, locked.Id });
                 profile.SaveDeck("Complete Core", "HERO_08", deck);

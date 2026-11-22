@@ -5,7 +5,13 @@ using System.Linq;
 public sealed class ArenaService : IArenaService
 {
     private readonly LocalProfile profile;
-    public ArenaService(LocalProfile profile) => this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
+    private readonly Func<bool> opponentsAvailable;
+
+    public ArenaService(LocalProfile profile, Func<bool> opponentsAvailable)
+    {
+        this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
+        this.opponentsAvailable = opponentsAvailable ?? throw new ArgumentNullException(nameof(opponentsAvailable));
+    }
 
     public ArenaView View()
     {
@@ -42,6 +48,7 @@ public sealed class ArenaService : IArenaService
         if (profile.ArenaRun != null) return Error("An Arena run is already active.");
         if (profile.Pending != null) return Error("A match is pending.");
         if (profile.HasPendingRewardPresentation || profile.PackRevealPending) return Error("A reward presentation is pending.");
+        if (!opponentsAvailable()) return Error("Arena opponents are unavailable.");
         var rules = DraftRules.Arena();
         if (profile.Gold < rules.EntryGold) return Error("Arena costs " + rules.EntryGold + " gold. You have " + profile.Gold + " gold.");
         return Change(next => {

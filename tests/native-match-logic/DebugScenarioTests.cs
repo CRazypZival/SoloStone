@@ -12,13 +12,99 @@ using EngineZone = SabberStoneCore.Enums.Zone;
 // a hidden transport entity, mana, and the central "a scenario match never settles" gate.
 internal static partial class Program
 {
+    // humanHeroPower=CARDID: parse, canonical, rejection and the applied hero power (ReplaceHeroPower, the heroPowerUpgrade path).
+    private static void DebugScenarioHumanHeroPower()
+    {
+        var staged = DebugScenario.Parse("humanHeroPower=EDR_851p\nhumanMana=5");
+        Check(staged.HumanHeroPower == "EDR_851p", "humanHeroPower parses");
+        string text = staged.Canonical();
+        Check(text == "humanHeroPower=EDR_851p\nhumanMana=5" && DebugScenario.Parse(text).Canonical() == text, "humanHeroPower round-trips: " + text);
+        Check(!DebugScenario.Parse("humanMana=5").Canonical().Contains("humanHeroPower"), "an absent key stays absent");
+        RejectsScenario("humanHeroPower=CS2_182", "a minion is not a hero power", null, "is a MINION");
+        RejectsScenario("humanHeroPower=HERO_08", "a base hero is not a hero power", null, "is a HERO");
+        RejectsScenario("humanHeroPower=NO_SUCH_CARD", "unknown card id", null, "unknown card id");
+        RejectsScenario("humanHeroPower=TB_BaconShop_HP_010", "a Battlegrounds hero power", null, "set 1453");
+        RejectsScenario("humanHeroPower=TBA01_5", "a Tavern Brawl hero power", null, "set 18");
+        RejectsScenario("humanHeroPower=EDR_851p,CS2_034", "a list is not an id");
+        RejectsScenario("humanHeroPower=EDR_851p\nhumanHeroPower=EDR_851p", "duplicate key");
+        RejectsScenario("humanHeroPower=EDR_851p", "no native client definition", id => id != "EDR_851p", "no native client definition");
+        try { DebugScenario.Parse("humanHeroPower=CS2_182"); throw new Exception("minion accepted"); }
+        catch (ArgumentException error) { Check(error.Message.Contains("humanHeroPower") && error.Message.Contains("hero power"), "error names the key: " + error.Message); }
+        var game = new SabberStoneCore.Model.Game(new SabberStoneCore.Config.GameConfig { RandomSeed = 17, StartPlayer = 1, Shuffle = false, SkipMulligan = true,
+            History = true, Logging = false,
+            Player1Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(),
+            Player2Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList() });
+        game.StartGame();
+        int before = game.Player1.Hero.HeroPower.Id, enemy = game.Player2.Hero.HeroPower.Id;
+        string applied = staged.Apply(game);
+        Check(game.Player1.Hero.HeroPower.Card.Id == "EDR_851p" && game.Player1.Hero.HeroPower.Id != before,
+            "the human hero power is the staged card: " + game.Player1.Hero.HeroPower.Card.Id);
+        Check(game.Player2.Hero.HeroPower.Id == enemy, "the NPC hero power is untouched");
+        Check(game.Player1.SetasideZone.Any(e => e.Id == before), "the old hero power left for SETASIDE");
+        Check(applied.Contains("humanHeroPower=EDR_851p"), "outcome detail names it: " + applied);
+    }
+
+    // humanHeroDamage / humanBoardDamage: wound the human side after the board is placed (live-check staging for heal cards).
+    private static void DebugScenarioWounds()
+    {
+        const string board = "humanBoard=CS2_182,EDR_031\nhumanBoardStats=4,10\n";
+        var wounds = DebugScenario.Parse(board + "humanHeroDamage=7\nhumanBoardDamage=3");
+        Check(wounds.HumanHeroDamage == 7 && wounds.HumanBoardDamage == 3, "wound keys parse");
+        string text = wounds.Canonical();
+        Check(text == "humanBoard=CS2_182,EDR_031\nhumanBoardStats=4,10\nhumanBoardDamage=3\nhumanHeroDamage=7" && DebugScenario.Parse(text).Canonical() == text,
+            "wound keys round-trip: " + text);
+        Check(DebugScenario.Parse("humanHeroDamage=1").HumanHeroDamage == 1 && DebugScenario.Parse("humanHeroDamage=29").HumanHeroDamage == 29
+            && DebugScenario.Parse("humanBoard=CS2_182\nhumanBoardDamage=999").HumanBoardDamage == 999, "wound limits accepted");
+        foreach (string bad in new[] { "0", "30", "-1", "+5", "1.5", "a", "5,5", "1e1", "07", "00" })
+            RejectsScenario("humanHeroDamage=" + bad, "hero damage '" + bad + "'");
+        foreach (string bad in new[] { "0", "1000", "-1", "+5", "2.5", "a", "5,5", "0999" })
+            RejectsScenario("humanBoard=CS2_182\nhumanBoardDamage=" + bad, "board damage '" + bad + "'");
+        RejectsScenario("humanBoardDamage=3", "board damage without humanBoard");
+        RejectsScenario("npcBoard=CS2_182\nhumanBoardDamage=3", "board damage needs the human board key");
+        RejectsScenario("humanHeroDamage=3\nhumanHeroDamage=3", "duplicate hero damage");
+        RejectsScenario("humanBoard=CS2_182\nhumanBoardDamage=3\nhumanBoardDamage=3", "duplicate board damage");
+        RejectsScenario("humanHeroDamage=3\nheroAttack=npc\nattackLethal=1", "hero damage with the NPC's lethal attack on the human hero");
+        Check(DebugScenario.Parse("humanHeroDamage=3\nheroAttack=human\nattackLethal=1").HumanHeroDamage == 3, "lethal on the NPC hero may combine");
+        Check(DebugScenario.Parse("humanHeroDamage=3\nheroAttack=npc").HumanHeroDamage == 3, "NPC attack without lethal may combine");
+        try { DebugScenario.Parse("humanBoard=CS2_182\nhumanBoardDamage=1000"); throw new Exception("1000 accepted"); }
+        catch (ArgumentException error) { Check(error.Message.Contains("humanBoardDamage"), "error names the key: " + error.Message); }
+        var game = PlainEngineGame();
+        string applied = wounds.Apply(game);
+        var human = game.Player1.BoardZone.OfType<Minion>().ToList();
+        Check(human.Count == 2 && human.All(m => m.BaseHealth == 10 && m.Damage == 3 && m.Health == 7), "board wounds: max 10, Health 7");
+        Check(game.Player1.Hero.Damage == 7 && game.Player1.Hero.BaseHealth == 30 && game.Player1.Hero.Health == 23, "hero wounded, max unchanged");
+        Check(game.Player2.Hero.Damage == 0, "the NPC hero is untouched");
+        Check(applied.Contains("humanBoardDamage=3") && applied.Contains("humanHeroDamage=7"), "outcome detail names both: " + applied);
+        // Clamp: more damage than Health leaves 1 Health, nothing dies.
+        var game2 = PlainEngineGame();
+        DebugScenario.Parse("humanBoard=CS2_182,EDR_031\nhumanBoardStats=4,5\nhumanBoardDamage=999").Apply(game2);
+        var survivors = game2.Player1.BoardZone.OfType<Minion>().ToArray();
+        Check(survivors.Length == 2 && survivors.All(m => m.Health == 1 && m.Damage == 4 && m.Zone.Type == EngineZone.PLAY),
+            "both minions survive the clamp at 1 Health");
+        var game3 = PlainEngineGame();
+        string one = DebugScenario.Parse("humanBoard=CS2_182,EDR_031\nhumanBoardStats=4,1\nhumanBoardDamage=5").Apply(game3);
+        var alreadyAtOne = game3.Player1.BoardZone.OfType<Minion>().ToArray();
+        Check(one.Contains("(0 minions wounded") && alreadyAtOne.Length == 2 && alreadyAtOne.All(m => m.Damage == 0 && m.Health == 1),
+            "1-Health bodies are not wounded and not counted: " + one);
+    }
+
+    private static SabberStoneCore.Model.Game PlainEngineGame()
+    {
+        var game = new SabberStoneCore.Model.Game(new SabberStoneCore.Config.GameConfig { RandomSeed = 17, StartPlayer = 1, Shuffle = false, SkipMulligan = true,
+            History = true, Logging = false,
+            Player1Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(),
+            Player2Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList() });
+        game.StartGame();
+        return game;
+    }
+
     private static void DebugScenarioLanePaths()
     {
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (int lane = 0; lane <= 3; lane++)
         {
             string root = OfflineGuard.LaneRoot(lane);
-            var launch = OfflineGuard.ResolveLaunch(@"LAB\HSNativeUIProbe", "LAB", root + @"\client\Hearthstone.exe",
+            var launch = OfflineGuard.ResolveHeldLaunch(@"LAB\HSNativeUIProbe", "LAB", root + @"\client\Hearthstone.exe",
                 LabTestPaths.LocalData,
                 new[] { "-hs-native-ui-run", RunA, "-hs-native-ui-lane", lane.ToString() }, false);
             string path = launch.Reports + @"\debug-scenario"; // OfflineProbe startup uses launch.Reports.
@@ -28,10 +114,15 @@ internal static partial class Program
         }
     }
 
-    private static void RejectsScenario(string text, string reason, Func<string, bool> known = null)
+    // `message`, when given, must appear in the rejection so the test proves WHICH check fired.
+    private static void RejectsScenario(string text, string reason, Func<string, bool> known = null, string message = null)
     {
         try { DebugScenario.Parse(text, known); }
-        catch (ArgumentException) { return; }
+        catch (ArgumentException error)
+        {
+            if (message != null && !error.Message.Contains(message)) throw new Exception("scenario rejected for the wrong reason (" + reason + "): " + error.Message);
+            return;
+        }
         throw new Exception("scenario accepted but must be rejected: " + reason);
     }
 
@@ -40,6 +131,79 @@ internal static partial class Program
     {
         var scenario = DebugScenario.Parse("humanHand=CORE_EX1_323\nhumanMana=10\n");
         Check(scenario.HumanHand.SequenceEqual(new[] { "CORE_EX1_323" }), "collectible hero card can be staged in hand");
+    }
+
+    private static Game CorpseScenarioGame(CardClass human = CardClass.DEATHKNIGHT,
+        CardClass npc = CardClass.DEATHKNIGHT, bool enabled = true)
+    {
+        var game = new Game(new SabberStoneCore.Config.GameConfig {
+            RandomSeed = 19, StartPlayer = 1, Shuffle = false, SkipMulligan = true,
+            History = true, Logging = false, EnableCorpses = enabled,
+            Player1HeroClass = human, Player2HeroClass = npc,
+            Player1Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList(),
+            Player2Deck = Enumerable.Repeat(Cards.FromId("CS2_182"), 30).ToList()
+        });
+        game.StartGame();
+        return game;
+    }
+
+    private static void DebugScenarioCorpses()
+    {
+        var scenario = DebugScenario.Parse("humanCorpses=15\nnpcCorpses=7");
+        string canonical = scenario.Canonical();
+        Check(canonical == "humanCorpses=15\nnpcCorpses=7"
+            && DebugScenario.Parse(canonical).Canonical() == canonical, "Corpses canonical replay");
+        Check(DebugScenario.Parse("humanMana=3").HumanCorpses == null, "omitted Corpses stay unset");
+        foreach (string key in new[] { "humanCorpses", "npcCorpses" })
+        {
+            foreach (string bad in new[] { "-1", "+1", "1.5", "ten", "1000", "2147483647", "2147483648", "1,2" })
+                RejectsScenario(key + "=" + bad, key + " invalid count");
+            RejectsScenario(key + "=1\n" + key + "=2", key + " duplicate");
+            Check(DebugScenario.Parse(key + "=999").Canonical() == key + "=999", key + " maximum");
+            foreach (var game in new[] { CorpseScenarioGame(CardClass.MAGE, CardClass.MAGE),
+                CorpseScenarioGame(enabled: false),
+                key == "humanCorpses" ? CorpseScenarioGame(CardClass.MAGE) : CorpseScenarioGame(npc: CardClass.MAGE) })
+            {
+                var invalid = DebugScenario.Parse(key + "=0\nhumanHand=CS2_182");
+                int hand = game.Player1.HandZone.Count;
+                Check(invalid.Validate(game)?.Contains(key) == true, key + " requires enabled DK seat, including zero");
+                try { invalid.Apply(game); throw new Exception("invalid Corpses scenario applied"); }
+                catch (InvalidOperationException) { }
+                Check(game.Player1.HandZone.Count == hand
+                    && SabberStoneCore.Actions.CorpseRules.Available(game.Player1) == 0
+                    && SabberStoneCore.Actions.CorpseRules.Available(game.Player2) == 0, "rejection applies nothing");
+            }
+        }
+        var staged = CorpseScenarioGame();
+        Check(scenario.Validate(staged) == null && scenario.Apply(staged) == "humanCorpses=15; npcCorpses=7", "Corpses applied summary");
+        Check(SabberStoneCore.Actions.CorpseRules.Available(staged.Player1) == 15
+            && SabberStoneCore.Actions.CorpseRules.Available(staged.Player2) == 7, "real Corpses resource seeded per seat");
+        var zero = CorpseScenarioGame();
+        DebugScenario.Parse("humanCorpses=0\nnpcCorpses=0").Apply(zero);
+        Check(SabberStoneCore.Actions.CorpseRules.Available(zero.Player1) == 0
+            && SabberStoneCore.Actions.CorpseRules.Available(zero.Player2) == 0, "zero Corpses accepted");
+        Console.WriteLine("PASS DebugScenarioCorpses: parsing, replay, per-seat resource, zero, invalid counts and DK gating");
+    }
+
+    private static void DebugScenarioCorpsesQuest()
+    {
+        var game = CorpseScenarioGame();
+        var scenario = DebugScenario.Parse("humanCorpses=15\nhumanHand=TLC_433");
+        scenario.Apply(game);
+        var player = game.Player1;
+        player.BaseMana = 10;
+        var quest = (Spell)player.HandZone.Single(card => card.Card.Id == "TLC_433");
+        Check(game.Process(player.Options().First(task => task.Source?.Id == quest.Id)), "play Reanimate the Terror");
+        Check(quest.QuestProgress == 0 && !player.HandZone.Any(card => card.Card.Id == "TLC_433t"), "seeding does not count as spending");
+        Check(SabberStoneCore.Actions.CorpseRules.TrySpend(player, 14) && quest.QuestProgress == 14
+            && player.SecretZone.ModernQuests.Contains(quest)
+            && !player.HandZone.Any(card => card.Card.Id == "TLC_433t"), "quest waits for fifteenth Corpse");
+        Check(SabberStoneCore.Actions.CorpseRules.TrySpend(player, 1)
+            && SabberStoneCore.Actions.CorpseRules.Available(player) == 0
+            && player[GameTag.CORPSES_SPENT_THIS_GAME] == 15, "spend all fifteen staged Corpses");
+        Check(quest.Zone == player.GraveyardZone && !player.SecretZone.ModernQuests.Contains(quest)
+            && player.HandZone.Count(card => card.Card.Id == "TLC_433t") == 1, "quest completes and Tyrax enters hand");
+        Console.WriteLine("PASS DebugScenarioCorpsesQuest: 15 staged Corpses spent completes TLC_433 and puts TLC_433t in hand");
     }
 
     private const string RunA = "0b5e3a7e-2f64-4a43-8c3f-4f8b8d2f9a10", RunB = "1c6f4b8f-3a75-4b54-9d40-5a9c9e3ab021";

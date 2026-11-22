@@ -15,5 +15,6 @@ NativeStringsTests.Run();
 NativeHomeTests.Run();
 NativeArenaBoundary.NativeArena.RunTests();
 StatusRoutineTests.Run();
+TurnBannerHoldTests.Run();
 PluginSourcePins.Run(root);
 Console.WriteLine("PASS native-bindings-logic");

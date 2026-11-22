@@ -41,13 +41,13 @@ internal static class ArenaChecks
         Offers(); Rewards();
         using (var poor = new LocalProfile(Path.Combine(root, "arena-poor.xml"))) {
             Fund(poor, 40);
-            Check(new ArenaService(poor).Begin("poor-1").Error == "Arena costs 150 gold. You have 40 gold.", "refusal names the cost and the gold");
+            Check(new ArenaService(poor, () => true).Begin("poor-1").Error == "Arena costs 150 gold. You have 40 gold.", "refusal names the cost and the gold");
         }
         string path = Path.Combine(root, "arena-run.xml");
         string runId; List<string> offers;
         using (var profile = new LocalProfile(path)) {
             Fund(profile);
-            var service = new ArenaService(profile);
+            var service = new ArenaService(profile, () => true);
             FailsAtomically(profile, path, () => service.Begin("entry-1"));
             Unchanged(profile, path, () => service.Begin(""), "empty request");
             Ok(service.Begin("entry-1")); runId = service.View().RunId;
@@ -65,7 +65,7 @@ internal static class ArenaChecks
         }
         // Reopen is the simulated crash after a successful entry/pick commit but before the caller got its reply.
         using (var profile = new LocalProfile(path)) {
-            var service = new ArenaService(profile);
+            var service = new ArenaService(profile, () => true);
             Ok(service.Begin("entry-1")); Check(profile.Gold == 850 && profile.ArenaRun.RunId == runId, "restart entry not charged twice");
             Check(service.View().Offers.SequenceEqual(offers), "restart exact offer");
             FailsAtomically(profile, path, () => service.Choose(1, 2));
@@ -92,7 +92,7 @@ internal static class ArenaChecks
             FailsAtomically(profile, path, () => service.AcknowledgeReward(runId));
         }
         using (var profile = new LocalProfile(path)) {
-            var service = new ArenaService(profile);
+            var service = new ArenaService(profile, () => true);
             Check(service.View().Phase == ArenaPhase.RewardPending && service.View().Reward.RunId == runId, "reward restart");
             Ok(service.AcknowledgeReward(runId)); Ok(service.AcknowledgeReward(runId));
             Check(service.View().Phase == ArenaPhase.None && profile.FeatsSnapshot().ArenaReceipts.Count == 1, "ack keeps receipt");
@@ -122,7 +122,7 @@ internal static class ArenaChecks
         var activeIds = new HashSet<string>(LocalCardCatalog.ActivePoolIds(), StringComparer.Ordinal);
         // Arena uses the Ranked pool: every card it can offer is one a player may put in a current Standard deck.
         Console.WriteLine("ARENA pool size " + rules.Pool.Count + " (ActivePoolIds " + activeIds.Count + ")");
-        Check(rules.Pool.Count > 0 && rules.Pool.All(LocalCardCatalog.IsStandardLegal), "pool is only Standard-legal cards");
+        Check(rules.Pool.Count > 0 && rules.Pool.All(LocalCardCatalog.IsStandard), "pool is only Standard-legal cards");
         Check(!rules.Pool.Any(card => card.Id == "GIL_213" || card.Id == "CFM_305"), "Wild pack-pool cards are not in the pool");
         // A pool change can leave a rarity bucket under three cards: offers fall back deterministically instead of failing the pick.
         var tiny = DraftRules.WithPool(Cards.All.Where(c => c.Collectible && c.Rarity == Rarity.COMMON && c.Class == CardClass.NEUTRAL).Take(5));
@@ -140,7 +140,7 @@ internal static class ArenaChecks
         foreach (string hero in rules.Heroes)
             for (int seed = 0; seed < 60; seed++)
                 foreach (string id in rules.Offers(seed * 7919L + 13, 1, hero, new string[0]))
-                    Check(LocalCardCatalog.IsStandardLegal(Cards.FromId(id)) && id != "GIL_213" && id != "CFM_305", "offered card outside the Ranked pool: " + id);
+                    Check(LocalCardCatalog.IsStandard(Cards.FromId(id)) && id != "GIL_213" && id != "CFM_305", "offered card outside the Ranked pool: " + id);
         foreach (var card in Cards.All.Where(card => SabberStoneCore.Actions.FabledRules.IsFabled(card.Id)
             || SabberStoneCore.Actions.FabledRules.IsCompanion(card.Id) || SabberStoneCore.Actions.DeckbuildingRules.HasSideboard(card.Id)
             || card[(GameTag)2931] > 0 || card[(GameTag)997] > 0 || card[(GameTag)1048] > 0))
@@ -234,7 +234,7 @@ internal static class ArenaChecks
     {
         string path = Path.Combine(root, "arena-gates.xml");
         using var profile = new LocalProfile(path);
-        Fund(profile, 149); var service = new ArenaService(profile);
+        Fund(profile, 149); var service = new ArenaService(profile, () => true);
         Unchanged(profile, path, () => service.Begin("poor"), "under 150");
         Fund(profile, 150); Ok(service.Begin("exact")); Check(profile.Gold == 0, "exact 150 entry");
         Ok(service.Retire()); Ok(service.AcknowledgeReward(service.View().RunId)); Fund(profile);
@@ -245,7 +245,7 @@ internal static class ArenaChecks
         foreach (var tier in GrindTiers.Selectable) {
             using var paced = new LocalProfile(Path.Combine(root, "arena-pace-" + tier.Id + ".xml"), new ProfileOptions { GrindTier = tier.Id });
             Fund(paced); paced.SetGrindTier(tier.Id);
-            var arena = new ArenaService(paced); Ok(arena.Begin("pace"));
+            var arena = new ArenaService(paced, () => true); Ok(arena.Begin("pace"));
             Check(paced.Gold == 850 && paced.ArenaRun.GrindTier == tier.Id, "flat entry and stamped pace " + tier.Id);
             Draft(arena); paced.CommitChange(next => { next.ArenaRun.Wins = 5; return true; });
             paced.SetGrindTier(tier == GrindTiers.Retail ? GrindTiers.Relaxed6x.Id : GrindTiers.Retail.Id);
@@ -259,7 +259,7 @@ internal static class ArenaChecks
     {
         string path = Path.Combine(root, "arena-settlement.xml");
         using var profile = new LocalProfile(path); Fund(profile, 10000);
-        var service = new ArenaService(profile); Ok(service.Begin("settle")); Draft(service);
+        var service = new ArenaService(profile, () => true); Ok(service.Begin("settle")); Draft(service);
         var initial = profile.ArenaRun;
         var rules = DraftRules.Arena(); string pack = FairPackRules.NewestSet;
         foreach (string result in new[] { "Lost", "Conceded", "Abandoned" })
@@ -307,7 +307,7 @@ internal static class ArenaChecks
             Check(profile.ArenaRun == null, "current profile starts without a run");
             profile.CommitChange(next => true);
             Check(old.SequenceEqual(File.ReadAllBytes(path)), "current profile no-op commit byte identical");
-            var service = new ArenaService(profile); Ok(service.Begin("tamper")); Ok(service.Choose(0, 0)); Ok(service.Choose(1, 0));
+            var service = new ArenaService(profile, () => true); Ok(service.Begin("tamper")); Ok(service.Choose(0, 0)); Ok(service.Choose(1, 0));
         }
         var valid = Read(path);
         foreach (Action<LocalProfileData> mutate in new Action<LocalProfileData>[] {
@@ -326,18 +326,25 @@ internal static class ArenaChecks
     private static void SaveVersion(string root)
     {
         string path = Path.Combine(root, "arena-v15-upgrade.xml");
+        long draftId;
         using (var profile = new LocalProfile(path)) {
             Fund(profile);
             Check(Read(path).Version == LocalProfile.SaveVersion, "fresh profiles write the current version");
-            var service = new ArenaService(profile);
+            draftId = profile.CreateDraft("Classic Mage", "HERO_08").Id;
+            var service = new ArenaService(profile, () => true);
             Ok(service.Begin("v15-upgrade")); Ok(service.Choose(0, 1));
             Ok(service.Choose(1, 2)); Ok(service.Choose(2, 0));
         }
-        var before = Read(path).ArenaRun;
-        Check(before.Phase == ArenaPhase.Drafting && before.Picks.Count == 2 && Read(path).Version > 15,
-            "any save holding Arena data must exceed V15, the last schema 0.2.x opens, so its preflight returns save-incompatible");
-        string currentXml = File.ReadAllText(path);
-        File.WriteAllText(path, currentXml.Replace("<Version>" + LocalProfile.SaveVersion + "</Version>", "<Version>15</Version>"));
+        var legacy = Read(path);
+        var before = legacy.ArenaRun;
+        Check(before.Phase == ArenaPhase.Drafting && before.Picks.Count == 2 && legacy.Version == LocalProfile.SaveVersion,
+            "new Arena run uses the current schema");
+        legacy.Version = 15;
+        legacy.Collection.Add(new LocalCardCount { Id = "CS2_029", Count = 1, Acquired = 1 });
+        var classic = legacy.CustomDecks.Single(deck => deck.Id == draftId);
+        classic.Format = null;
+        classic.CardEntries = new List<LocalDeckCard> { new LocalDeckCard { Id = "CS2_029" } };
+        Write(path, legacy);
         byte[] original = File.ReadAllBytes(path);
         Check(Read(path).Version == 15, "simulate an earlier Arena test build's V15 save");
         using (var profile = new LocalProfile(path)) {
@@ -349,7 +356,11 @@ internal static class ArenaChecks
         }
         Check(Read(path).Version == LocalProfile.SaveVersion && Read(path).Version > 15, "upgraded Arena save is current and 0.2.x preflight refuses it");
         Check(original.SequenceEqual(File.ReadAllBytes(path + ".v15.bak")), "V15 Arena upgrade keeps a byte-exact rollback backup");
-        Check(File.ReadAllText(path) == currentXml, "V15 Arena upgrade changes only the version");
+        var migrated = Read(path);
+        var standard = migrated.CustomDecks.Single(deck => deck.Id == draftId);
+        Check(standard.Format == LocalProfile.StandardFormat && standard.Cards.SequenceEqual(new[] { "CORE_CS2_029" })
+            && migrated.CoreGrants.Any(card => card.Id == "CORE_CS2_029" && card.Count >= 1),
+            "V15 Arena save also receives the Classic deck migration and Core reprint");
         byte[] upgraded = File.ReadAllBytes(path);
         using (var profile = new LocalProfile(path)) Check(profile.ArenaRun.RunId == before.RunId, "upgraded Arena run reopens");
         Check(upgraded.SequenceEqual(File.ReadAllBytes(path)), "second open leaves upgraded Arena bytes unchanged");
@@ -373,7 +384,7 @@ internal static class ArenaChecks
             Check(run.RunId == "30e426b2-b08b-4489-9584-dddd439541b2" && run.Phase == ArenaPhase.Ready && run.Wins == 1 && run.Losses == 0
                 && run.Deck.Count == 30 && run.Deck.SequenceEqual(before.ArenaRun.Deck), "the run in progress survives the upgrade");
             Check(profile.Gold == before.GoldBalance && profile.History.Count(m => m.Mode == ArenaRules.Mode) == 3, "gold and Arena matches survive");
-            var view = new ArenaService(profile).View();
+            var view = new ArenaService(profile, () => true).View();
             Check(view.Error == null && view.Phase == ArenaPhase.Ready && view.Wins == 1 && view.Slot == 30, "the upgraded run is playable");
             profile.CommitChange(next => true);
         }
@@ -390,7 +401,7 @@ internal static class ArenaChecks
         string path = Path.Combine(root, "arena-stored.xml");
         string first, shown;
         using (var profile = new LocalProfile(path)) {
-            Fund(profile); var service = new ArenaService(profile);
+            Fund(profile); var service = new ArenaService(profile, () => true);
             Ok(service.Begin("old-run")); Ok(service.Retire()); Ok(service.AcknowledgeReward(service.View().RunId));
             Ok(service.Begin("live-run")); Ok(service.Choose(0, 0));
             for (int slot = 1; slot <= 5; slot++) Ok(service.Choose(slot, 1));
@@ -410,7 +421,7 @@ internal static class ArenaChecks
         Write(path, data);
         string edited = string.Join(",", run.PendingOffers);
         using (var profile = new LocalProfile(path)) {
-            var service = new ArenaService(profile);
+            var service = new ArenaService(profile, () => true);
             Check(string.Join(",", service.View().Offers) == edited && edited != shown, "stored offer is shown unchanged after the rules moved on");
             Ok(service.Choose(6, 2)); Check(profile.ArenaRun.Deck[5] == edited.Split(',')[2], "the pick takes the stored offer");
             Check(service.View().Slot == 7 && profile.FeatsSnapshot().ArenaReceipts[0].Reward.Gold > 0, "run continues, receipt loads");
@@ -421,7 +432,7 @@ internal static class ArenaChecks
     {
         using var profile = new LocalProfile(Path.Combine(root, "arena-registry.xml"));
         // Binding is explicit (NativeUIProbe.BindSave): the crafting ledger no longer sets Arena as a side effect.
-        var service = new ArenaService(profile);
+        var service = new ArenaService(profile, () => true);
         ArenaServiceRegistry.Current = service;
         CraftingLedgerRegistry.Current = new LocalCraftingLedger(profile);
         CraftingLedgerRegistry.Current = null;

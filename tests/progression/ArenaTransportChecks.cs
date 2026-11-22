@@ -13,7 +13,8 @@ internal static partial class NativeArena
         string path = Path.Combine(root, "arena-transport.xml");
         using var profile = new LocalProfile(path);
         profile.CommitChange(next => { next.GoldBalance = 1000; return true; });
-        var service = new ArenaService(profile);
+        bool opponentsAvailable = false;
+        var service = new ArenaService(profile, () => opponentsAvailable);
         ArenaServiceRegistry.Current = service;
         NativeUIProbe.Active = true; disabled = false;
         var received = new List<(int Id, object Payload)>();
@@ -49,6 +50,11 @@ internal static partial class NativeArena
         }
 
         Refused(() => RetireRequest(0, 0, 0, false), "retire without a run");
+        var original = File.ReadAllBytes(path);
+        Refused(() => BeginRequest(false), "entry with no Arena opponents");
+        Check(lastError == "Arena opponents are unavailable." && profile.Gold == 1000
+            && File.ReadAllBytes(path).SequenceEqual(original), "unavailable opponents leave the save and wallet unchanged");
+        opponentsAvailable = true;
         BeginRequest(false); Tick();
         var begin = (Network.BeginDraft)received.Last(row => row.Id == 246).Payload;
         var view = service.View();
@@ -79,6 +85,7 @@ internal static partial class NativeArena
         view = service.View();
         Check(view.Phase == ArenaPhase.Ready && view.Slot == 30 && view.Deck.SequenceEqual(drafted), "ready after hero plus thirty picks, Slot == 30");
         Refused(() => ChoiceRequest(DeckId, NativeSlot(view), 1, 1, false, false, new List<int>()), "pick after the deck is complete");
+        opponentsAvailable = false;
         ContentsRequest(false); Tick();
         var ready = (Network.DraftChoicesAndContents)received.Last().Payload;
         Check(ready.Slot == 31 && ready.MaxSlot == view.MaxSlot && ready.MaxWins == view.MaxWins && ready.MaxLosses == view.MaxLosses
@@ -99,6 +106,7 @@ internal static partial class NativeArena
         Check(service.View().Phase == ArenaPhase.None && profile.Gold == gold && received.Last().Id == 288, "ack closes the run without paying again");
         Refused(() => AckRequest(DeckId, 31, false), "ack with no run");
         Check(DeckId == 0 && profile.Gold == gold, "no run, no deck id");
+        opponentsAvailable = true;
         BeginRequest(false); Tick();
         Check(service.View().Phase == ArenaPhase.ChoosingHero && profile.Gold == gold - service.View().EntryCost, "a new run can begin after the claim");
 

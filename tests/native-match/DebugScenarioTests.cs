@@ -18,10 +18,12 @@ internal static partial class Program
     {
         DebugScenarioParsing();
         DebugScenarioMatch();
+        DebugScenarioStartOfGame();
         DebugScenarioBoardStats();
         DebugScenarioSummonStats();
         DebugScenarioHandMods();
         DebugScenarioManaRawAndClear();
+        DebugScenarioNpcPlayNext();
         Console.WriteLine("PASS debug scenario: validation, one-shot file, hidden NPC first draw, mana, no settlement");
     }
 
@@ -38,6 +40,23 @@ internal static partial class Program
         Check(scenario.NpcDeckTop.SequenceEqual(new[] { "EDR_260t", "EDR_260t" }) && scenario.HumanDeckTop.SequenceEqual(new[] { "CS2_182" })
             && scenario.NpcMana == 10 && scenario.HumanMana == 3 && scenario.NpcHand.Count == 1 && scenario.HumanHand.Count == 0,
             "scenario fields parse");
+        foreach (string key in new[] { "humanStartOfGame", "npcStartOfGame" })
+        {
+            string text = key + "=JAIL_509,JAIL_509,JAIL_509";
+            var start = DebugScenario.Parse(text);
+            Check((key == "humanStartOfGame" ? start.HumanStartOfGame : start.NpcStartOfGame).Count == 3
+                && start.Canonical() == text && DebugScenario.Parse(start.Canonical()).Canonical() == text,
+                key + " accepts three sources and round-trips");
+            RejectsScenario(key + "=JAIL_509\n" + key + "=JAIL_509", "duplicate Start of Game key");
+            RejectsScenario(key + "=NOPE_000", "unknown Start of Game card");
+            RejectsScenario(key + "=JAIL_509", "no native client definition", _ => false);
+            RejectsScenario(key + "=" + string.Join(",", Enumerable.Repeat("JAIL_509", 4)), "Start of Game limit");
+            try { DebugScenario.Parse(key + "=CS2_182"); throw new Exception("non-Start of Game card accepted"); }
+            catch (ArgumentException error) {
+                Check(error.Message.Contains(key) && error.Message.Contains("CS2_182") && error.Message.Contains("no Start of Game effect"),
+                    "Start of Game rejection names the key, card and missing effect");
+            }
+        }
         foreach (string mode in new[] { "human", "npc", "human-godfrey", "npc-godfrey" })
         {
             var burn = DebugScenario.Parse("overdraw=" + mode);
@@ -52,6 +71,10 @@ internal static partial class Program
         Check(DebugScenario.Parse(opening.Canonical()).HumanOpeningHand.SequenceEqual(new[] { "CATA_489", "CS2_182" }), "opening override roundtrip");
         RejectsScenario("humanOpeningHand=" + string.Join(",", Enumerable.Repeat("CS2_182", 5)), "opening maximum");
         RejectsScenario("npcOpeningHand=NOPE_000", "opening card identity");
+        var pet = DebugScenario.Parse("npcPet=PET_4_3");
+        Check(pet.NpcPet == "PET_4_3" && pet.Canonical() == "npcPet=PET_4_3" && DebugScenario.Parse("npcMana=3").NpcPet == null, "npcPet scenario roundtrip");
+        RejectsScenario("npcPet=CS2_182", "npcPet must be a pet card");
+        RejectsScenario("npcPet=PET_4_3,PET_4_1", "npcPet takes one pet");
         RejectsScenario("humanOpeningHand=GAME_005", "opening override cannot forge Coin");
         var tooMany = new NativeMatch((_, __) => { }, "mage", "priest", 183) {
             StartingPlayer = 1, DebugScenario = DebugScenario.Parse("humanOpeningHand=CATA_489,CATA_489,CATA_489,CATA_489")
@@ -174,7 +197,208 @@ internal static partial class Program
             "runId binds the file to a launch and stays out of the recorded canonical text");
     }
 
+    // npcPlayNext: the NPC plays the listed cards first, through its normal play path, then the AI carries on; an impossible card warns.
+    private static void DebugScenarioNpcPlayNext()
+    {
+        var parsed = DebugScenario.Parse("npcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182, CS2_189@self");
+        Check(parsed.NpcPlayNext.Select(p => p.ToString()).SequenceEqual(new[] { "CS2_182", "CS2_189@self" })
+            && parsed.Canonical() == "npcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182,CS2_189@self", "npcPlayNext parses and round-trips");
+        RejectsScenario("npcPlayNext=CS2_189@moon", "unknown target");
+        RejectsScenario("npcPlayNext=NOPE_000", "unknown card");
+        RejectsScenario("npcPlayNext=CS2_182", "no client definition", id => false);
+        RejectsScenario("npcPlayNext=" + string.Join(",", Enumerable.Repeat("CS2_182", DebugScenario.MaxHand + 1)), "too many plays");
+        RejectsScenario("npcPlayNext=HERO_08", "hero portrait is not playable");
+
+        foreach (bool profile in new[] { false, true })
+        {
+            string path = profile ? "profile path" : "plain path";
+            NativeMatch Stage(string scenarioText, out List<string> logs, out Capture run, IMatchRecorder recorder = null)
+            {
+                run = new Capture();
+                var log = logs = new List<string>();
+                var match = profile
+                    ? new NativeMatch(run.Send, "mage", "showcase-demon-hunter-outcast", 7) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = log.Add, BotTrace = _ => { }, SynchronousNpc = true }
+                    : new NativeMatch(run.Send, "mage", "warrior", 4242) { DebugScenario = DebugScenario.Parse(scenarioText), DebugScenarioLog = log.Add };
+                if (recorder != null) match.Recorder = recorder;
+                match.Start();
+                match.SendChoices(run.Last<EntityChoices>(17).Id, new List<int>());
+                return match;
+            }
+            List<string> Played(List<string> logs) => logs.Where(l => l.Contains("npcPlayNext played")).ToList();
+
+            // Both plays, in order, through the NPC's own path; Archer@self hurts its own hero.
+            var journal = new DecisionKinds();
+            var match = Stage("npcMana=10\nhumanMana=10\nnpcHand=CS2_182,CS2_189\nnpcPlayNext=CS2_182,CS2_189@self", out var logs, out var run, journal);
+            var game = match.Game;
+            SendEndTurn(match, run);
+            Check(game.Turn >= 3 && game.State != State.COMPLETE, path + ": the NPC turn ran");
+            var plays = Played(logs);
+            Check(plays.Count == 2 && plays[0].EndsWith("CS2_182") && plays[1].EndsWith("CS2_189@self"), path + ": both scripted plays ran in order: " + string.Join(" | ", logs));
+            Check(!logs.Any(l => l.Contains("warning")), path + ": no warning when both plays are legal");
+            Check(game.Player2.Hero.Damage == 1, path + ": Elven Archer hit its own hero (target self)");
+            Check(game.Player2.BoardZone.Any(m => m.Card.Id == "CS2_182"), path + ": Chillwind Yeti was played to the NPC's board");
+            Check(journal.Kinds.Count(k => k == "npc-play-next-scenario") == 2, path + ": each scripted play wrote its decision row: " + string.Join(",", journal.Kinds));
+            run.SerializeAll();
+
+            // npcSkin swaps the NPC's class (the way to get a Druid NPC); the scripted play still goes through.
+            match = Stage("npcSkin=HERO_06\nnpcMana=10\nhumanMana=10\nnpcHand=EDR_519\nnpcPlayNext=EDR_519", out logs, out run);
+            game = match.Game;
+            Check(game.Player2.Hero.Card.Id == "HERO_06" && game.Player2.HeroClass == CardClass.DRUID, path + ": npcSkin=HERO_06 makes the NPC a Druid");
+            SendEndTurn(match, run);
+            Check(Played(logs).Count == 1 && game.State != State.COMPLETE, path + ": the Druid NPC played the scripted Wisprider: " + string.Join(" | ", logs));
+
+            // Targets: hero, enemy (human's first legal minion), friend (NPC's first legal minion), and the default (human hero first).
+            foreach (string target in new[] { "hero", "enemy", "friend", null })
+            {
+                match = Stage("npcMana=10\nhumanMana=10\n" + (target == "friend" ? "npcBoard" : "humanBoard") + "=CS2_182\nnpcHand=CS2_189\nnpcPlayNext=CS2_189" + (target == null ? "" : "@" + target), out logs, out run);
+                game = match.Game;
+                SendEndTurn(match, run);
+                string name = path + " target " + (target ?? "default");
+                Check(Played(logs).Count == 1 && !logs.Any(l => l.Contains("warning")), name + ": played once: " + string.Join(" | ", logs));
+                // The catalog AI keeps playing after the scripted step and may finish the Yeti off or hit faces itself, so on that path
+                // the check is "no undamaged Yeti left" / "the hero took damage"; the plain bot's turn is not that aggressive, so it is exact.
+                if (target == "enemy") Check(!game.Player1.BoardZone.Any(m => m.Card.Id == "CS2_182" && m.Damage == 0) && (profile || game.Player1.BoardZone.Count == 1), name + ": the human's Yeti was hit");
+                else if (target == "friend") Check(!game.Player2.BoardZone.Any(m => m.Card.Id == "CS2_182" && m.Damage == 0), name + ": the NPC's own Yeti was hit; npc board " + string.Join(",", game.Player2.BoardZone.Select(m => m.Card.Id + ":" + m.Damage)) + " | " + string.Join(" | ", logs));
+                else Check(game.Player1.Hero.Damage >= 1 && (profile || game.Player1.BoardZone.All(m => m.Damage == 0)), name + ": the human hero was hit, not the minion beside it");
+            }
+
+            // Mana: the second Yeti cannot be paid on turn 1 (5 crystals, 4+4), stays queued with ONE warning, and is played on the next NPC turn.
+            match = Stage("npcMana=5\nhumanMana=10\nnpcHand=CS2_182,CS2_182\nnpcPlayNext=CS2_182,CS2_182", out logs, out run);
+            game = match.Game;
+            SendEndTurn(match, run);
+            Check(Played(logs).Count == 1 && logs.Count(l => l.Contains("warning")) == 1 && logs.Any(l => l.Contains("stays queued")), path + ": unaffordable step warns once and stays queued: " + string.Join(" | ", logs));
+            SendEndTurn(match, run);
+            Check(Played(logs).Count == 2 && game.Player2.BoardZone.Count(m => m.Card.Id == "CS2_182") == 2, path + ": the queued step was played on the next NPC turn: " + string.Join(" | ", logs));
+
+            // A card that is not in hand blocks the head and warns (once per turn); nothing is played by the key.
+            match = Stage("npcMana=3\nhumanMana=10\nnpcHand=CS2_182\nnpcPlayNext=CS2_189,CS2_182", out logs, out run);
+            SendEndTurn(match, run);
+            Check(Played(logs).Count == 0 && logs.Count(l => l.Contains("warning")) == 1 && logs.Any(l => l.Contains("not in the NPC's hand")), path + ": missing card warns with its own reason: " + string.Join(" | ", logs));
+
+            // A Discover as step 1: step 2 waits for the choice (a pending choice consumes nothing), then plays.
+            match = Stage("npcMana=10\nhumanMana=10\nnpcHand=DS1_184,CS2_182\nnpcPlayNext=DS1_184,CS2_182", out logs, out run);
+            game = match.Game;
+            SendEndTurn(match, run);
+            plays = Played(logs);
+            Check(plays.Count == 2 && plays[0].EndsWith("DS1_184") && plays[1].EndsWith("CS2_182") && game.Player2.Choice == null
+                && game.Player2.BoardZone.Any(m => m.Card.Id == "CS2_182"), path + ": the step after a Discover played once the choice was resolved: " + string.Join(" | ", logs));
+
+            // Key absent: nothing is offered and nothing is logged.
+            match = Stage("npcMana=10\nhumanMana=10\nnpcHand=CS2_182", out logs, out run);
+            Check(match.DebugScenario.NextNpcPlay(match.Game, match.Game.Player2.Options(), logs.Add) == null && !logs.Any(l => l.Contains("npcPlayNext")),
+                path + ": no npcPlayNext key, no scripted decision");
+            SendEndTurn(match, run);
+            Check(!logs.Any(l => l.Contains("npcPlayNext")), path + ": no npcPlayNext lines without the key");
+        }
+    }
+
+    private sealed class DecisionKinds : IMatchRecorder
+    {
+        internal readonly List<string> Kinds = new List<string>();
+        public bool Enabled => true;
+        public void OnMulligan(int playerId, IReadOnlyList<int> kept) { }
+        public void OnDecision(GoldenContext context, GoldenDecision trace, string lethal, bool reuse, int nodes, double ms, double slice) => Kinds.Add(trace.DriverKind);
+        public void OnHumanAction(int turn, string action, int index, IReadOnlyList<int> choices, bool conceded) { }
+        public void OnEmote(int playerId, string emote, int eventIndex) { }
+        public void OnConcession(int playerId, int turn) { }
+        public void OnResult(string result, int turns) { }
+        public void OnPostAction(long sequence, string hash) { }
+    }
+
     private const string RunA = "0b5e3a7e-2f64-4a43-8c3f-4f8b8d2f9a10", RunB = "1c6f4b8f-3a75-4b54-9d40-5a9c9e3ab021";
+
+    private static void DebugScenarioStartOfGame()
+    {
+        foreach (bool npc in new[] { false, true })
+        {
+            string key = npc ? "npcStartOfGame" : "humanStartOfGame";
+            string text = key + "=JAIL_509\nhumanDeckTop=CS2_182,CS2_187\nnpcDeckTop=CS2_182,CS2_187";
+            NativeMatch Start(out Capture capture)
+            {
+                capture = new Capture();
+                var match = new NativeMatch(capture.Send, "mage", "warrior", 4242) {
+                    StartingPlayer = 1, DebugScenario = DebugScenario.Parse(text)
+                };
+                match.Start();
+                Check(match.Game.Player1.Hero[(GameTag)4717] == 0 && match.Game.Player2.Hero[(GameTag)4717] == 0,
+                    key + " waits for mulligans");
+                match.SendChoices(capture.Last<EntityChoices>(17).Id, new List<int>());
+                return match;
+            }
+            var match = Start(out var run);
+            var owner = npc ? match.Game.Player2 : match.Game.Player1;
+            var source = owner.DeckZone.Single(c => c.Card.Id == "JAIL_509");
+            Check(match.DebugScenarioApplied.Contains(key + "=JAIL_509 (fires)"), key + " logs eligibility");
+            Check(owner.Hero[(GameTag)4717] == 1 && owner.AppliedEnchantments.Any(e => e.Card.Id == "JAIL_509e"),
+                key + " resolves Godfrey's real hero tag and player effect");
+            Check(owner.Opponent.Hero[(GameTag)4717] == 0, key + " affects only its owner");
+            Check(source.Zone == owner.DeckZone && owner.DeckZone[0] == source,
+                key + " source stays at deck bottom");
+            Check(match.Game.PowerHistory.Full.OfType<SabberStoneCore.Kettle.PowerHistoryBlockStart>()
+                .Any(b => b.BlockType == BlockType.TRIGGER && b.Source == source.Id),
+                key + " resolves in a TRIGGER sourced by the staged entity");
+            Check(match.Game.Player1.HandZone.Last().Card.Id == "CS2_182"
+                && match.Game.Player1.DeckZone.TopCard.Card.Id == "CS2_187", "humanDeckTop draw order stays intact");
+            var twin = Start(out var twinRun);
+            Check(EngineIdentity(match.Game) == EngineIdentity(twin.Game), key + " stages deterministically from serialized text");
+            if (npc)
+            {
+                var history = SogHistory(run);
+                int reveal = history.FindIndex(x => x.HasShowEntity && x.ShowEntity.Entity == source.Id);
+                Check(reveal >= 0 && history.Take(reveal).Any(x => x.HasFullEntity && x.FullEntity.Entity == source.Id),
+                    "staged NPC source is created before its reveal");
+                Check(history.Take(reveal).Where(x => SnapshotEntity(x) == source.Id)
+                    .All(x => string.IsNullOrEmpty(SnapshotName(x))), "staged NPC identity stays hidden before reveal");
+                SogAssertPresentation(match, run, new[] { source.Id });
+                var firstDraw = owner.DeckZone.TopCard;
+                Check(firstDraw.Card.Id == "CS2_182", "NPC first draw remains its staged deck top");
+                SendEndTurn(match, run);
+                Check(firstDraw.Zone != owner.DeckZone && source.Zone == owner.DeckZone,
+                    "NPC drew its deck top and left Godfrey in deck");
+            }
+            run.SerializeAll(); twinRun.SerializeAll();
+        }
+
+        var baselineRun = new Capture();
+        var baseline = new NativeMatch(baselineRun.Send, "mage", "warrior", 4242) { StartingPlayer = 1 };
+        baseline.Start();
+        baseline.SendChoices(baselineRun.Last<EntityChoices>(17).Id, new List<int>());
+        Check(baseline.Game.Player1.Hero[(GameTag)4717] == 0 && baseline.Game.Player2.Hero[(GameTag)4717] == 0,
+            "match without Start of Game keys has no Godfrey tag");
+
+        var pendingRun = new Capture();
+        var pending = new NativeMatch(pendingRun.Send, "mage", "warrior", 4242) { StartingPlayer = 1 };
+        pending.Start();
+        var player = pending.Game.Player1;
+        var handSource = SabberStoneCore.Model.Entities.Entity.FromCard(player, Cards.FromId("JAIL_509"), zone: player.HandZone);
+        try { SabberStoneCore.Actions.StartOfGameRules.Stage(handSource); throw new Exception("hand source accepted"); }
+        catch (ArgumentException) { }
+        var ordinary = SabberStoneCore.Model.Entities.Entity.FromCard(player, Cards.FromId("CS2_029"), zone: player.DeckZone);
+        try { SabberStoneCore.Actions.StartOfGameRules.Stage(ordinary); throw new Exception("non-Start of Game source accepted"); }
+        catch (ArgumentException) { }
+        player.DeckZone.Add(player.HandZone.Remove(handSource), 0);
+        Check(SabberStoneCore.Actions.StartOfGameRules.Stage(handSource)
+            && SabberStoneCore.Actions.StartOfGameRules.Stage(handSource), "staging preserves an already eligible source");
+        handSource[SabberStoneCore.Actions.StartOfGameRules.Pending] = -1;
+        Check(!SabberStoneCore.Actions.StartOfGameRules.Stage(handSource), "staging does not rearm a resolved source");
+        var ineligible = DebugScenario.Parse("humanStartOfGame=EDR_845");
+        Check(ineligible.Apply(pending.Game).Contains("humanStartOfGame=EDR_845 (not eligible)"), "ineligible source is logged");
+        var hamuul = player.DeckZone.Single(c => c.Card.Id == "EDR_845");
+        Check(hamuul.NativeTags[SabberStoneCore.Actions.StartOfGameRules.Pending] == -1, "non-Nature spell disqualifies staged Hamuul");
+        foreach (var spell in player.DeckZone.Where(c => c.Card.Type == CardType.SPELL).ToArray())
+            player.SetasideZone.Add(player.DeckZone.Remove(spell));
+        Check(!SabberStoneCore.Actions.StartOfGameRules.Stage(hamuul), "staging preserves captured ineligibility after deck changes");
+
+        while (player.DeckZone.FreeSpace > 1)
+            SabberStoneCore.Model.Entities.Entity.FromCard(player, Cards.FromId("CS2_182"), zone: player.DeckZone);
+        var full = DebugScenario.Parse("humanDeckTop=CS2_182\nhumanStartOfGame=JAIL_509");
+        int entities = pending.Game.IdEntityDic.Count;
+        Check(full.Validate(pending.Game)?.Contains("Human deck") == true, "deck capacity includes both keys");
+        try { full.Apply(pending.Game); throw new Exception("overfull deck accepted"); }
+        catch (InvalidOperationException) { }
+        Check(pending.Game.IdEntityDic.Count == entities, "capacity failure creates no entities");
+        Console.WriteLine("PASS debug scenario Start of Game: both seats, real effects and TRIGGER, bottom order, eligibility, deterministic replay, baseline");
+    }
 
     private static void DebugScenarioMatch()
     {

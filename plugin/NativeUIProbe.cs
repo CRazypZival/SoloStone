@@ -262,8 +262,16 @@ internal static partial class NativeUIProbe
             finalizer: new HarmonyMethod(typeof(NativeUIProbe), nameof(FinishLocalReorder)));
         foreach (string name in new[] { "AddPendingDeckRename", "AddPendingDeckEdit" })
             Hook(harmony, typeof(CollectionManager), name, nameof(ReadOnly));
-        Hook(harmony, typeof(CollectionManagerDisplay), "CreateDeckFromClipboard", nameof(BlockDeckImport));
-        Hook(harmony, typeof(CollectionInputMgr), "PasteDeckInEditModeFromShareableDeck", nameof(BlockDeckImport));
+        Hook(harmony, typeof(CollectionManagerDisplay), "CreateDeckFromClipboard", nameof(PlanDeckCodeImport));
+        Hook(harmony, typeof(CollectionManagerDisplay), "OnDeckCreatedFromClipboard", nameof(ProjectImportedDeck));
+        harmony.Patch(Required(typeof(CollectionManagerDisplay), "CreateDeckFromClipboard"),
+            postfix: new HarmonyMethod(typeof(NativeUIProbe), nameof(TidyRefusedImport)));
+        harmony.Patch(Required(typeof(CollectionManagerDisplay), "Exit"),
+            prefix: new HarmonyMethod(typeof(NativeUIProbe), nameof(LeaveCollectionImportState)));
+        Hook(harmony, typeof(CollectionInputMgr), "PasteDeckInEditModeFromShareableDeck", nameof(BlockDeckEditPaste));
+        Hook(harmony, typeof(ShareableDeck), "ParseDataFromDeckString", nameof(FindPastedDeckCode));
+        harmony.Patch(Required(typeof(DeckOptionsMenu), "OnCopyButtonReleased"),
+            finalizer: new HarmonyMethod(typeof(NativeUIProbe), nameof(ObserveDeckCopy)));
         harmony.Patch(Required(typeof(DeckTrayDeckListContent), "ShouldDeckBoxesBeLocked"),
             prefix: new HarmonyMethod(typeof(NativeUIProbe), nameof(UnlockLocalDeckBoxSlots)));
         harmony.Patch(Required(typeof(CollectionDeckBoxVisual), "SetDeckID"),
@@ -319,7 +327,7 @@ internal static partial class NativeUIProbe
         ArenaServiceRegistry.Current = null;
 #else
         CraftingLedgerRegistry.Current = selectedProfile == null ? null : new LocalCraftingLedger(selectedProfile);
-        ArenaServiceRegistry.Current = selectedProfile == null ? null : new ArenaService(selectedProfile);
+        ArenaServiceRegistry.Current = selectedProfile == null ? null : new ArenaService(selectedProfile, () => NpcWorldRuntime.Arena != null);
 #endif
     }
 
@@ -989,26 +997,34 @@ internal static partial class NativeUIProbe
         displayable.Clear();
         displayable.AddRange(union);
         var wild = new HashSet<TAG_CARD_SET>(GameUtils.GetAllWildPlayableSets());
-        // Local decks are Standard (LocalDeckFormat): without server set-rotation timings no set is rotated offline, so
-        // every displayable set is Standard. An owned card outside it would read as Wild-only, so stop at boot instead.
+        // #87: the client must agree with the engine's Standard rule (NativeFormatWild hooks). An owned Standard card has to sit
+        // in a native Standard set and read Standard; an owned Wild (Basic/Classic) card in a native Wild set and read Wild.
+        // Any disagreement would let a Wild card into a Standard deck (or lock a Standard one out), so stop at boot instead.
         var standard = new HashSet<TAG_CARD_SET>(GameUtils.GetStandardSets());
-        var audit = new List<string> { "id\tsetInt\tsetName\tnativeFormat\trotated\tlegacy\tdisplayable\tallWildMembership\tstandardMembership" };
+        var audit = new List<string> { "id\tsetInt\tsetName\tnativeFormat\trotated\tlegacy\tdisplayable\tallWildMembership\tstandardMembership\tengineStandard\tnativeWildCard" };
         var missingOwned = new List<string>();
         foreach (string id in supportedIds)
         {
-            TAG_CARD_SET set = DefLoader.Get().GetEntityDef(id).GetCardSet();
+            EntityDef def = DefLoader.Get().GetEntityDef(id);
+            TAG_CARD_SET set = def.GetCardSet();
             bool inDisplayable = displayable.Contains(set), inWild = wild.Contains(set), inStandard = standard.Contains(set);
+            bool engineStandard = LocalCardCatalog.IsStandardId(id), nativeWildCard = GameUtils.IsWildCard(def);
             audit.Add(id + "\t" + (int)set + "\t" + set + "\t" + GameUtils.GetCardSetFormat(set) + "\t"
-                + GameUtils.IsSetRotated(set) + "\t" + GameUtils.IsLegacySet(set) + "\t" + inDisplayable + "\t" + inWild + "\t" + inStandard);
-            if (owned.TryGetValue(id, out int count) && count > 0 && !inStandard)
-                missingOwned.Add(id + " set=" + set);
+                + GameUtils.IsSetRotated(set) + "\t" + GameUtils.IsLegacySet(set) + "\t" + inDisplayable + "\t" + inWild + "\t" + inStandard
+                + "\t" + engineStandard + "\t" + nativeWildCard);
+            // A Standard card the client calls Wild would lock it out of decks: stop at boot. A Wild card the client calls
+            // Standard only weakens the native editor's refusal (the save still refuses it at Play), so it is logged.
+            if (owned.TryGetValue(id, out int count) && count > 0 && engineStandard && (!inStandard || nativeWildCard))
+                missingOwned.Add(id + " set=" + set + " standard");
+            else if (count > 0 && !engineStandard && (!inWild || inStandard || !nativeWildCard))
+                log.LogWarning("NATIVE_FORMAT_WILD_MISMATCH id=" + id + " set=" + set + " inWild=" + inWild + " inStandard=" + inStandard + " nativeWild=" + nativeWildCard);
         }
         audit.Add("#displayableSets\t" + string.Join(",", displayable.Select(set => (int)set + ":" + set)));
         audit.Add("#allWildSets\t" + string.Join(",", wild.OrderBy(set => (int)set).Select(set => (int)set + ":" + set)));
         audit.Add("#standardSets\t" + string.Join(",", standard.OrderBy(set => (int)set).Select(set => (int)set + ":" + set)));
         File.WriteAllLines(Path.Combine(Reports, "native-card-set-audit.tsv"), audit);
         if (missingOwned.Count != 0)
-            throw new InvalidOperationException("Owned supported cards absent from native Standard aggregate: " + string.Join(",", missingOwned));
+            throw new InvalidOperationException("Owned cards whose native format disagrees with the engine (#87): " + string.Join(",", missingOwned));
     }
 
     internal static void PublishResultsMedal() => PublishMedal();
@@ -1436,6 +1452,24 @@ internal static partial class NativeUIProbe
             var local = ValidateNative(native);
             selected = native.ID + "|" + native.Name + "|" + native.HeroCardID + "|" + string.Join(",", native.GetCardsWithCardID().OrderBy(id => id));
             LocalCustomDeck custom = Profile.GetDraft(native.ID);
+            var wild = custom == null ? Array.Empty<string>() : Profile.WildCards(custom.Id);
+            string format = custom?.Format ?? LocalProfile.StandardFormat;
+            if (format != LocalProfile.StandardFormat) {
+                log.LogInfo("NATIVE_PICKER_FORMAT_REFUSED deck=" + custom.Id + " format=" + format);
+                DialogManager.Get()?.ShowPopup(new AlertPopup.PopupInfo {
+                    m_headerText = NativeStandardText.FormatDeckHeader, m_text = NativeStandardText.FormatDeckBody(format),
+                    m_responseDisplay = AlertPopup.ResponseDisplay.OK
+                });
+                return;
+            }
+            if (wild.Count != 0) {
+                log.LogInfo("NATIVE_PICKER_WILD_REFUSED deck=" + custom.Id + " cards=" + string.Join(",", wild));
+                DialogManager.Get()?.ShowPopup(new AlertPopup.PopupInfo {
+                    m_headerText = NativeStandardText.WildDeckHeader, m_text = NativeStandardText.WildDeckBody(wild),
+                    m_responseDisplay = AlertPopup.ResponseDisplay.OK
+                });
+                return;
+            }
             if (custom != null && !Profile.IsDeckComplete(custom.Id)) {
                 DialogManager.Get()?.ShowPopup(new AlertPopup.PopupInfo {
                     m_headerText = NativeStrings.Get("GLUE_INCOMPLETE_DECK_HEADER", "Incomplete deck"), m_text = "Acquire missing cards and complete this deck before playing.",
@@ -2238,6 +2272,7 @@ internal static partial class NativeUIProbe
             string card = entity.GetCardId();
             int zone = entity.GetTag(GAME_TAG.ZONE);
             if (string.IsNullOrEmpty(card) || (zone != 1 && zone != 4 && !(zone == 3 && entity.GetControllerId() == 1))) continue;
+            if (match.IsGhostActor(entity.GetEntityId())) continue; // a retired or burned card's old actor: its engine card has a fresh actor
             if (!NativeUIProjection.TryResolveVisibleEngineEntity(card, match.EngineReturnId(entity.GetEntityId()), id =>
                 match.Game.IdEntityDic.ContainsKey(id) ? match.Game.IdEntityDic[id] : null,
                 id => match.TransportCardId(entity.GetEntityId(), id), out SabberStoneCore.Model.Entities.IPlayable engine))
@@ -2304,6 +2339,7 @@ internal static partial class NativeUIProbe
         {
             string cardId = entity.GetCardId();
             if (string.IsNullOrEmpty(cardId)) { hiddenSkipped++; continue; }
+            if (match.IsGhostActor(entity.GetEntityId())) { hiddenSkipped++; continue; } // a retired or burned card's old actor
             if (!NativeUIProjection.TryResolveVisibleEngineEntity(cardId, match.EngineReturnId(entity.GetEntityId()), id =>
                 match.Game.IdEntityDic.ContainsKey(id) ? match.Game.IdEntityDic[id] : null,
                 id => match.TransportCardId(entity.GetEntityId(), id), out SabberStoneCore.Model.Entities.IPlayable engineEntity))

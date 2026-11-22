@@ -59,7 +59,7 @@ public sealed class DraftRules
             || rewards.Length != MaxWins + 1 || rewards.Any(row => row.Any(value => value < 0)))
             throw new InvalidOperationException("Invalid Arena rules.");
         if (poolOverride != null) { pool = new Lazy<EngineCard[]>(() => poolOverride); return; }
-        pool = new Lazy<EngineCard[]>(() => LocalCardCatalog.ActivePoolIds().Select(Cards.FromId).Where(LocalCardCatalog.IsStandardLegal).Where(Eligible)
+        pool = new Lazy<EngineCard[]>(() => LocalCardCatalog.ActivePoolIds().Select(Cards.FromId).Where(LocalCardCatalog.IsStandard).Where(Eligible)
             .OrderBy(card => card.Id, StringComparer.Ordinal).ToArray());
     }
 

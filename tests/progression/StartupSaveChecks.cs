@@ -151,8 +151,11 @@ internal static class StartupSaveChecks
                 () => { File.Delete(options); File.Move(realOptions, options); });
         }
         // A save from an older version is not a failure: it upgrades through the ordinary open.
-        var old = Load(); old.Version = 14; Save(old);
-        Check(Decide(legacy).IsAuto, "a supported older version is not a failure");
+        foreach (int version in new[] { 13, 14, 15, 16 })
+        {
+            var old = Load(); old.Version = version; Save(old);
+            Check(Decide(legacy).IsAuto, "startup accepts V" + version + " for upgrade");
+        }
         Put(profile, good);
         // The other save was never involved.
         Check(File.Exists(Profile(legacy, other.Id)), "the bystander save is intact");

@@ -29,7 +29,7 @@ internal static class ArenaMatchChecks
 
     private static ArenaService Ready(LocalProfile profile, string request)
     {
-        var service = new ArenaService(profile);
+        var service = new ArenaService(profile, () => true);
         Ok(service.Begin(request)); Ok(service.Choose(0, 0));
         for (int slot = 1; slot <= 30; slot++) Ok(service.Choose(slot, slot % 3));
         Check(service.View().Phase == ArenaPhase.Ready, "run ready");
@@ -57,7 +57,7 @@ internal static class ArenaMatchChecks
         Check(ArenaRules.IsArena("Arena") && !ArenaRules.IsRanked("Arena") && !ArenaRules.IsRanked("Casual") && ArenaRules.IsRanked(null), "mode helpers");
         Check(!ArenaRules.CarriesNpcMemory(ArenaRules.Mode) && ArenaRules.CarriesNpcMemory(null) && ArenaRules.CarriesNpcMemory(CasualRules.Mode), "Arena opponents bring no rival memory");
         Reject(() => profile.Begin("arena:none", "npc-x", 1, Npc, NpcDeck, 1300, ArenaRules.Mode), "Arena begin without a run");
-        var service = new ArenaService(profile); Ok(service.Begin("gate"));
+        var service = new ArenaService(profile, () => true); Ok(service.Begin("gate"));
         string key = ArenaRules.DeckKey(profile.ArenaRun.RunId);
         Reject(() => profile.Begin(key, "npc-x", 1, Npc, NpcDeck, 1300, ArenaRules.Mode), "Arena begin while choosing a hero");
         Ok(service.Choose(0, 0));
@@ -160,7 +160,7 @@ internal static class ArenaMatchChecks
                 }
             }
             using (var reopened = new LocalProfile(path)) {
-                var service = new ArenaService(reopened);
+                var service = new ArenaService(reopened, () => true);
                 Check(service.View().Phase == ArenaPhase.RewardPending && service.View().Reward.RunId == runId && reopened.Gold == gold
                     && reopened.DustBalance == dust && Packs(reopened) == packs, row.Item3 + " restart shows the unclaimed reward with the same balances");
                 if (reopened.HasPendingRewardPresentation) Check(reopened.AcknowledgeRewardPresentation(reopened.History.Last().Id), "match presentation");
@@ -299,7 +299,7 @@ internal static class ArenaMatchChecks
     private static void Hook(string root)
     {
         using var profile = new LocalProfile(Path.Combine(root, "arena-m-hook.xml")); Fund(profile);
-        var service = new ArenaService(profile);
+        var service = new ArenaService(profile, () => true);
         int calls = 0;
         ArenaMatchHook.MatchStarter = (ArenaRun run, out string error) => { calls++; error = null; return true; };
         try {
@@ -311,7 +311,7 @@ internal static class ArenaMatchChecks
             Start(profile);
             Check(!service.StartMatch(out error) && error.Contains("pending") && calls == 1, "no start with a pending match");
         } finally { ArenaMatchHook.MatchStarter = null; }
-        Check(!new ArenaService(profile).StartMatch(out string none) && none != null, "no hook, no start");
+        Check(!new ArenaService(profile, () => true).StartMatch(out string none) && none != null, "no hook, no start");
     }
 
     private static void Decks()
@@ -330,7 +330,7 @@ internal static class ArenaMatchChecks
             Check(ids.Count == 30 && built.Count == 30 && LocalDecks.PlayerHeroes.Contains(row.Hero) && built.All(card => card != null && card.Implemented && rules.Eligible(card)
                 && LocalDecks.IsAllowedInDeck(card, LocalDecks.HeroClass(row.Hero))), "deck loads " + row.Id);
             LocalDecks.ValidateRunes(built, LocalDecks.HeroClass(row.Hero));
-            Check(built.All(card => card.Collectible && LocalCardCatalog.IsStandardLegal(card) && card.Id != "GIL_213" && card.Id != "CFM_305"),
+            Check(built.All(card => card.Collectible && LocalCardCatalog.IsStandard(card) && card.Id != "GIL_213" && card.Id != "CFM_305"),
                 "NPC deck has only collectible Standard-legal cards (no Wild, Basic, Classic, Hall of Fame) " + row.Id);
         }
         Check(rows.Select(r => r.Class).Distinct().Count() >= 8 && rows.Select(r => r.Skill).Distinct().Count() == ArenaDeckGenerator.Skills.Length, "mixed classes and drafter skill");
