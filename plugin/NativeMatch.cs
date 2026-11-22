@@ -1240,17 +1240,25 @@ public sealed class NativeMatch
         ObserveOpposingChoiceReveal();
         bool powerIdle;
         try { powerIdle = NativeNpcPowerIdle?.Invoke() ?? true; } catch (Exception) { powerIdle = true; }
-        int sourceId = opposingChoiceSource?.SourceId ?? 0;
-        bool sourceIsDecisionBattlecry = false;
-        try { sourceIsDecisionBattlecry = sourceId > 0 && Game.IdEntityDic.TryGetValue(sourceId, out var sourceEntity)
-            && sourceEntity.Power?.PowerTask is SabberStoneCore.Tasks.SimpleTasks.DecisionBattlecryTask; }
-        catch (Exception) { }
-        Func<bool> spell = NativeOpposingSourceSpellActive == null ? (Func<bool>)null
-            : () => NativeOpposingSourceSpellActive(sourceId);
+        var source = OpposingChoiceRecipeSource();
+        bool sourceIsDecisionBattlecry = source?.Card?.Power?.PowerTask is SabberStoneCore.Tasks.SimpleTasks.DecisionBattlecryTask;
+        Func<bool> spell = NativeOpposingSourceSpellActive == null || source == null ? (Func<bool>)null
+            : () => NativeOpposingSourceSpellActive(WireReturnId(source.Id));
         double hold = opposingPacing.Hold(NpcClock(), opposingRevealedAt, OpposingChoiceBeatMilliseconds(npcProfile?.Personality),
             powerIdle, sourceIsDecisionBattlecry, spell, NpcTurnDeadlineLeft());
         if (hold <= 0) LogOpposingHold(false);
         return hold;
+    }
+
+    private IPlayable OpposingChoiceRecipeSource()
+    {
+        if (Game == null || opposingChoiceSource == null) return null;
+        try
+        {
+            int id = DarkGifts.RecipeSource(Game, opposingChoiceSource.SourceId);
+            return Game.IdEntityDic.TryGetValue(id, out var source) ? source : null;
+        }
+        catch (Exception) { return null; }
     }
 
     // One line per opposing choice, when its hold ends: why (deal, spell, cap, deadline, canact) and for how long, so a live
@@ -1262,8 +1270,7 @@ public sealed class NativeMatch
         if (abandoned) pacing.Abandon(NpcClock());
         if (pacing.Released == null) return;
         pacing.Logged = true;
-        string card = null;
-        try { card = Game?.IdEntityDic.TryGetValue(opposingChoiceSource?.SourceId ?? 0, out var source) == true ? source.Card.Id : null; } catch (Exception) { }
+        string card = OpposingChoiceRecipeSource()?.Card?.Id;
         BotTrace?.Invoke(string.Format(System.Globalization.CultureInfo.InvariantCulture,
             "NPC_CHOICE_HOLD card={0} released={1} waited={2:F2} spellWait={3:F2}",
             card ?? "?", pacing.Released, pacing.WaitedMilliseconds / 1000, pacing.SpellWaitedMilliseconds / 1000));

@@ -145,7 +145,8 @@ namespace SabberStoneCore.Model
                 entity.Game.PowerHistory.Add(PowerHistoryBuilder.TagChange(entity.Id, tag, value));
         }
 
-        internal static int RecipeSource(Game game, int sourceId) =>
+        // The executor owns the choice, but the played card owns the recipe and its play spell.
+        public static int RecipeSource(Game game, int sourceId) =>
             game.IdEntityDic.TryGetValue(sourceId, out var source) && source.Card.Id == "EDR_102t"
                 ? source[GameTag.CREATOR] : sourceId;
 

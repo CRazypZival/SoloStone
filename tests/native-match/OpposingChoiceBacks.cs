@@ -542,6 +542,67 @@ internal static partial class Program
         OpposingHoldThroughRunner(HoldMode.SpellRuns, "UNG_941", false);
         OpposingHoldThroughRunner(HoldMode.SpellRuns, "LOE_006", false);
         OpposingHoldThroughRunner(HoldMode.SpellRuns, "JAIL_458", true);
+        OpposingSpellUsesPlayedSource();
+    }
+
+    private static void OpposingSpellUsesPlayedSource()
+    {
+        foreach (var cardId in new[] { "TLC_100", "EDR_105" })
+        {
+            var (capture, match) = OpposingChoiceMatch();
+            var bot = match.Game.Player2;
+            var card = Cards.FromId(cardId);
+            SabberStoneCore.Model.Entities.IPlayable source;
+            if (cardId == "TLC_100")
+            {
+                string[] costs = { "CS2_231", "CS2_189", "CS2_172", "CS2_121", "CS2_182", "CS2_187",
+                    "CS2_200", "CS2_201", "EX1_298", "EX1_561", "EX1_586" };
+                bot.DeckCards.Clear();
+                bot.DeckCards.AddRange(costs.Select(Cards.FromId));
+                QuestRules.AddPlayerEffect(bot, bot.Hero, "JAIL_509e");
+                while (!bot.HandZone.IsFull) Generic.DrawCard(bot, Cards.FromId("CS2_182"));
+                source = SabberStoneCore.Model.Entities.Entity.FromCard(bot, card, zone: bot.DeckZone);
+                Generic.Draw(bot, source);
+                Check(source.Zone == bot.SetasideZone, "Atlas retains Elise from a full hand");
+                FlushFieldHistory(match);
+                bot.SetasideZone.Add(bot.HandZone.Remove(bot.HandZone[0]));
+                FlushFieldHistory(match);
+                Check(source.Zone == bot.HandZone && match.WireReturnId(source.Id) != source.Id,
+                    "Atlas returns Elise with a fresh native actor");
+            }
+            else source = Generic.DrawCard(bot, card);
+
+            int wireId = match.WireReturnId(source.Id);
+            double now = 0;
+            bool spellActive = true;
+            var probes = new List<int>();
+            var trace = new List<string>();
+            match.NpcClock = () => now;
+            match.NativeOpposingChoiceRevealed = _ => true;
+            match.NativeOpposingSourceSpellActive = id => { probes.Add(id); return id == wireId && spellActive; };
+            match.BotTrace = trace.Add;
+            FlushFieldHistory(match);
+            InvokeProcess(match, bot.Options().First(t => t.PlayerTaskType == PlayerTaskType.PLAY_CARD && t.Source?.Id == source.Id));
+            FlushFieldHistory(match);
+            Check(bot.Choice?.ChoiceType == ChoiceType.GENERAL && match.OpposingChoiceId > 0, cardId + " shows an NPC choice");
+            if (cardId == "EDR_105")
+                Check(match.Game.IdEntityDic[bot.Choice.SourceId].Card.Id == "EDR_102t", "Dark Gift choice names its executor");
+            var pick = ChooseTask.Pick(bot, bot.Choice.Choices[0]);
+            match.OpposingChoiceHold(BotAction.From(pick));
+            now = 2600;
+            Check(match.OpposingChoiceHold(BotAction.From(pick)) > 0 && probes.Count > 0 && probes.All(id => id == wireId),
+                cardId + " waits on the actual played card's native spell");
+            spellActive = false;
+            now += 100;
+            Check(match.OpposingChoiceHold(BotAction.From(pick)) == 0
+                && trace.Any(line => line.StartsWith("NPC_CHOICE_HOLD card=" + cardId + " released=spell ")),
+                cardId + " releases the pick when that spell ends");
+            int answerStart = capture.Packets.Count;
+            InvokeProcess(match, pick);
+            FlushFieldHistory(match);
+            Check(DeckDiscoverWireHistory(capture, answerStart).Any(row => row.HasPowerStart && row.PowerStart.Source == wireId),
+                cardId + " opens the answer's POWER block on the same actor");
+        }
     }
 
     // GameState processes an EntitiesChosen at once when no choice of that player is mapped. Sent before the client
