@@ -102,22 +102,25 @@ internal static class DifficultySuite
         }
     }
 
-    // An Easy encounter at the Core step serves the beginner deck of its class; Medium serves the Core starter.
     private static void BeginnerServed(LadderMatchmaker mm)
     {
-        foreach (var level in new[] { NpcDifficulties.Easy, NpcDifficulties.Medium })
+        int CountBeginner(NpcDifficultyLevel level, double rating)
         {
-            int core = 0;
-            for (int i = 0; i < 200; i++)
+            return Enumerable.Range(0, 200).Count(index =>
             {
-                var e = mm.Choose(new MatchRequest(Profile + 5, i, 0, 1400, null, null, level)).Encounter;
-                if (!NpcDifficultyShaper.IsCoreDeck(e.Deck)) continue;
-                core++;
-                string expect = (level == NpcDifficulties.Easy ? NpcBeginnerDecks.IdPrefix : NpcCoreDecks.IdPrefix) + e.Deck.Class.ToLowerInvariant();
-                Program.Require(e.Deck.Id == expect, level.Id + " Core step serves " + expect + ", got " + e.Deck.Id);
-            }
-            Program.Require(core > 0, level.Id + " reaches the Core step at star 0");
+                var deck = mm.Next(new MatchRequest(Profile + 5, index, 0, rating, null, null, level)).Deck;
+                bool beginner = deck.Id == NpcBeginnerDecks.IdFor(deck.Class);
+                Program.Require(beginner || deck.Id == NpcCoreDecks.IdFor(deck.Class),
+                    "Core step serves a starter or beginner deck of the same class");
+                return beginner;
+            });
         }
+        Program.Require(CountBeginner(NpcDifficulties.Easy, LadderRules.StartRating) == 200,
+            "fresh Easy always serves beginner decks");
+        int medium = CountBeginner(NpcDifficulties.Medium, LadderRules.StartRating);
+        Program.Require(medium > 50 && medium < 120, "fresh Medium mixes starter and beginner decks: " + medium);
+        Program.Require(CountBeginner(NpcDifficulties.Medium, 1100) == 200, "Medium offers beginner decks after rating falls");
+        Program.Require(CountBeginner(NpcDifficulties.Medium, 1600) == 0, "Medium offers starter decks once rating rises");
     }
 
     private static IEnumerable<MatchRequest> Ladder(NpcDifficultyLevel level, int matches = 120)
@@ -287,14 +290,13 @@ internal static class DifficultySuite
             NpcWorldRuntime.InstallClientSeams(null);
             foreach (var level in new[] { NpcDifficulties.Easy, NpcDifficulties.Medium })
             {
-                string prefix = level == NpcDifficulties.Easy ? NpcBeginnerDecks.IdPrefix : NpcCoreDecks.IdPrefix;
                 NpcEncounter core = null;
                 for (int i = 0; i < 100 && core == null; i++)
                 {
                     var e = mm.Choose(new MatchRequest(Profile + 3, i, 0, 1400, null, null, level)).Encounter;
                     if (NpcDifficultyShaper.IsCoreDeck(e.Deck)) core = e;
                 }
-                Program.Require(core != null && core.Deck.Id.StartsWith(prefix, StringComparison.Ordinal), level.Id + " Core encounter exists");
+                Program.Require(core != null, level.Id + " Core encounter exists");
                 bool refused = false;
                 try { LocalDecks.Get(core.Deck.Id); } catch (InvalidOperationException) { refused = true; }
                 Program.Require(refused, "a Core deck does not resolve before Begin");
@@ -335,13 +337,27 @@ internal static class DifficultySuite
             var easy = mm.Choose(new CasualRequest(Profile, i, 10, 1300, null, NpcDifficulties.Easy));
             Program.Require(Math.Abs(easy.Target - (plain.Target - NpcDifficulties.Easy.ShiftRating)) < 1e-9, "Casual Easy target shifted");
             Program.Require(easy.Encounter.Difficulty == "easy" && easy.Encounter.Skill.Id.EndsWith("+easy", StringComparison.Ordinal), "Casual Easy boosted");
-            // Casual fun decks stay: no Core deck, ever, even at a rank deep in the Core step.
-            var deep = mm.Choose(new CasualRequest(Profile, i, 10, 1300, null, NpcDifficulties.Easy, 0));
-            Program.Require(!NpcDifficultyShaper.IsCoreDeck(deep.Encounter.Deck) && deep.Encounter.Deck.Id == easy.Encounter.Deck.Id,
-                "Casual never serves a Core deck");
-            Program.Require(deep.Encounter.DifficultyPosition == NpcDifficulties.Easy.LadderPosition(0), "Casual position anchors on the ranked star index");
             Program.Require(easy.Encounter.DifficultyPosition == NpcDifficulties.Easy.RatingPosition(1300), "no star index: the Casual rating anchors");
         }
+        foreach (var level in new[] { NpcDifficulties.Easy, NpcDifficulties.Medium })
+        {
+            var bronze = new CasualRequest(Profile, 0, 0, LadderRules.StartRating, null, level, 0);
+            var picks = QueueForecast.Casual(mm, bronze, 200);
+            int core = picks.Count(pick => NpcDifficultyShaper.IsCoreDeck(pick.Encounter.Deck));
+            Program.Require(core > 70 && core < 165, level.Id + " Casual mixes Core and themed decks: " + core);
+            for (int i = 1; i < picks.Count; i++)
+            {
+                if (picks[i].RelaxLevel != 0) continue;
+                string family = catalog.FamilyOf(picks[i].Encounter.Deck.Id);
+                Program.Require(picks.Skip(Math.Max(0, i - mm.Rules.NoSameDeckWithin)).Take(Math.Min(i, mm.Rules.NoSameDeckWithin))
+                    .All(previous => catalog.FamilyOf(previous.Encounter.Deck.Id) != family), "Casual repeat rule uses the served deck");
+            }
+            var high = new CasualRequest(Profile, 200, 0, LadderRules.StartRating + level.ShiftRating, null, level, 0);
+            Program.Require(QueueForecast.Casual(mm, high, 40).All(pick => !NpcDifficultyShaper.IsCoreDeck(pick.Encounter.Deck)),
+                "Casual wins end the Core step without any Ranked games");
+        }
+        var both = new CasualRequest(Profile, 0, 0, LadderRules.StartRating + 60, null, NpcDifficulties.Medium, 15);
+        Program.Require(both.Position == -15, "Ranked and Casual progress do not count twice");
         var hi = mm.Choose(new CasualRequest(Profile, 3, 10, 1300, null, NpcDifficulties.Medium, 120)).Encounter;
         var lo = mm.Choose(new CasualRequest(Profile, 3, 10, 1300, null, NpcDifficulties.Medium, 20)).Encounter;
         Program.Require(hi.DifficultyPosition == 90 && lo.DifficultyPosition == -10, "Casual Medium position: " + hi.DifficultyPosition + "/" + lo.DifficultyPosition);

@@ -187,7 +187,7 @@ public sealed class LadderMatchmaker : IMatchmaker
 
             // Easy/Medium Core step: decided once per match before candidates are built, so every history rule judges the deck that
             // will be served (a Core deck of the picked deck's class), not the deck it replaces. Hard rolls nothing.
-            var core = request.Shifted ? NpcDifficultyShaper.Decide(request.Difficulty, request.Position, seed) : default(NpcDifficultyShaper.CoreDecision);
+            var core = request.Shifted ? NpcDifficultyShaper.Decide(request.Difficulty, request.Position, seed, request.HiddenRating) : default(NpcDifficultyShaper.CoreDecision);
 
             bool bandRelaxed = false, widened = false;
             List<Option> options = null;
@@ -231,7 +231,7 @@ public sealed class LadderMatchmaker : IMatchmaker
             string reason = request.StarIndex < LadderRules.DiamondFiveIndex ? "hidden-rating"
                 : request.StarIndex < LadderRules.LegendIndex || request.Shifted ? "fixed-field" : "legend-field";
             var encounter = NpcDifficultyShaper.Shape(Encounter(chosen.Npc, deck.Deck, chosen.Rating, seed, reason),
-                request.Difficulty, request.Position, seed, World, buildProfile, request.Shifted ? deck.Deck : null);
+                request.Difficulty, request.Position, World, buildProfile);
             return new MatchPick(encounter, target, level, widened, bandRelaxed, regularDraw);
         }
     }
@@ -261,7 +261,7 @@ public sealed class LadderMatchmaker : IMatchmaker
         if (refusal != null) return null;
         int seed = StableSeed.Derive(request.ProfileSeed, request.MatchIndex);
         lock (gate) return NpcDifficultyShaper.Shape(Encounter(npc, deck, rating, seed, "rematch"), request.Difficulty, request.Position,
-            seed, World, buildProfile, deck);
+            World, buildProfile);
     }
 
     private string RematchRefusal(MatchRequest request, string npcId, string deckId, out NpcIdentity npc, out NpcDeckEntry deck, out double rating)
