@@ -78,8 +78,8 @@ internal static class SummonTimingProof
     private static void BuzzardMortallyWoundedInSameDeathPhase()
     {
         var g = Fixture(); var p = g.Player1;
-        var buzzard = Summon(p, "CS2_237"); // 3/2
-        buzzard.Damage = 1;
+        var buzzard = Summon(p, "CS2_237");
+        buzzard.Damage = buzzard.BaseHealth - 1;
         var ghoul = Summon(p, "FP1_024"); // Deathrattle: deal 1 damage to all minions
         var wolf = Summon(p, "OG_216");
         int hand = p.HandZone.Count;
