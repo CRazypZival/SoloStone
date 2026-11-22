@@ -172,6 +172,8 @@ internal static partial class Program
                     InvokeProcess(match, human.Options().OfType<PlayCardTask>().First(task => task.Source?.Id == card.Id));
                     Check(game.Rewind != null, "the only player move this turn offers a Rewind");
                     InvokeProcess(match, ChooseTask.Pick(human, game.Rewind.RewindEntityId));
+                    if (game.Rewind != null)
+                        InvokeProcess(match, ChooseTask.Pick(human, game.Rewind.KeepEntityId));
                     Check(!game.HistoryFacts.Query.PlayerActions().Any(action => action.Turn == game.Turn && action.ControllerId == human.Id),
                         "the Rewind discards the action fact so the committed attempt must count separately");
                 }
