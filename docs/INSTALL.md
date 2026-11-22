@@ -128,13 +128,15 @@ yours, the SoloStone version, update status, **Play**, **Roll back**, the update
 The game's **Options** has an extra button in its Other group: **SoloStone Options**. It opens a window like the one
 **Sound Options** opens. **Back** or Escape returns to Options, and **Done** or a click outside the window closes it.
 
-**SoloStone Options** holds these. Turn Timer, NPC Deck Guess and Show Opponents' Pets take effect from the next match; the
-others change at once.
+**SoloStone Options** holds these. Turn Timer, NPC Deck Guess, Show Plain Cards, and Show Opponents' Pets take effect
+from the next match. The other settings change at once.
 
 - **Turn Timer** puts the burning rope on your turns.
 - **Handheld UI** makes mulligan cards and menu text larger, for small screens.
 - **FPS Counter** shows the frame rate in the top-right corner.
 - **NPC Deck Guess (Experimental)** lets NPCs guess your deck from the cards you have played.
+- **Show Plain Cards** shows golden, diamond and signature cards in their normal version in matches, yours and the
+  NPC's, and a golden hero portrait in its normal version too. Your collection, decks and packs keep them as they are.
 - **Show Opponents' Pets** (on by default): turn it off and NPC opponents bring no pet to the match. Your own pet and its XP
   are not affected.
 - **Pace: <tier>** opens the Pace page, and its **Back** returns to this window. The button is hidden during a match.

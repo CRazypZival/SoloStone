@@ -52,6 +52,7 @@ if (args.Length == 0)
     TurnTimerOptionChecks.Run();
     FpsCounterOptionChecks.Run();
     DeckInferenceOptionChecks.Run();
+    PlainCardsOptionChecks.Run();
     OpponentPetsOptionChecks.Run();
     MasteryChecks.Run();
     CurrentV14ProgressionChecks.Run();
