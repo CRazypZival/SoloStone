@@ -269,8 +269,9 @@ def tail(path, count=TAIL_LINES):
 
 
 class Runner:
-    def __init__(self, dotnet, artifacts, build, verbose):
+    def __init__(self, dotnet, artifacts, build, verbose, *, strict_transport=None):
         self.dotnet, self.artifacts, self.build, self.verbose = dotnet, Path(artifacts), build, verbose
+        self.strict_transport = strict_transport
         self.logs = self.artifacts / 'logs'
         self.logs.mkdir(parents=True, exist_ok=True)
         self.engine_built = None  # None not tried, else True or False
@@ -326,6 +327,8 @@ class Runner:
         return ok, time.monotonic() - started, log
 
     def run_dotnet(self, suite, log):
+        if suite.name == 'transport-invariants' and self.strict_transport is not None:
+            return self.step(log, [*self.strict_transport, *suite.args], 'run', env=os.environ)
         artifacts = self.artifacts / suite.artifacts if suite.artifacts else self.shared()
         props = list(suite.props)
         if suite.needs_engine:
@@ -347,7 +350,17 @@ class Runner:
         if not program.is_file():
             Path(log).write_bytes(Path(log).read_bytes() + f'missing build output {program}\n'.encode())
             return False
-        return self.step(log, [self.dotnet, program, *suite.args], 'run')
+        command = [self.dotnet, program, *suite.args]
+        if suite.name == 'transport-invariants' and os.name != 'nt':
+            import fcntl
+
+            # Coordinate writes to sim/out/transport with other transport runners in this checkout.
+            lock = ROOT / 'sim/.build/transport/run.lock'
+            lock.parent.mkdir(parents=True, exist_ok=True)
+            with lock.open('a') as handle:
+                fcntl.flock(handle, fcntl.LOCK_EX)
+                return self.step(log, command, 'run')
+        return self.step(log, command, 'run')
 
     def prebuild_with_client(self, log, suite):
         """With a client set up, build what the suite's client-only check reads. False (a failure) when that cannot be done:
@@ -415,7 +428,7 @@ def parse(argv):
     return parser.parse_args(argv)
 
 
-def main(argv=None):
+def main(argv=None, *, strict_transport=None):
     args = parse(argv)
     if args.list:
         width = max(len(suite.name) for suite in SUITES)
@@ -458,7 +471,7 @@ def main(argv=None):
         artifacts = Path(temporary)
     results = []
     try:
-        runner = Runner(dotnet, artifacts, not args.no_build, args.verbose)
+        runner = Runner(dotnet, artifacts, not args.no_build, args.verbose, strict_transport=strict_transport)
         say(f'run.py: {len(chosen)} suites, artifacts in {artifacts}')
         for suite in chosen:
             say(f'--- {suite.name}')
