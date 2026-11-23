@@ -112,6 +112,11 @@ internal static class Program
                 TransportHooks.Install();
                 return MetaPreBeProof.Run(args.ElementAtOrDefault(1));
             }
+            if (args is ["--prepare-pool-snapshot"])
+            {
+                HsSim.PoolSnapshots.Save();
+                return 0;
+            }
             if (args is ["--classify-history", var rawPath])
                 return HistoryShapeReport.Reclassify(rawPath) ? 0 : 1;
             if (args is ["--b13-state-only"]) { TransportHooks.Install(); Batch13PrivateStateProof.Run(); return 0; }
