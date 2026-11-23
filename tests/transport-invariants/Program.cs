@@ -11,8 +11,19 @@ internal static class Program
     internal static readonly JsonSerializerOptions Json = new() {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
+    private static readonly string EvidenceDirectory = Environment.GetEnvironmentVariable("SOLOSTONE_TRANSPORT_EVIDENCE_DIR");
+
+    // Keep evidence references relative to the checkout when a runner stages the files elsewhere.
+    internal static string EvidencePath(string path)
+    {
+        const string prefix = Runner.Output + "/";
+        return EvidenceDirectory != null && path.StartsWith(prefix, StringComparison.Ordinal)
+            ? Path.Combine(EvidenceDirectory, path[prefix.Length..]) : path;
+    }
+
     internal static void Save<T>(string path, T data)
     {
+        path = EvidencePath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
         File.WriteAllText(path, JsonSerializer.Serialize(data, Json) + "\n");
     }

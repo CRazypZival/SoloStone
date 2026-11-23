@@ -328,7 +328,9 @@ class Runner:
 
     def run_dotnet(self, suite, log):
         if suite.name == 'transport-invariants' and self.strict_transport is not None:
-            return self.step(log, [*self.strict_transport, *suite.args], 'run', env=os.environ)
+            command = self.strict_transport(self.dotnet)
+            if command is not None:
+                return self.step(log, [*command, *suite.args], 'run', env=os.environ)
         artifacts = self.artifacts / suite.artifacts if suite.artifacts else self.shared()
         props = list(suite.props)
         if suite.needs_engine:
