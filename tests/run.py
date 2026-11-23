@@ -287,20 +287,20 @@ class Runner:
     def hssim_dll(self):
         return self.shared() / 'bin' / 'HsSim' / 'release' / 'HsSim.dll'
 
-    def step(self, log, command, label, env=None):
+    def step(self, log, command, label, env=None, *, pass_fds=()):
         """Run one command from the repository root, appending its output to `log`. Returns True on exit 0."""
         with open(log, 'ab') as handle:
             handle.write(f'$ {" ".join(str(part) for part in command)}\n'.encode())
             handle.flush()
             if self.verbose:
                 result = subprocess.run([str(part) for part in command], cwd=ROOT, env=env or self.env, stdout=subprocess.PIPE,
-                                        stderr=subprocess.STDOUT)
+                                        stderr=subprocess.STDOUT, pass_fds=pass_fds)
                 handle.write(result.stdout)
                 sys.stdout.buffer.write(result.stdout)
                 sys.stdout.flush()
             else:
                 result = subprocess.run([str(part) for part in command], cwd=ROOT, env=env or self.env, stdout=handle,
-                                        stderr=subprocess.STDOUT)
+                                        stderr=subprocess.STDOUT, pass_fds=pass_fds)
             handle.write(f'[{label} exit {result.returncode}]\n'.encode())
         return result.returncode == 0
 
@@ -354,12 +354,12 @@ class Runner:
         if suite.name == 'transport-invariants' and os.name != 'nt':
             import fcntl
 
-            # Coordinate writes to sim/out/transport with other transport runners in this checkout.
+            # The transport child keeps the evidence lock if this wrapper exits first.
             lock = ROOT / 'sim/.build/transport/run.lock'
             lock.parent.mkdir(parents=True, exist_ok=True)
             with lock.open('a') as handle:
                 fcntl.flock(handle, fcntl.LOCK_EX)
-                return self.step(log, command, 'run')
+                return self.step(log, command, 'run', pass_fds=(handle.fileno(),))
         return self.step(log, command, 'run')
 
     def prebuild_with_client(self, log, suite):
